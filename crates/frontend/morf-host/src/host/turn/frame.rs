@@ -140,6 +140,7 @@ impl Host {
     /// Paints the shell's own surface and every window that takes updates.
     fn paint(&mut self, runtime: &mut Runtime) -> Result<Turn, String> {
         let painted = Instant::now();
+        let paint_stage = morf_lua::profile::stage(morf_lua::profile::Stage::Paint);
         let state = &mut self.state;
         let client = &*self.backend;
         // Before anything is drawn, tell the renderer what died. Its caches
@@ -176,9 +177,11 @@ impl Host {
         slow(self.report_slow, &self.name, "a frame", painting);
         // Skipped for want of a buffer: owed, and painted on the next
         // callback (or when the callback is overdue).
-        if let Painter::Gpu(renderer) = &mut state.painter
-            && renderer.backend_mut().take_skipped()
-        {
+        let skipped = match &mut state.painter {
+            Painter::Gpu(renderer) => renderer.backend_mut().take_skipped(),
+            Painter::Layout(_) => false,
+        };
+        if skipped {
             state.primary_deferred = true;
             // Nothing committed, so no callback may be coming: ask for one,
             // or the owed paint waits for whatever paints next.
@@ -213,6 +216,12 @@ impl Host {
         // What this frame actually cost, which is what the next one is paced
         // against.
         state.pacer.observed(painted.elapsed());
+        drop(paint_stage);
+        if !skipped {
+            let shown = runtime.scene().paint_revision();
+            self.frame_accounting
+                .painted(state.refresh, shown, state.animating_shaders);
+        }
         Ok(Turn::Again)
     }
 }

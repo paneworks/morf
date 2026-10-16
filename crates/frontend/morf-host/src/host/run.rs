@@ -144,6 +144,7 @@ fn drive_surface(
         }
         host.wait(runtime, Some(wake.as_fd()))?;
         wake.drain();
+        host.rang(wake.rings());
         if let Some(provider) = &native_provider {
             provider.begin_turn();
         }

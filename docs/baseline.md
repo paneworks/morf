@@ -163,37 +163,112 @@ the noise here. The text caches (4.3) never reach their caps in a short
 script; the caps bound a long session's memory, which their unit tests
 cover.
 
-# Frame stalls (PLAN item 2, steps 1-2)
+# Frame stalls (PLAN item 2)
 
-The rehearsal (`frame_stall` in `crates/engine/morf-lua/tests/engine/`): a
-spring (`stiffness = 120, damping = 14`, `x` to 300) ticked at 16ms steps,
-with an IPC handler that burns a fixed Lua loop fired once per frame before
-the tick, as a host turn runs handlers before it paints. Release build:
+Taken on a branch off `develop` (cce07898), 2026-10-16, release builds, on
+an Intel Core i7-13700KF with an RTX 4080 and no integrated GPU, Ubuntu
+26.04. The machine was building other branches all the while (load average
+13-25 on 24 threads), so every figure is the range over three rounds of 6 s,
+the two builds alternated phase by phase under the same load. Before is the
+tree just ahead of the fast path (50b37e6c) with the accounting's refresh
+fix (0f572786) applied; after is that fix's commit.
+
+## The rehearsal and the accounting
+
+`examples/demos/motion/frame-stall.lua`: a 120 px box on a spring
+(`stiffness = 90, damping = 11`), swung between the ends of a strip every
+700 ms so it is always moving, and a timer every `--interval` ms that burns
+`--budget` Lua instructions, split over as many timers as a handler's 1M
+budget needs, all due together. An instruction costs about 9 ns here:
+1.3M is 10-13 ms a firing, 2.8M 23-29 ms, 4.5M 36-39 ms, 67M 600-650 ms
+(the handlers stage over the firings in each run).
+
+`morf check --frames` runs it three ways: virtual (the headless runner's
+clock, frames back to back: what a frame costs, stage by stage); `--paced`
+(the wall clock, a refresh every 16.7 ms, each frame callback delivered at
+the first refresh after the paint that asked for it, paints held back
+until then, as a compositor holds them); and `--paced --gpu` (the same,
+painting with wgpu offscreen on the RTX 4080 through nixGL's
+`nixVulkanNvidia`). The frame accounting (`host/turn/stats.rs`) reads a
+frame as paint to paint while motion carries on, late past 1.5x the
+refresh interval, an overrun past 2.4x, each overrun owned by the stage
+that held most of it: services, handlers, flush, motion, layout, paint,
+or waiting (no stage: the loop asleep, or the runner between turns).
+
+The cage sandbox (`tools/sandbox/frame-stall.steps`, one `@frames` read a
+phase) does not run on this machine. With no integrated GPU cage needs
+NVIDIA's GL (a nixGL wrapper gets it to GLES on the 4080), but the nested
+Hyprland then fails to allocate buffers for its headless outputs
+(`GBM: Failed to allocate a GBM buffer: bo null`) and the shell's layer
+surface is never configured. The paced GPU run stands in for it here; the
+steps file is for a machine with an Intel or AMD render node.
+
+## What a stall costs, before the fast path
+
+Virtual, before (50b37e6c), per 6 s: every millisecond of the stall is
+charged to handlers, and the flush after the handler stays under 0.1 ms in
+every run of every mode, so the flush does not dominate and the plan's
+narrower variant (a bounded flush) does not apply.
 
 ```
-spring settled            frame 114 of 150, stalled and unstalled alike
-busy handler              3.60 ms/frame (120k-iteration loop, release)
-                          66 ms/frame in a debug build, same loop
-frame budget at 60Hz      16.7 ms; the accounting overrun line is 2.4x that
+stall a firing          frames  mean / worst ms     handlers ms   flush  paint
+none                    332     0.0 / 0.0           0.0           0.0    0.3-0.4
+12 ms every 16 ms       332     12.0-12.6 / 22-38   3971-4182     0.0    1.5-1.7
+600 ms every 2 s        332     5.7-5.9 / 649-703   1890-1949     0.0    0.5-0.6
 ```
 
-So a slow-but-legal handler is additive turn latency -- the spring keeps
-its virtual-time schedule, but every frame's paint waits behind the
-handler in the same turn. The cost lands in the `handlers` stage of the
-new frame-time accounting (`host/turn/stats.rs`, surfaced with the motion
-report, counters reset on report), not in paint.
+The premise check: 600 ms stalls (67M every 2 s) make frames of 627-1069
+ms, two overruns in every 6 s, each owned by handlers, in all three modes.
+Frames do not hold at refresh, so the premise stands.
 
-# Motion-only fast path (PLAN item 2, steps 3-4)
+## Before and after the fast path
 
-Landed in `host/turn.rs`: backend events are drained up front, and a turn
-whose events are only `Event::Frame`, with no supervisor commands and no
-repaint debt, handles frame callbacks before `poll_services()`; every
-other turn keeps the original ordering. Cage-sandbox rehearsal
-(`tools/sandbox/nested.sh`, release build): a spring box (`x` 100 -> 1500)
-beside a 16 ms timer burning a 900k-iteration Lua loop filmed 90 frames
-in 5.31 s (about 59 ms a frame, handler-bound), the spring completed its
-travel, an IPC `ping` during the film answered `pong`, and a separate
-run clicking the counter demo incremented it. No wakeup was lost; frame
-rate under this handler remains bounded by the handler itself, which the
-accounting attributes to the handlers stage, not paint. Splitting Lua
-off the host thread stays future work, informed by these numbers.
+Mean and worst frame (ms), late frames and overruns, per 6 s:
+
+```
+paced                   before                           after
+stall a firing          mean       worst    late  over   mean       worst    late  over
+none                    16.6       17-27    0-1   0      16.6       17-20    0     0
+12 ms every 16 ms       16.7-17.8  51-79    14-15 1-3    16.8-17.5  44-84    13-16 1-2
+25 ms every 100 ms      18.6-20.4  60-98    53    52     18.3-18.4  45-67    40-45 28-30
+40 ms every 100 ms      22.6-22.9  84-110   53    53     22.4-23.0  61-81    53    39-45
+600 ms every 2 s        21.4-22.2  627-703  2     2      21.7-22.2  697-757  2     2
+
+paced, GPU              before                           after
+none                    16.7       34       1     0      16.7       34       1     0
+12 ms every 16 ms       16.8-17.9  70-81    16-27 1-3    16.8-17.5  36-86    15-16 0-2
+25 ms every 100 ms      18.3-21.0  78-133   53    52     18.3-21.3  49-77    42-53 28-37
+40 ms every 100 ms      23.2-29.7  75-173   52-53 51-53  23.2-25.3  95-98    53    44-51
+600 ms every 2 s        21.5-25.0  636-1069 3     2      21.3-23.7  606-858  3     2
+```
+
+(The one late GPU frame unstalled is the run's first, which builds the
+pipelines.) A 25 ms stall every 100 ms makes 29-46 % fewer overruns and a
+40 ms one 4-26 % fewer, mostly with lower worst frames: a frame whose
+callback is already due is drawn before the timer runs instead of after
+it. Stalls under a refresh change nothing (they never overran),
+and every stall still makes the frame after it late: the loop that runs the
+handler is the loop that paints.
+
+Against the plan's bar: mean frame time stays within one refresh of the
+unstalled run (16.6 against at most 25.3 ms) for every stall up to 40 ms a
+firing, before and after alike; worst frames do not (45-98 ms against
+17-34), and a 600 ms stall is a 600-860 ms frame either way. That shortfall
+is the follow-up, splitting logic evaluation off the host thread, with these
+numbers as its baseline.
+
+## Without losing a wakeup
+
+`crates/frontend/morf-cli/src/tests/motion_turn.rs` drives the real host on
+the headless backend, paced: a timer due on a motion frame fires in that
+turn after its paint and is painted on the next callback; a timer's colour
+change after a still frame is painted by the turn after (dropping the
+post-paint repaint fails this test; dropping the fast path fails four);
+a click during the motion takes the full turn and the spring goes on; a
+service thread ringing takes the full turn; and the spring's path frame
+by frame is the same paced and unpaced. `examples/demos/tests/
+frame_stall_spec.lua` swings the spring with and without 1M instructions a
+frame: the path is the same frame for frame, the frames went through
+motion-only turns, handlers hold over ten times paint and the flush, no
+overrun is paint's, and a calibrated tenth-of-a-second stall is an overrun
+owned by handlers. It fails against the build without the fast path.

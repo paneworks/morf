@@ -67,6 +67,7 @@ impl Runtime {
         // Outside the arena, before this turn's Lua: compile what turned hot.
         self.service_jit();
         let _bookkeeping = crate::profile::span(|| "engine: services bookkeeping".to_owned());
+        let _stage = crate::profile::stage(crate::profile::Stage::Services);
         self.flush_lint();
         // The loop wakes when the caret is due to turn over
         // (`Runtime::next_deadline`), so it blinks without a timer of its own.

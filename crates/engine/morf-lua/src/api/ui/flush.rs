@@ -85,6 +85,7 @@ fn flush_graph(
     ctx: Context<'_>,
     limits: Limits,
 ) -> Result<(), String> {
+    let _stage = crate::profile::stage(crate::profile::Stage::Flush);
     // A flush asked for from inside one -- a binding that registers another,
     // a module `require`d from a binding writing a signal -- has nothing to
     // do of its own: the flush already under way drains it.

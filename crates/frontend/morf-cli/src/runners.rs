@@ -265,6 +265,7 @@ fn options(args: &RunnerArgs, screen_index: usize) -> LoadOptions {
     options.scale = args.scale as i32;
     options.args = args.args.clone();
     options.policy = args.policy;
+    options.gpu = args.gpu;
     options
 }
 
@@ -304,7 +305,16 @@ fn check(args: &RunnerArgs) -> Result<bool, String> {
             outln!("  error: {error}");
             errors += 1;
         }
-        headless.advance(args.after, args.wait);
+        if let Some(host) = headless.host.as_mut().filter(|_| args.frames) {
+            host.take_frame_report();
+        }
+        match args.paced {
+            true => headless.run_paced(args.after, std::time::Duration::from_micros(16_667)),
+            false => headless.advance(args.after, args.wait),
+        }
+        if let Some(host) = headless.host.as_mut().filter(|_| args.frames) {
+            println!("  frames  {}", host.take_frame_report());
+        }
         for surface in &headless.surfaces {
             outln!(
                 "  surface {:<24} {:>5}x{:<5} at {},{}{}  {} nodes",

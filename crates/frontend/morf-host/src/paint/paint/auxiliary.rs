@@ -85,6 +85,7 @@ pub fn paint_popup_surface(
     surface: &mut Window,
     text: Option<&mut TextSystem>,
 ) -> Result<(), String> {
+    let _stage = morf_lua::profile::stage(morf_lua::profile::Stage::Paint);
     match text {
         Some(text) => lay_out_auxiliary(AuxiliaryKind::Popup, runtime, text, client, surface),
         None => paint_auxiliary_surface(AuxiliaryKind::Popup, runtime, client, surface),
@@ -97,6 +98,7 @@ pub fn paint_floating_surface(
     surface: &mut Window,
     text: Option<&mut TextSystem>,
 ) -> Result<(), String> {
+    let _stage = morf_lua::profile::stage(morf_lua::profile::Stage::Paint);
     match text {
         Some(text) => lay_out_auxiliary(AuxiliaryKind::Floating, runtime, text, client, surface),
         None => paint_auxiliary_surface(AuxiliaryKind::Floating, runtime, client, surface),

@@ -85,6 +85,7 @@ impl Runtime {
     }
 
     pub fn tick_animations(&mut self, delta: Duration) -> Result<AnimationFrame, Error> {
+        let _stage = crate::profile::stage(crate::profile::Stage::Motion);
         self.reactive.borrow_mut().animation_mut().ticked = true;
         let claims = self.evaluate_claims(delta);
         let fading = self.advance_theme_fades(delta);

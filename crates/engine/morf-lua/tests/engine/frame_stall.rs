@@ -1,78 +1,112 @@
-//! The frame-stall rehearsal (PLAN item 2, step 1): a busy handler and
-//! a running spring in one runtime, driven frame by frame as a host turn
-//! drives them -- handler first, then the motion tick, then the paint
-//! that would follow. Motion is native and clock-driven, so the spring
-//! keeps virtual time no matter what the handler costs; what the handler
-//! costs is wall time in the turn, before the paint.
+//! Where a busy configuration's time is charged: a timer's own Lua to the
+//! handlers stage, the bindings its write re-runs to the flush, the tick
+//! to motion. What the host's frame accounting reads, per stage
+//! (`morf_lua::profile::take_stages`).
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use morf_lua::profile::{Stage, StageTimes, take_stages};
 
 use super::*;
 
-const FRAMES: u32 = 150;
-const STEP: Duration = Duration::from_millis(16);
+/// Fires every timer due 16 ms on, and says what each stage was charged.
+fn fire(runtime: &mut Runtime) -> StageTimes {
+    runtime.advance_virtual_clock(Duration::from_millis(16));
+    let _ = take_stages();
+    runtime.poll_services();
+    take_stages()
+}
 
-fn rehearsal(busy: bool) -> (Option<u32>, Duration, Duration) {
-    let mut runtime = Runtime::default();
-    runtime
-        .execute(
-            "stall.lua",
-            br#"
-                local ui = require("morf.ui")
-                local node = ui.Rect {
-                    width = 10, height = 10,
-                    behavior = { x = { kind = "spring", stiffness = 120, damping = 14 } },
-                }
-                morf.ipc.busy = function()
-                    local sum = 0
-                    for i = 1, 120000 do sum = sum + i end
-                    return sum
-                end
-                morf.ipc.x = function() return node.x end
-                node.x = 300
-            "#,
-        )
-        .unwrap();
-    let mut handler_total = Duration::ZERO;
-    let mut settled = None;
-    for frame in 0..FRAMES {
-        if busy {
-            let started = Instant::now();
-            runtime.call_ipc("busy", &[]).unwrap();
-            handler_total += started.elapsed();
-        }
-        runtime.poll_services();
-        let tick = runtime.tick_frame_animations(STEP).unwrap();
-        let x = match runtime.call_ipc("x", &[]).unwrap()[..] {
-            [IpcValue::Number(x)] => x,
-            [IpcValue::Integer(x)] => x as f64,
-            ref other => panic!("unexpected x reply: {other:?}"),
-        };
-        if settled.is_none() && !tick.active && (x - 300.0).abs() < 0.5 {
-            settled = Some(frame);
-        }
-    }
-    (settled, handler_total, handler_total / FRAMES)
+fn charged(times: &StageTimes, stage: Stage) -> Duration {
+    times[stage as usize]
 }
 
 #[test]
-fn a_busy_handler_stalls_the_turn_but_not_the_spring() {
-    let (idle_settled, idle_total, _) = rehearsal(false);
-    let (busy_settled, busy_total, busy_per_frame) = rehearsal(true);
-    eprintln!(
-        "frame-stall rehearsal: spring settled at frame {idle_settled:?} unstalled, \
-         {busy_settled:?} stalled; busy handler {busy_per_frame:.2?}/frame, {busy_total:.2?} total"
+fn a_busy_timer_is_charged_to_handlers_and_not_to_the_flush() {
+    let mut runtime = Runtime::default();
+    runtime.use_virtual_clock();
+    runtime
+        .execute(
+            "busy-timer.lua",
+            br#"
+                local fired = 0
+                morf.ipc.fired = function() return fired end
+                morf.timer(16, function()
+                    local sum = 0
+                    for i = 1, 200000 do sum = sum + i end
+                    fired = fired + 1
+                end)
+            "#,
+        )
+        .unwrap();
+    let times = fire(&mut runtime);
+    assert_eq!(
+        runtime.call_ipc("fired", &[]).unwrap(),
+        [IpcValue::Integer(1)]
     );
-    // The spring keeps its schedule: motion is ticked by virtual time,
-    // and the handler cannot delay it in frame count.
-    assert_eq!(busy_settled, idle_settled);
-    assert!(idle_settled.is_some(), "the spring never settled");
-    // The handler's cost is real wall time in the turn, owned by the
-    // handler stage: at 60Hz a frame is 16.7ms and this rehearsal's
-    // handler is sized to be a visible share of one.
-    assert!(
-        busy_per_frame > Duration::from_millis(1),
-        "busy handler too cheap to measure: {busy_per_frame:?}"
+    let handlers = charged(&times, Stage::Handlers);
+    assert!(handlers > Duration::ZERO, "{times:?}");
+    // It wrote nothing a binding reads, so nothing flushed.
+    assert_eq!(charged(&times, Stage::Flush), Duration::ZERO, "{times:?}");
+    assert!(handlers > charged(&times, Stage::Services) * 4, "{times:?}");
+}
+
+#[test]
+fn bindings_a_timer_wakes_are_charged_to_the_flush() {
+    let mut runtime = Runtime::default();
+    runtime.use_virtual_clock();
+    runtime
+        .execute(
+            "busy-binding.lua",
+            br#"
+                local ui = require("morf.ui")
+                local tick = morf.signal("busy.tick", 0)
+                ui.Text {
+                    text = function()
+                        local sum = 0
+                        for i = 1, 200000 do sum = sum + i end
+                        return tostring(tick:get() + sum % 2)
+                    end,
+                }
+                morf.timer(16, function() tick:set(tick:get() + 1) end)
+            "#,
+        )
+        .unwrap();
+    let times = fire(&mut runtime);
+    let flush = charged(&times, Stage::Flush);
+    assert!(flush > charged(&times, Stage::Handlers) * 4, "{times:?}");
+    assert!(flush > charged(&times, Stage::Services) * 4, "{times:?}");
+}
+
+#[test]
+fn the_animation_tick_is_charged_to_motion() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "spring.lua",
+            br#"
+                local ui = require("morf.ui")
+                local nodes = {}
+                for index = 1, 400 do
+                    nodes[index] = ui.Rect {
+                        width = 10, height = 10,
+                        behavior = { x = { kind = "spring", stiffness = 120, damping = 14 } },
+                    }
+                end
+                for _, node in ipairs(nodes) do node.x = 300 end
+            "#,
+        )
+        .unwrap();
+    let _ = take_stages();
+    let frame = runtime
+        .tick_frame_animations(Duration::from_millis(16))
+        .unwrap();
+    let times = take_stages();
+    assert!(frame.active);
+    assert!(charged(&times, Stage::Motion) > Duration::ZERO, "{times:?}");
+    assert_eq!(
+        charged(&times, Stage::Handlers),
+        Duration::ZERO,
+        "{times:?}"
     );
-    assert_eq!(idle_total, Duration::ZERO);
 }

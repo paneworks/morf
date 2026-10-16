@@ -19,6 +19,10 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
+mod stages;
+
+pub use stages::{Stage, StageGuard, StageTimes, stage, take_stages};
+
 /// One label's share of what was recorded since the last clear.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProfileEntry {

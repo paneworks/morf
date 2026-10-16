@@ -113,6 +113,7 @@ pub fn layout_for(
     (revision, size, scale_120): (u64, (u32, u32), u32),
     text: &mut impl morf_layout::TextMeasurer,
 ) -> Result<(Layout, bool), String> {
+    let _stage = morf_lua::profile::stage(morf_lua::profile::Stage::Layout);
     let available = Size {
         width: size.0 as f64,
         height: size.1 as f64,

@@ -50,6 +50,13 @@ pub(crate) struct RunnerArgs {
     pub(crate) kit: bool,
     /// `--a11y`: every control a screen reader reaches has a name.
     pub(crate) a11y: bool,
+    /// `--frames`: the frame accounting over the `--after` run.
+    pub(crate) frames: bool,
+    /// `--paced`: `--after` runs on the wall clock, with a refresh every
+    /// 16.7 ms, as a compositor paces a shell.
+    pub(crate) paced: bool,
+    /// `--gpu`: the host paints with the GPU, offscreen.
+    pub(crate) gpu: bool,
     pub(crate) output: Option<PathBuf>,
     pub(crate) surface: Option<String>,
     pub(crate) filter: Option<String>,
@@ -86,6 +93,9 @@ impl RunnerArgs {
             strict: false,
             kit: false,
             a11y: false,
+            frames: false,
+            paced: false,
+            gpu: false,
             output: None,
             surface: None,
             filter: None,
@@ -224,6 +234,9 @@ pub(crate) fn parse_runner(runner: Runner, rest: &[&str]) -> Result<RunnerArgs, 
                 }
             }
             ("--a11y", Runner::Check) => parsed.a11y = true,
+            ("--frames", Runner::Check) => parsed.frames = true,
+            ("--paced", Runner::Check) => parsed.paced = true,
+            ("--gpu", Runner::Check) => parsed.gpu = true,
             ("-o" | "--output", Runner::Render) => {
                 parsed.output = Some(PathBuf::from(value(&mut rest, "-o")?));
             }

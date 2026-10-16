@@ -18,20 +18,22 @@ impl Runtime {
         &mut self,
         body: impl for<'gc> FnOnce(Context<'gc>, Limits) -> T,
     ) -> T {
+        let _stage = crate::profile::stage(crate::profile::Stage::Handlers);
         self.reactive.borrow_mut().tracking_mut().enter_handler();
         let limits = self.limits;
         let result = self.lua.enter(|ctx| body(ctx, limits));
         let flush = self.reactive.borrow_mut().tracking_mut().leave_handler();
-        let _span =
-            flush.then(|| crate::profile::span(|| "engine: flush after a handler".to_owned()));
-        if flush
-            && let Err(message) = self
+        if flush {
+            let _span = crate::profile::span(|| "engine: flush after a handler".to_owned());
+            let _stage = crate::profile::stage(crate::profile::Stage::Flush);
+            if let Err(message) = self
                 .lua
                 .enter(|ctx| flush_reactive(&self.reactive, ctx, self.limits))
-        {
-            self.reactive
-                .borrow_mut()
-                .log(LogLevel::Warn, format!("after handler: {message}"));
+            {
+                self.reactive
+                    .borrow_mut()
+                    .log(LogLevel::Warn, format!("after handler: {message}"));
+            }
         }
         // A handler that edited a text input — `:insert`, `:select` — owes
         // that field's callbacks, which could not run while it was running.

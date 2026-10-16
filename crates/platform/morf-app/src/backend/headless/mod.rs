@@ -36,6 +36,9 @@ pub struct HeadlessBackend {
     /// The windows that asked for a frame (asked through `&self`, as a
     /// compositor's frame callback is).
     frames: RefCell<BTreeSet<WindowKey>>,
+    /// Paced as a compositor paces: a frame asked for is outstanding until
+    /// the clock moves, and the host holds its paints back until then.
+    paced: bool,
     /// Where each window takes the pointer; absent is everywhere.
     input_regions: RefCell<BTreeMap<WindowKey, Vec<InputRect>>>,
     /// The clock's reading.
@@ -115,6 +118,12 @@ impl HeadlessBackend {
     /// The clock's reading.
     pub fn now(&self) -> Duration {
         self.now
+    }
+
+    /// Paces frames as a compositor does: a frame asked for is outstanding
+    /// until the clock is advanced, and the host waits for it to paint.
+    pub fn set_paced(&mut self, paced: bool) {
+        self.paced = paced;
     }
 
     /// Moves the clock on by `by`: every window that asked for a frame gets
@@ -241,6 +250,13 @@ impl Backend for HeadlessBackend {
 
     fn request_frame(&self, id: WindowId) {
         self.frames.borrow_mut().insert(id.into());
+    }
+
+    /// Outstanding, when paced, from the frame's asking to the clock's next
+    /// move: no time passes on this clock in between.
+    fn layer_frame_wait(&self, id: u64) -> Option<Duration> {
+        let asked = self.paced && self.frames.borrow().contains(&WindowId::Layer(id).into());
+        asked.then_some(Duration::ZERO)
     }
 
     fn commit(&self, _id: WindowId) {}

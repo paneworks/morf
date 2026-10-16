@@ -31,6 +31,7 @@ pub fn paint(
     // took on the CPU side, submission included, so a configuration that
     // feels slow can be read rather than guessed at.
     let started = frame_log_wanted().then(std::time::Instant::now);
+    let _stage = morf_lua::profile::stage(morf_lua::profile::Stage::Paint);
     let config = runtime.layer_surface_config();
     let painted = match painter {
         Painter::Gpu(renderer) => paint_layer(

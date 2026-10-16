@@ -183,6 +183,41 @@ pub(super) fn ipc(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<Ipc
     Ok(result)
 }
 
+/// `test.frames()`: the host's frame accounting since the last call, and
+/// a new window begun.
+pub(super) fn frames(host: &mut TestHost, _: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
+    let report = host
+        .subject()?
+        .host
+        .as_mut()
+        .ok_or("the configuration has no surface, so no frames")?
+        .take_frame_report();
+    let ms = |took: Duration| IpcValue::Number(took.as_secs_f64() * 1000.0);
+    let count = |count: u64| IpcValue::Integer(count as i64);
+    let owners = morf_host::host::turn::OWNERS;
+    let stages = owners
+        .iter()
+        .zip(report.stages)
+        .map(|(name, took)| (*name, ms(took)));
+    let held = owners
+        .iter()
+        .zip(report.owners)
+        .map(|(name, held)| (*name, count(held)));
+    Ok(vec![map(vec![
+        ("frames", count(report.frames)),
+        ("late", count(report.late)),
+        ("overruns", count(report.overruns)),
+        ("turns", count(report.turns)),
+        ("motion_turns", count(report.motion_turns)),
+        ("worst_ms", ms(report.worst)),
+        ("mean_ms", ms(report.mean())),
+        ("refresh_ms", ms(report.refresh)),
+        ("stages", map(stages.collect())),
+        ("owners", map(held.collect())),
+        ("summary", string(report.to_string())),
+    ])])
+}
+
 pub(super) fn logs(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
     let level = optional_text(arguments.first())
         .and_then(|name| LogLevel::parse(&name))

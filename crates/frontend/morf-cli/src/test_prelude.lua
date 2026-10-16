@@ -394,6 +394,9 @@ end
 
 function test.ipc_verbs() return host.ipc_verbs() end
 
+-- The host's frame accounting since the last call, and a new window begun.
+function test.frames() return host.frames() end
+
 -- `level` is the least that counts: "debug", "info", "warn" or "error".
 function test.logs(level) return host.logs(level or "debug") end
 function test.clear_logs() host.clear_logs() end
