@@ -276,14 +276,6 @@ def main():
     for entry in sorted(set(dynamic) - used_dynamic):
         problems.append(f"allow-list: +{entry} is not documented; remove it")
 
-    skill_check = subprocess.run(
-        [sys.executable, str(ROOT / "tools" / "skill_gen.py"), "--check"],
-        capture_output=True, text=True, cwd=ROOT,
-    )
-    print(skill_check.stdout.strip())
-    if skill_check.returncode != 0:
-        problems.append("skill/SKILL.md is stale; run tools/skill_gen.py")
-
     binary = morf_binary()
     if binary is None:
         problems.append("no morf binary found (build morf-cli first); "

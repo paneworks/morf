@@ -299,29 +299,6 @@ pub(crate) fn ui_guide_from(candidates: &[PathBuf]) -> Result<String, String> {
     ))
 }
 
-const SKILL: &str = include_str!("../../../../skill/SKILL.md");
-
-/// Writes the generated agent skill into the per-user skill locations
-/// of the common coding agents under `home`. Returns one line per
-/// location: what was written, or that it was already there. Nothing
-/// else is written, and re-running is a no-op.
-pub(crate) fn install_skill(home: &std::path::Path) -> Result<Vec<String>, String> {
-    let mut wrote = Vec::new();
-    for agent in [".claude", ".codex"] {
-        let path = home.join(agent).join("skills/morf/SKILL.md");
-        if fs::read_to_string(&path).is_ok_and(|text| text == SKILL) {
-            wrote.push(format!("{} (already current)", path.display()));
-            continue;
-        }
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|error| format!("{}: {error}", parent.display()))?;
-        }
-        fs::write(&path, SKILL).map_err(|error| format!("{}: {error}", path.display()))?;
-        wrote.push(format!("{} (written)", path.display()));
-    }
-    Ok(wrote)
-}
-
 /// Prints what a bug report needs: the machine, the display, the instance.
 ///
 /// The half about this process is always printable; the half about the
