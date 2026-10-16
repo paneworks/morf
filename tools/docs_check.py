@@ -225,8 +225,7 @@ def isolated_env(scratch):
     runtime directory and an empty PATH of its own, and no session."""
     env = {key: value for key, value in os.environ.items()
            if key not in ("WAYLAND_DISPLAY", "WAYLAND_SOCKET", "DISPLAY", "PIPEWIRE_REMOTE",
-                          "PULSE_SERVER", "DBUS_SESSION_BUS_ADDRESS", "DBUS_SYSTEM_BUS_ADDRESS",
-                          "MORF_CONFIG", "MORF_RUNTIME_PATH")}
+                          "PULSE_SERVER", "MORF_CONFIG", "MORF_RUNTIME_PATH")}
     for name, folder in (("HOME", "home"), ("XDG_CONFIG_HOME", "config"),
                          ("XDG_DATA_HOME", "data"), ("XDG_STATE_HOME", "state"),
                          ("XDG_CACHE_HOME", "cache"), ("XDG_RUNTIME_DIR", "runtime"),
@@ -235,6 +234,7 @@ def isolated_env(scratch):
         path.mkdir(parents=True, exist_ok=True)
         env[name] = str(path)
     (scratch / "runtime").chmod(0o700)
+    env["DBUS_SESSION_BUS_ADDRESS"] = env["DBUS_SYSTEM_BUS_ADDRESS"] = "unix:path=/nonexistent"
     return env
 
 
