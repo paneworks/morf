@@ -89,7 +89,7 @@ fn cases(runtime: &mut Runtime) -> Result<Vec<Case>, String> {
 /// Prints a block of lines as TAP diagnostics.
 fn diagnose(lines: &str) {
     for line in lines.lines() {
-        println!("#   {line}");
+        outln!("#   {line}");
     }
 }
 
@@ -100,7 +100,7 @@ pub(crate) fn run_spec(
     number: &mut usize,
     tally: &mut Tally,
 ) -> Result<(), String> {
-    println!("# {}", path.display());
+    outln!("# {}", path.display());
     let source = std::fs::read(path)
         .map_err(|error| format!("could not read {}: {error}", path.display()))?;
     let spec_dir = path
@@ -123,7 +123,7 @@ pub(crate) fn run_spec(
     if let Err(error) = runtime.execute(&path.to_string_lossy(), &source) {
         *number += 1;
         tally.failed += 1;
-        println!("not ok {number} - {} did not load", path.display());
+        outln!("not ok {number} - {} did not load", path.display());
         diagnose(&error.to_string());
         return Ok(());
     }
@@ -138,7 +138,7 @@ pub(crate) fn run_spec(
         *number += 1;
         if let Some(reason) = &case.skip {
             tally.skipped += 1;
-            println!("ok {number} - {} # SKIP {reason}", case.name);
+            outln!("ok {number} - {} # SKIP {reason}", case.name);
             continue;
         }
         host.borrow_mut().start_test();
@@ -166,21 +166,21 @@ pub(crate) fn run_spec(
         };
         if passed {
             tally.passed += 1;
-            println!("ok {number} - {} ({took:.0} ms)", case.name);
+            outln!("ok {number} - {} ({took:.0} ms)", case.name);
         } else {
             tally.failed += 1;
-            println!("not ok {number} - {} ({took:.0} ms)", case.name);
+            outln!("not ok {number} - {} ({took:.0} ms)", case.name);
             diagnose(&message);
             let problems = host.borrow().recent_problems(8);
             if !problems.is_empty() {
-                println!("#   the configuration said:");
+                outln!("#   the configuration said:");
                 for line in problems {
-                    println!("#     {line}");
+                    outln!("#     {line}");
                 }
             }
         }
         for note in std::mem::take(&mut host.borrow_mut().notes) {
-            println!("#   {note}");
+            outln!("#   {note}");
         }
     }
     // The configuration goes before the spec's runtime, so its children
@@ -192,7 +192,7 @@ pub(crate) fn run_spec(
 /// `morf test`: every spec file, then a summary. True when nothing failed.
 pub(crate) fn run(args: &RunnerArgs) -> Result<bool, String> {
     let started = Instant::now();
-    println!("TAP version 13");
+    outln!("TAP version 13");
     let mut number = 0;
     let mut tally = Tally::default();
     for path in &args.files {
@@ -203,12 +203,12 @@ pub(crate) fn run(args: &RunnerArgs) -> Result<bool, String> {
         if let Err(error) = run_spec(path, args, &mut number, &mut tally) {
             number += 1;
             tally.failed += 1;
-            println!("not ok {number} - {}", path.display());
+            outln!("not ok {number} - {}", path.display());
             diagnose(&error);
         }
     }
-    println!("1..{number}");
-    println!(
+    outln!("1..{number}");
+    outln!(
         "# {} passed, {} failed, {} skipped in {:.2} s",
         tally.passed,
         tally.failed,

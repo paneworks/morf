@@ -187,12 +187,12 @@ fn check_a11y(headless: &Headless) -> usize {
     }
     problems.sort();
     problems.dedup();
-    println!(
+    outln!(
         "  a11y    {nodes} accessible nodes, {} unnamed",
         problems.len()
     );
     for problem in &problems {
-        println!("  error: a11y: {problem}");
+        outln!("  error: a11y: {problem}");
     }
     problems.len()
 }
@@ -215,13 +215,13 @@ fn check_kit(headless: &mut Headless) -> usize {
         end
     "#;
     if let Err(error) = headless.runtime.execute("morf-kit-check", CHECK) {
-        println!("  error: kit: {error}");
+        outln!("  error: kit: {error}");
         return 1;
     }
     let lines = match headless.runtime.call_ipc("morf-kit-check", &[]) {
         Ok(values) => values,
         Err(error) => {
-            println!("  error: kit: {error}");
+            outln!("  error: kit: {error}");
             return 1;
         }
     };
@@ -232,13 +232,13 @@ fn check_kit(headless: &mut Headless) -> usize {
     let mut lines = lines.iter().map(text);
     let head = lines.next().unwrap_or_default();
     if !head.starts_with("stage ") {
-        println!("  error: kit: {head}");
+        outln!("  error: kit: {head}");
         return 1;
     }
-    println!("  kit     {head}");
+    outln!("  kit     {head}");
     let problems = lines.collect::<Vec<_>>();
     for problem in &problems {
-        println!("  error: kit: {problem}");
+        outln!("  error: kit: {problem}");
     }
     problems.len()
 }
@@ -277,9 +277,9 @@ fn check(args: &RunnerArgs) -> Result<bool, String> {
     for screen_index in 0..args.screens.max(1) {
         let options = options(args, screen_index);
         if args.screens == 0 {
-            println!("{config} with no output");
+            outln!("{config} with no output");
         } else {
-            println!(
+            outln!(
                 "{config} on HEADLESS-{} ({}x{}, {} screen{})",
                 screen_index + 1,
                 args.size.0,
@@ -291,22 +291,22 @@ fn check(args: &RunnerArgs) -> Result<bool, String> {
         let mut headless = match Headless::load(&options) {
             Ok(headless) => headless,
             Err(failure) => {
-                println!("  error: {}", failure.error);
+                outln!("  error: {}", failure.error);
                 errors += 1;
                 for entry in failure.logs.iter().filter(|entry| is_error(entry)) {
-                    println!("  error: {}", entry.message);
+                    outln!("  error: {}", entry.message);
                     errors += 1;
                 }
                 continue;
             }
         };
         if let Err(error) = call_ipc(&mut headless, args) {
-            println!("  error: {error}");
+            outln!("  error: {error}");
             errors += 1;
         }
         headless.advance(args.after, args.wait);
         for surface in &headless.surfaces {
-            println!(
+            outln!(
                 "  surface {:<24} {:>5}x{:<5} at {},{}{}  {} nodes",
                 surface.label(),
                 surface.size.0,
@@ -319,18 +319,18 @@ fn check(args: &RunnerArgs) -> Result<bool, String> {
         }
         let verbs = headless.runtime.ipc_verbs();
         if !verbs.is_empty() {
-            println!("  ipc     {}", verbs.join(" "));
+            outln!("  ipc     {}", verbs.join(" "));
         }
         for declaration in headless.runtime.module_declarations() {
             if declaration.imported {
                 if declaration.declared {
-                    println!(
+                    outln!(
                         "  permissions {}: {}",
                         declaration.name,
                         declaration.groups.join(" ")
                     );
                 } else {
-                    println!("  permissions {}: (none declared)", declaration.name);
+                    outln!("  permissions {}: (none declared)", declaration.name);
                     // The shipped integrations are the most
                     // third-party-shaped code morf carries: under
                     // --strict they must carry a manifest (item 4 step 5).
@@ -340,7 +340,7 @@ fn check(args: &RunnerArgs) -> Result<bool, String> {
                             .components()
                             .any(|part| part.as_os_str() == "integrations")
                     {
-                        println!(
+                        outln!(
                             "  error: imported integration {} declares no permissions",
                             declaration.name
                         );
@@ -351,16 +351,16 @@ fn check(args: &RunnerArgs) -> Result<bool, String> {
         }
         let found = findings(&headless);
         for error in &found.errors {
-            println!("  error: {error}");
+            outln!("  error: {error}");
         }
         for warning in &found.warnings {
-            println!("  warning: {warning}");
+            outln!("  warning: {warning}");
         }
         errors += found.errors.len();
         warnings += found.warnings.len();
         let failed_effects = headless.runtime.effect_errors();
         if args.strict && failed_effects > 0 {
-            println!("  error: effects raised {failed_effects} error(s)");
+            outln!("  error: effects raised {failed_effects} error(s)");
             errors += 1;
         }
         if args.kit {
@@ -370,7 +370,7 @@ fn check(args: &RunnerArgs) -> Result<bool, String> {
             errors += check_a11y(&headless);
         }
     }
-    println!(
+    outln!(
         "{errors} error{}, {warnings} warning{}",
         if errors == 1 { "" } else { "s" },
         if warnings == 1 { "" } else { "s" }
@@ -399,7 +399,7 @@ fn render(args: &RunnerArgs) -> Result<bool, String> {
         args.scale,
         &output,
     )?;
-    println!("{}: {what}, {width}x{height}", output.display());
+    outln!("{}: {what}, {width}x{height}", output.display());
     // The picture is what was asked for; what the configuration got wrong
     // on the way is said, but is `morf check`'s to fail on.
     for error in findings(&headless).errors {

@@ -4,9 +4,12 @@
 
 use std::process::ExitCode;
 
+#[macro_use]
+mod stdout;
 mod bundle;
 mod commands;
 mod config;
+mod docs;
 mod runner_args;
 mod runners;
 mod test_host;
