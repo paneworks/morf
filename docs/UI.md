@@ -1822,6 +1822,36 @@ desktop's colour scheme, contrast and motion preferences when not told
 (`MORF_KIT_VARIANT` overrides for a run). `morf check --kit default`
 checks it against the contract.
 
+Its glass comes by name. `kit.surface { style = ... }` is a `Rect` wearing
+one of the glass surfaces (`kit.surface_styles` lists them):
+`"clear_glass"` bends what is behind at its rim and blurs none of it,
+`"frosted_glass"` blurs and greys it, `"dark_glass"` darkens it under
+light text and `"light_glass"` lightens it under dark text, the last two
+frosting only where what is behind is busy. Each style is the glass
+material above (`tokens.surfaces` holds the four tables); a `glass` or
+`color` given beside the style is used instead of the style's, and
+`kit.surface_ink(style)` is the colour text on it reads in.
+`examples/demos/render/glass-cases.lua` draws all four.
+
+```lua
+local ui = require("morf.ui")
+local kit = require("lib.kit.skins.default").kit
+
+morf.surface.namespace = "now-playing"
+morf.surface.width = 480
+morf.surface.height = 240
+
+ui.Item {
+  width = 480, height = 240,
+  ui.Rect { anchors = { fill = true }, gradient = { angle = 120, stops = { "#e76f51", "#2a9d8f" } } },
+  kit.surface {
+    style = "dark_glass", x = 40, y = 40, width = 400, height = 160, radius = 22,
+    ui.Text { x = 24, y = 24, text = "Now playing", font_size = 20,
+              color = kit.surface_ink("dark_glass") },
+  },
+}
+```
+
 ### Accessibility
 
 A screen reader is told a tree of the shown nodes that mean something:

@@ -82,6 +82,24 @@ M.PAD = 12
 M.GAP = 12
 M.control_height = 34
 
+-- ---------------------------------------------------------------- surfaces --
+--
+-- The named surface styles `kit.surface { style = ... }` draws: each the
+-- glass material (docs/UI.md, "Glass") it asks the engine for, and the ink
+-- that reads on it. `clear_glass` bends what is behind and blurs none of
+-- it; `frosted_glass` blurs and greys it; `dark_glass` darkens it under
+-- light text and `light_glass` lightens it under dark text, both frosting
+-- only where what is behind is busy.
+M.surfaces = {
+  clear_glass = { glass = { refraction = 18, frost = 0, rim = 0.55 }, ink = "#ffffff" },
+  frosted_glass = {
+    glass = { blur = 24, frost = 1, saturation = 0.5, tint = "#ffffff26", rim = 0.35 },
+    ink = "#ffffff",
+  },
+  dark_glass = { glass = { blur = 24, frost = "auto", tint = "#121214b3", rim = 0.2 }, ink = "#ffffff" },
+  light_glass = { glass = { blur = 24, frost = "auto", tint = "#fafafbb8", rim = 0.45 }, ink = "#1d1d20" },
+}
+
 -- ------------------------------------------------------------------ motion --
 
 -- libadwaita moves on ease-out cubic over short times, never overshooting.

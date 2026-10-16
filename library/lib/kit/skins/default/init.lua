@@ -57,6 +57,7 @@ function M.make(options)
     size = tokens.size, font = options.font or tokens.font, mono = tokens.mono, icon_font = tokens.icon_font,
     radius = tokens.radius, ROUNDING = tokens.ROUNDING, PAD = tokens.PAD, GAP = tokens.GAP,
     control_height = tokens.control_height, ease = tokens.ease, duration = tokens.duration(reduced),
+    surfaces = tokens.surfaces,
   }
   if fixed then
     local p = M.palette(fixed)
