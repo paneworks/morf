@@ -262,6 +262,7 @@ fn smoothed_motion_obeys_velocity_limit() {
 }
 
 mod exit;
+mod glass;
 mod gradient;
 mod groups;
 mod physics;
