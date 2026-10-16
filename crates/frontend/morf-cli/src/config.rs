@@ -15,7 +15,7 @@ use paths::carry_fonts;
 pub(crate) use paths::{config_root, default_config_path, followed, named_config_path};
 
 pub(crate) fn usage() -> &'static str {
-    "morf - reactive Wayland shell runtime\n\nusage: morf [--no-plugin | --clean] [-d | --daemonize] [shell.lua] [-- args...]\n       morf <shell|lock|greet> [-c NAME] [-- args...]\n       morf --lock <ipc|log|info|...>   (talk to this display's lock process)\n       morf -i <display> <client command>\n       morf list [-j|--json] [--show-dead]\n       morf info\n       morf app <app.lua> [-- args...]   (run a configuration as an application: its windows, one process)\n       morf [--no-plugin | --clean] -c <name>[/shell|/lock|/greet] [-- args...]\n       morf ipc call <target> [args...]\n       morf ipc verbs\n       morf log [-f|--follow] [--level <debug|info|warn|error>]\n       morf log --bindings\n       morf kill\n       morf bundle <shell.lua> [-o <output>] [--with <path>]...\n       morf check <shell.lua> [--size WxH] [--screens N] [--ipc 'VERB ARGS']... [--after MS] [--wait MS] [--strict] [--no-dbus | --private-bus] [--isolate] [-- args...]\n       morf render <shell.lua> -o <out.png> [--size WxH] [--scale S] [--surface NAME|INDEX|screen] [--ipc 'VERB ARGS']... [--after MS] [--wait MS] [--no-dbus | --private-bus] [--isolate] [-- args...]\n       morf test <spec.lua>... [--filter PATTERN] [--size WxH] [--scale S] [--snapshots DIR] [--no-dbus | --private-bus] [--no-isolate]\n       morf docs [--ui]            (this version's API reference, or its UI guide)\n       morf approve [--yes] <shell.lua>   (approve its imported modules; --yes approves all, for scripts)\n       morf --help\n       morf --version\n\nA bundle is morf and a configuration in one file, which then takes only the\nconfiguration's own arguments after `--`.\n\ncheck, render and test run a configuration with no compositor: nothing\nconnects to Wayland and time is virtual. See docs/TESTING.md."
+    "morf - reactive Wayland shell runtime\n\nusage: morf [--no-plugin | --clean] [-d | --daemonize] [shell.lua] [-- args...]\n       morf <shell|lock|greet> [-c NAME] [-- args...]\n       morf --lock <ipc|log|info|...>   (talk to this display's lock process)\n       morf -i <display> <client command>\n       morf list [-j|--json] [--show-dead]\n       morf info\n       morf app <app.lua> [-- args...]   (run a configuration as an application: its windows, one process)\n       morf [--no-plugin | --clean] -c <name>[/shell|/lock|/greet] [-- args...]\n       morf ipc call <target> [args...]\n       morf ipc verbs\n       morf log [-f|--follow] [--level <debug|info|warn|error>]\n       morf log --bindings\n       morf kill\n       morf bundle <shell.lua> [-o <output>] [--with <path>]...\n       morf check <shell.lua> [--size WxH] [--screens N] [--ipc 'VERB ARGS']... [--after MS] [--wait MS] [--strict] [--no-dbus | --private-bus] [--isolate] [-- args...]\n       morf render <shell.lua> -o <out.png> [--size WxH] [--scale S] [--surface NAME|INDEX|screen] [--ipc 'VERB ARGS']... [--after MS] [--wait MS] [--no-dbus | --private-bus] [--isolate] [-- args...]\n       morf test <spec.lua>... [--filter PATTERN] [--size WxH] [--scale S] [--snapshots DIR] [--no-dbus | --private-bus] [--no-isolate]\n       morf docs [--ui]            (this version's API reference, or its UI guide)\n       morf approve [--yes] <shell.lua | -c NAME>   (approve its imported modules; --yes approves all, for scripts; exit 0 all approved, 1 some not, 2 error)\n       morf --help\n       morf --version\n\nA bundle is morf and a configuration in one file, which then takes only the\nconfiguration's own arguments after `--`.\n\ncheck, render and test run a configuration with no compositor: nothing\nconnects to Wayland and time is virtual. See docs/TESTING.md."
 }
 
 pub(crate) fn run() -> Result<(), String> {
@@ -111,10 +111,15 @@ pub(crate) fn run() -> Result<(), String> {
                 println!("{}", api_reference());
             }
         }
-        Command::Approve { config, yes } => {
-            if !approve_modules(&config, yes)? {
-                std::process::exit(1);
+        Command::Approve(request) => {
+            morf_host::headless::env::isolate_from_session(true);
+            let stdin = std::io::stdin();
+            let result =
+                crate::approve::approve(&request, None, &mut stdin.lock(), &mut std::io::stdout());
+            if let Err(error) = &result {
+                eprintln!("morf: {error}");
             }
+            std::process::exit(crate::approve::exit_code(&result));
         }
         Command::Types(dir) => write_types(&dir)?,
         Command::Runner(args) => return crate::runners::run(args),
@@ -186,10 +191,7 @@ pub(crate) enum Command {
         ui: bool,
     },
     /// Approve a configuration's imported modules.
-    Approve {
-        config: PathBuf,
-        yes: bool,
-    },
+    Approve(crate::approve::Request),
     /// `check`, `render` or `test`: a configuration with no compositor.
     Runner(crate::runner_args::RunnerArgs),
     Client(IpcRequest),
@@ -255,18 +257,7 @@ pub(crate) fn parse_command(args: &[std::ffi::OsString]) -> Result<Command, Stri
         ["types", dir] => Ok(Command::Types(PathBuf::from(dir))),
         ["docs"] => Ok(Command::Docs { ui: false }),
         ["docs", "--ui"] => Ok(Command::Docs { ui: true }),
-        ["approve", "--yes", config] => Ok(Command::Approve {
-            config: PathBuf::from(config),
-            yes: true,
-        }),
-        ["approve", config] => Ok(Command::Approve {
-            config: PathBuf::from(config),
-            yes: false,
-        }),
-        ["approve", config, "--yes"] => Ok(Command::Approve {
-            config: PathBuf::from(config),
-            yes: true,
-        }),
+        ["approve", rest @ ..] => crate::approve::parse(rest).map(Command::Approve),
         ["app", path, rest @ ..] if !path.starts_with('-') => {
             morf_host::app::enter();
             Ok(Command::Run(

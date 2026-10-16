@@ -42,6 +42,15 @@ pub(crate) fn install<'gc>(
                 }
             };
             let output = source_of(options.get_value(ctx, "output"), "image.compose output")?;
+            if crate::vm::permissions::refused_write(
+                ctx,
+                &state,
+                &mut stack,
+                "morf.image.compose",
+                &output,
+            ) {
+                return Ok(CallbackReturn::Return);
+            }
             let request = morf_image::canvas::Request {
                 width,
                 height,

@@ -65,6 +65,7 @@ use std::time::Duration;
 
 use crate::{
     Limits, api::ui::scene::*, runtime::state::*, value::table::*, vm::execute::drive_executor,
+    vm::permissions::gate,
 };
 use morf_runtime::Handler;
 
@@ -90,20 +91,28 @@ pub(crate) fn install_io_api<'gc>(
     state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
-    let write = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (token, data): (UserRef<IoToken>, luna::String) = stack.consume(ctx)?;
-        match token.0.write(data.as_bytes()).map_err(HostError::from)? {
-            Ok(()) => stack.replace(ctx, true),
-            Err(error) => stack.replace(ctx, (false, error.message())),
-        }
-        Ok(CallbackReturn::Return)
-    });
+    let writer = |group: &'static str, api: &'static str| {
+        let state = Rc::clone(&state);
+        Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+            gate!(ctx, &state, stack, group, api);
+            let (token, data): (UserRef<IoToken>, luna::String) = stack.consume(ctx)?;
+            match token.0.write(data.as_bytes()).map_err(HostError::from)? {
+                Ok(()) => stack.replace(ctx, true),
+                Err(error) => stack.replace(ctx, (false, error.message())),
+            }
+            Ok(CallbackReturn::Return)
+        })
+    };
+    let write = writer("run", "process:write");
+    let send = writer("socket", "connection:send");
     let close_stdin = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let token: UserRef<IoToken> = stack.consume(ctx)?;
         token.0.close_stdin();
         Ok(CallbackReturn::Return)
     });
-    let kill = Callback::from_fn(&ctx, |ctx, _, mut stack| {
+    let kill_state = Rc::clone(&state);
+    let kill = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        gate!(ctx, &kill_state, stack, "run", "process:kill");
         let (token, signal): (UserRef<IoToken>, LuaValue) = stack.consume(ctx)?;
         let signal = signal_of(signal)?;
         stack.replace(ctx, token.0.kill(signal));
@@ -143,7 +152,7 @@ pub(crate) fn install_io_api<'gc>(
     let process_metatable = Table::new(&ctx);
     process_metatable.set_field(ctx, "__index", process_methods);
     let connection_methods = Table::new(&ctx);
-    connection_methods.set_field(ctx, "send", write);
+    connection_methods.set_field(ctx, "send", send);
     connection_methods.set_field(ctx, "connected", connected);
     connection_methods.set_field(ctx, "close", close);
     let connection_metatable = Table::new(&ctx);
@@ -157,10 +166,7 @@ pub(crate) fn install_io_api<'gc>(
 
     let spawn_starter = Rc::clone(&starter);
     let spawn = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        if let Some(refusal) = spawn_starter.state.borrow().permission_refusal("run") {
-            stack.replace(ctx, (LuaValue::Nil, refusal.as_str()));
-            return Ok(CallbackReturn::Return);
-        }
+        gate!(ctx, &spawn_starter.state, stack, "run", "morf.spawn");
         let options: Table = stack.consume(ctx)?;
         let command = match options.get_value(ctx, "command") {
             LuaValue::Table(command) => command,
@@ -194,10 +200,7 @@ pub(crate) fn install_io_api<'gc>(
 
     let run_starter = Rc::clone(&starter);
     let run = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        if let Some(refusal) = run_starter.state.borrow().permission_refusal("run") {
-            stack.replace(ctx, (LuaValue::Nil, refusal.as_str()));
-            return Ok(CallbackReturn::Return);
-        }
+        gate!(ctx, &run_starter.state, stack, "run", "morf.run");
         let (command, options, callback): (Table, LuaValue, LuaValue) = stack.consume(ctx)?;
         let (options, callback) = match (options, callback) {
             (LuaValue::Function(Function::Closure(callback)), LuaValue::Nil) => {
@@ -238,7 +241,9 @@ pub(crate) fn install_io_api<'gc>(
     // (or no longer holds the handle of) -- a recorder left running by an
     // earlier shell. The default is TERM. Process groups (pid <= 0) and init
     // are refused. Returns true, or false and the reason.
-    let kill_pid = Callback::from_fn(&ctx, |ctx, _, mut stack| {
+    let kill_state = Rc::clone(&starter.state);
+    let kill_pid = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        gate!(ctx, &kill_state, stack, "run", "morf.kill");
         let (pid, signal): (i64, LuaValue) = stack.consume(ctx)?;
         let pid = morf_io::signalable_pid(pid).map_err(HostError::from)?;
         let signal = signal_of(signal)?;
@@ -252,10 +257,7 @@ pub(crate) fn install_io_api<'gc>(
 
     let connect_starter = Rc::clone(&starter);
     let connect = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        if let Some(refusal) = connect_starter.state.borrow().permission_refusal("socket") {
-            stack.replace(ctx, (LuaValue::Nil, refusal.as_str()));
-            return Ok(CallbackReturn::Return);
-        }
+        gate!(ctx, &connect_starter.state, stack, "socket", "morf.connect");
         let options: Table = stack.consume(ctx)?;
         let endpoint = endpoint_of(ctx, options)?;
         let on_line = optional_closure(ctx, options, "on_line").map_err(HostError::from)?;
@@ -282,6 +284,7 @@ pub(crate) fn install_io_api<'gc>(
     morf.set_field(ctx, "connect", connect);
 
     let request = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        gate!(ctx, &starter.state, stack, "socket", "morf.request_socket");
         let (path, data, callback, options): (luna::String, luna::String, LuaValue, LuaValue) =
             stack.consume(ctx)?;
         let callback = match callback {

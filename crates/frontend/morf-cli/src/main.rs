@@ -4,9 +4,11 @@
 
 use std::process::ExitCode;
 
+mod approve;
 mod bundle;
 mod commands;
 mod config;
+mod permission_words;
 mod runner_args;
 mod runners;
 mod test_host;

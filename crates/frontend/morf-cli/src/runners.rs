@@ -265,12 +265,15 @@ fn options(args: &RunnerArgs, screen_index: usize) -> LoadOptions {
     options.scale = args.scale as i32;
     options.args = args.args.clone();
     options.policy = args.policy;
+    if args.runner == Runner::Check {
+        options.permissions = morf_lua::PermissionMode::HoldImported;
+    }
     options
 }
 
 /// `morf check`: loads, runs a little, lays everything out, and says what
 /// it found. True when nothing failed it.
-fn check(args: &RunnerArgs) -> Result<bool, String> {
+pub(crate) fn check(args: &RunnerArgs) -> Result<bool, String> {
     let config = args.files[0].display().to_string();
     let (mut errors, mut warnings) = (0usize, 0usize);
     // `--screens 0`: one pass, as the shell runs it once every output is gone.
@@ -321,34 +324,14 @@ fn check(args: &RunnerArgs) -> Result<bool, String> {
         if !verbs.is_empty() {
             println!("  ipc     {}", verbs.join(" "));
         }
-        for declaration in headless.runtime.module_declarations() {
-            if declaration.imported {
-                if declaration.declared {
-                    println!(
-                        "  permissions {}: {}",
-                        declaration.name,
-                        declaration.groups.join(" ")
-                    );
-                } else {
-                    println!("  permissions {}: (none declared)", declaration.name);
-                    // The shipped integrations are the most
-                    // third-party-shaped code morf carries: under
-                    // --strict they must carry a manifest (item 4 step 5).
-                    if args.strict
-                        && declaration
-                            .path
-                            .components()
-                            .any(|part| part.as_os_str() == "integrations")
-                    {
-                        println!(
-                            "  error: imported integration {} declares no permissions",
-                            declaration.name
-                        );
-                        errors += 1;
-                    }
-                }
-            }
+        let report = crate::permission_words::report(&headless.runtime, args.strict);
+        for line in &report.lines {
+            println!("  {line}");
         }
+        for error in &report.errors {
+            println!("  error: {error}");
+        }
+        errors += report.errors.len();
         let found = findings(&headless);
         for error in &found.errors {
             println!("  error: {error}");

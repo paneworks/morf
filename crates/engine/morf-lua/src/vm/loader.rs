@@ -10,9 +10,11 @@ use crate::{api::ui::scene::*, runtime::state::*, vm::execute::*, vm::types::*};
 
 mod dbus;
 mod json;
+mod require;
 
 pub(crate) use dbus::{dbus_value_to_lua, lua_to_dbus};
 pub(crate) use json::{json_to_lua, lua_to_json};
+pub(crate) use require::{Require, install_require};
 
 pub(crate) fn default_module_roots() -> Vec<PathBuf> {
     std::env::var_os("MORF_RUNTIME_PATH")
@@ -84,8 +86,6 @@ pub fn runtimepath_roots(config: &std::path::Path, external: bool) -> Vec<PathBu
 }
 
 /// Resolves a module name to the file it loads from and its source.
-/// The first root is the configuration's own; a module resolved under
-/// any other root is imported (see `vm::permissions`).
 pub(crate) fn resolve_runtime_module(
     roots: &[PathBuf],
     name: &str,
@@ -245,13 +245,12 @@ pub(crate) fn view_transition_to_lua(ctx: Context<'_>, transition: ViewTransitio
     table
 }
 
-pub(crate) fn execute_module<'gc>(
+/// Runs a module's compiled top level and returns what it returned.
+pub(crate) fn run_module<'gc>(
     ctx: Context<'gc>,
-    name: &str,
-    source: &[u8],
+    closure: Closure<'gc>,
     limits: Limits,
 ) -> Result<LuaValue<'gc>, String> {
-    let closure = Closure::load(ctx, Some(name), source).map_err(|error| error.to_string())?;
     let executor = Executor::start(ctx, closure.into(), ());
     drive_executor(ctx, executor, limits, limits.module_fuel, "module")?;
     match executor.take_result::<LuaValue>(ctx) {

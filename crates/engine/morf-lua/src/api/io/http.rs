@@ -50,6 +50,7 @@ use std::rc::Rc;
 
 use crate::{
     Limits, api::ui::scene::*, runtime::state::*, vm::execute::drive_executor, vm::loader::*,
+    vm::permissions::gated,
 };
 use morf_runtime::Handler;
 
@@ -105,6 +106,7 @@ pub(crate) fn install_http_api<'gc>(
     metatable.set_field(ctx, "__index", methods);
     let metatable = ctx.stash(metatable);
 
+    let gate_state = Rc::clone(&state);
     let start = Rc::new(Starter {
         state,
         json,
@@ -112,46 +114,64 @@ pub(crate) fn install_http_api<'gc>(
     });
 
     let request_start = Rc::clone(&start);
-    let request = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let options: Table = stack.consume(ctx)?;
-        let url = match options.get_value(ctx, "url") {
-            LuaValue::String(url) => url.display_lossy().to_string(),
-            _ => return Err(HostError("http request url must be a string".into()).into()),
-        };
-        let mut request = HttpRequest::get(url);
-        apply_options(ctx, &mut request, Some(options))?;
-        let callback = function_of(options.get_value(ctx, "on_done"))?;
-        stack.replace(ctx, request_start.start(ctx, request, callback)?);
-        Ok(CallbackReturn::Return)
-    });
+    let request = gated(
+        ctx,
+        &gate_state,
+        "http",
+        "morf.http.request",
+        move |ctx, _, mut stack| {
+            let options: Table = stack.consume(ctx)?;
+            let url = match options.get_value(ctx, "url") {
+                LuaValue::String(url) => url.display_lossy().to_string(),
+                _ => return Err(HostError("http request url must be a string".into()).into()),
+            };
+            let mut request = HttpRequest::get(url);
+            apply_options(ctx, &mut request, Some(options))?;
+            let callback = function_of(options.get_value(ctx, "on_done"))?;
+            stack.replace(ctx, request_start.start(ctx, request, callback)?);
+            Ok(CallbackReturn::Return)
+        },
+    );
     http.set_field(ctx, "request", request);
 
     let get_start = Rc::clone(&start);
-    let get = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (url, options, callback): (String, LuaValue, LuaValue) = stack.consume(ctx)?;
-        let (options, callback) = options_and_callback(ctx, options, callback)?;
-        let mut request = HttpRequest::get(url);
-        apply_options(ctx, &mut request, options)?;
-        stack.replace(ctx, get_start.start(ctx, request, callback)?);
-        Ok(CallbackReturn::Return)
-    });
+    let get = gated(
+        ctx,
+        &gate_state,
+        "http",
+        "morf.http.get",
+        move |ctx, _, mut stack| {
+            let (url, options, callback): (String, LuaValue, LuaValue) = stack.consume(ctx)?;
+            let (options, callback) = options_and_callback(ctx, options, callback)?;
+            let mut request = HttpRequest::get(url);
+            apply_options(ctx, &mut request, options)?;
+            stack.replace(ctx, get_start.start(ctx, request, callback)?);
+            Ok(CallbackReturn::Return)
+        },
+    );
     http.set_field(ctx, "get", get);
 
-    let post = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (url, payload, options, callback): (String, LuaValue, LuaValue, LuaValue) =
-            stack.consume(ctx)?;
-        let (options, callback) = options_and_callback(ctx, options, callback)?;
-        let mut request = HttpRequest::get(url);
-        request.method = "POST".into();
-        match payload {
-            LuaValue::Nil => {}
-            LuaValue::String(body) => request.body = Some(body.as_bytes().to_vec()),
-            payload => set_json_body(ctx, &mut request, payload)?,
-        }
-        apply_options(ctx, &mut request, options)?;
-        stack.replace(ctx, start.start(ctx, request, callback)?);
-        Ok(CallbackReturn::Return)
-    });
+    let post = gated(
+        ctx,
+        &gate_state,
+        "http",
+        "morf.http.post",
+        move |ctx, _, mut stack| {
+            let (url, payload, options, callback): (String, LuaValue, LuaValue, LuaValue) =
+                stack.consume(ctx)?;
+            let (options, callback) = options_and_callback(ctx, options, callback)?;
+            let mut request = HttpRequest::get(url);
+            request.method = "POST".into();
+            match payload {
+                LuaValue::Nil => {}
+                LuaValue::String(body) => request.body = Some(body.as_bytes().to_vec()),
+                payload => set_json_body(ctx, &mut request, payload)?,
+            }
+            apply_options(ctx, &mut request, options)?;
+            stack.replace(ctx, start.start(ctx, request, callback)?);
+            Ok(CallbackReturn::Return)
+        },
+    );
     http.set_field(ctx, "post", post);
 
     let url_encode = Callback::from_fn(&ctx, |ctx, _, mut stack| {

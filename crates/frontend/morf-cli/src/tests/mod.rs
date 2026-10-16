@@ -1,3 +1,5 @@
+mod approve;
+mod check_permissions;
 mod command_line;
 mod config_paths;
 mod docs;
@@ -8,6 +10,7 @@ mod lock_input;
 mod lock_ipc;
 mod lock_trees;
 mod operations;
+mod permission_cost;
 mod plugins;
 mod reload;
 mod supervision;
