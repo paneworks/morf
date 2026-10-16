@@ -28,7 +28,6 @@ pub(super) fn frame(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<I
             ])
         }
         Err(error) if error.starts_with("no GPU") => {
-            host.notes.push(format!("frame skipped: {error}"));
             host.no_gpu = Some(error.clone());
             Ok(vec![IpcValue::Boolean(false), string(error)])
         }
