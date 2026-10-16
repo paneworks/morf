@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.9] - 2026-10-16
+
+### <!-- 0 -->⛰️ Features
+
+- Publish native per-output shell bindings, input regions, frame geometry and keyboard coverage.
+- Cancel native controller work per gesture.
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- Start AppImages from the launcher's app menu; launched apps no longer write to a closed pipe.
+- Repaint on IPC calls only when visible state changes.
+- Confirm a Wayland unlock before closing the lock client.
+
+### <!-- 2 -->⚡ Performance
+
+- Prepare workspace wallpaper images on bounded workers and skip textures outside their clip.
+
 ## [0.2.8] - 2026-10-10
 
 ### <!-- 0 -->⛰️ Features
