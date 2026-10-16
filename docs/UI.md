@@ -2193,7 +2193,7 @@ printed on stderr:
 
 | Variable | Prints |
 |---|---|
-| `MORF_WAKE_LOG=1` | every wake and its cause: `compositor`, `wake fd` (a service thread), or `deadline: timer`, `caret`, `image`, `dbus-timeout`, `terminal`, `tray-retry`, `clock-seconds`, `clock-minutes`, `clock-hours`, `fallback`, `pending` (the last turn left work), with how long it slept; each timer as it fires, named by the `file:line` that made it (`ui.Timer at …` for a node); and, every two seconds while anything animates, what is moving (`path.property`, marked `(loops)` when it never ends) |
+| `MORF_WAKE_LOG=1` | every wake and its cause: `compositor`, `wake fd` (a service thread), or `deadline: timer`, `caret`, `image`, `dbus-timeout`, `terminal`, `tray-retry`, `clock-seconds`, `clock-minutes`, `clock-hours`, `fallback`, `pending` (the last turn left work), with how long it slept; each timer as it fires, named by the `file:line` that made it (`ui.Timer at …` for a node); and, every two seconds while anything animates, what is moving (`path.property`, marked `(loops)` when it never ends) and the frame accounting since the last report: how many frames, how many ran late or past 2.4x the refresh interval, which stage held each of those (`services`, `handlers`, `flush`, `motion`, `layout`, `paint`, or `waiting` when none did), and the time each stage was charged |
 | `MORF_FRAME_LOG=1` | every painted frame and what it cost; `=2` also splits any frame over 16 ms into layout, render and the rest |
 | `MORF_SLOW_MS=N` | any stage of a turn that held the output longer than N ms (default 150) |
 | `MORF_PROFILE=1` | with each slow stage, whose work filled it (below) |

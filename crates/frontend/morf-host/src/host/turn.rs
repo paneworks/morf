@@ -10,32 +10,35 @@ mod frame;
 mod stall;
 mod start;
 mod stats;
+mod steps;
 
 use stats::FrameAccounting;
+use steps::Timed;
 
 use morf_app::{Backend, Event, PRIMARY_LAYER, Woke};
 use morf_desktop::Desktop;
+use morf_lua::profile::Stage;
 use morf_lua::{Runtime, Screen, SurfaceReserve};
 use std::os::fd::BorrowedFd;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use crate::host::desktop::{apply_service_requests, dispatch_desktop};
+use crate::host::desktop::dispatch_desktop;
 use crate::process::supervisor::LoadPolicy;
 use crate::{
     host::events::*,
     host::layers::*,
     host::surfaces::*,
-    lock::{SupervisorMessage, WorkerCommand, WorkerMessage},
+    lock::{SupervisorMessage, WorkerCommand},
     paint::backdrop::*,
     paint::wake_plan::*,
-    paint::*,
     process::services::*,
     process::workers::*,
 };
 
 pub(crate) use stall::{advance_without_callbacks, motion_deadline};
 pub use start::{FirstFrame, StartOptions};
+pub use stats::{FrameReport, LATE, OVERRUN, OWNERS};
 
 /// What a host answers to: the supervisor of a live shell. A headless host
 /// has none, and its runner plays the supervisor's part itself.
@@ -132,53 +135,56 @@ impl Host {
 
     /// One turn: the desktop's news, the clock, services and timers, the
     /// supervisor's commands, the configuration's window and surface changes,
-    /// the backend's events, and the paint of whatever changed.
+    /// the backend's events, and the paint of whatever changed. Charged to
+    /// the frame accounting however it ends.
     pub fn turn(
         &mut self,
         runtime: &mut Runtime,
         links: Option<&Links<'_>>,
     ) -> Result<Turn, String> {
+        self.frame_accounting.begin_turn();
+        let base = morf_lua::profile::stage(Stage::Services);
+        let events = std::iter::from_fn(|| self.backend.next_event()).collect();
+        let commands = links.map_or_else(Vec::new, |links| links.commands.try_iter().collect());
+        let turned = self.ordered_turn(runtime, links, events, commands);
+        drop(base);
+        let moving =
+            runtime.has_motion() || self.state.animating_shaders || self.state.primary_deferred;
+        self.frame_accounting.end_turn(moving);
+        turned
+    }
+
+    /// A turn in its full order, given the backend's events and the
+    /// supervisor's commands queued when it began.
+    fn ordered_turn(
+        &mut self,
+        runtime: &mut Runtime,
+        links: Option<&Links<'_>>,
+        events: Vec<Event>,
+        commands: Vec<WorkerCommand>,
+    ) -> Result<Turn, String> {
         let name = self.name.clone();
-        let turn_started = Instant::now();
-        let mut handlers_took = Duration::ZERO;
         let mut repaint = std::mem::take(&mut self.containment_repaint);
         repaint |= dispatch_desktop(runtime, &mut *self.desktop, self.state.painter.gpu())?;
         self.report_motion(runtime);
         // Before the services, so a callback reading the time reads it as it
         // is now, not as it was when the loop last woke.
-        let next_clock = clock_text();
-        if next_clock != self.clock {
-            self.clock = next_clock;
-            repaint |= runtime
-                .update_clock(&self.clock)
-                .map_err(|error| error.to_string())?;
-        }
+        repaint |= self.update_clock(runtime)?;
         self.report_jit(runtime);
-        // The turn's events, taken up front: a turn the compositor woke
-        // only for frame callbacks is motion-only, and paints before
-        // the services are polled (Item 2's fast path), so a slow
-        // handler cannot hold a spring's frame hostage. Anything else
-        // -- input, a command, a configure -- takes the ordered path.
-        let mut events = Vec::new();
-        while let Some(event) = self.backend.next_event() {
-            events.push(event);
-        }
-        let frame_only = !events.is_empty()
-            && events
-                .iter()
-                .all(|event| matches!(event, Event::Frame { .. }));
-        let mut services_took = Duration::ZERO;
-        let mut commands_processed = 0usize;
+        repaint |= self.poll_stage(runtime);
         let mut recreate_surface = false;
         if let Some(links) = links {
-            while let Ok(command) = links.commands.try_recv() {
-                commands_processed += 1;
+            let mut queued = commands.into_iter();
+            while let Some(command) = queued.next().or_else(|| links.commands.try_recv().ok()) {
+                let Some(command) = self.answer_frames_hook(command) else {
+                    continue;
+                };
                 self.follow_up = true;
-                let started_command = Instant::now();
-                let update =
-                    handle_worker_command(runtime, Some(links.screen), links.policy, command);
-                slow(self.report_slow, &name, "an IPC call", started_command);
-                handlers_took += started_command.elapsed();
+                let update = {
+                    let _timed =
+                        Timed::start(self.report_slow, &name, Stage::Handlers, "an IPC call");
+                    handle_worker_command(runtime, Some(links.screen), links.policy, command)
+                };
                 repaint |= update.repaint;
                 recreate_surface |= update.recreate_surface;
                 if update.reset_input {
@@ -188,121 +194,19 @@ impl Host {
                     refresh_idle_timeouts(runtime, &mut *self.desktop);
                 }
                 if update.reloaded {
-                    self.runtime_generation = self
-                        .runtime_generation
-                        .checked_add(1)
-                        .ok_or("native controller runtime generation exhausted")?;
-                    self.reloaded(runtime)?;
-                    // What to do once every output is gone may have changed.
-                    links
-                        .tx
-                        .send(SupervisorMessage::Worker(WorkerMessage::Outputless {
-                            output: name.clone(),
-                            wanted: runtime.layer_surface_config().outputless,
-                        }))
-                        .map_err(|_| "output supervisor stopped".to_owned())?;
+                    self.after_reload(runtime, links)?;
                 }
             }
-            if let Some(hard) = runtime.take_reload_request() {
-                links
-                    .tx
-                    .send(SupervisorMessage::Reload { hard })
-                    .map_err(|_| "output supervisor stopped".to_owned())?;
-            }
-            if runtime.quit_requested() {
-                // Told once, and then this output stops driving frames. The
-                // supervisor takes the others down; returning here rather than
-                // waiting for it keeps this thread from painting a shell that
-                // is already leaving.
-                links
-                    .tx
-                    .send(SupervisorMessage::Quit)
-                    .map_err(|_| "output supervisor stopped".to_owned())?;
-                return Ok(Turn::Stop);
-            }
-            if let Some(enabled) = runtime.take_watch_files_change() {
-                links
-                    .tx
-                    .send(SupervisorMessage::WatchFiles(enabled))
-                    .map_err(|_| "output supervisor stopped".to_owned())?;
+            if let Some(turn) = self.tell_supervisor(runtime, links)? {
+                return Ok(turn);
             }
         }
         if recreate_surface {
             return Ok(Turn::Recreate);
         }
-        apply_idle_inhibit(runtime, &mut *self.backend);
-        apply_idle_timeouts(runtime, &mut *self.desktop);
-        apply_shortcuts_inhibit(runtime, &mut *self.backend);
-        if let Some(density) = runtime.take_density_change() {
-            // A scale slider: every window is told its new scale and size,
-            // and lays itself out again at them.
-            self.backend.set_density(density);
-            repaint = true;
-        }
-        if runtime.take_layer_surface_change() {
-            self.layer_surface_changed(runtime)?;
-            // The mask lives in the same configuration and is re-derived when
-            // the surface paints, so the new geometry owes one frame even when
-            // the backend has no configure to send back.
-            repaint = true;
-        }
-        if runtime.take_window_surface_change() {
-            // The only thing that can move the primary root.
-            self.state.primary_root =
-                primary_surface_root_keeping(runtime, self.state.primary_root)?;
-            repaint |= crate::host::surfaces::sync_window_surfaces(
-                runtime,
-                &mut *self.backend,
-                &mut self.state.windows,
-                &name,
-            )?;
-        }
-        apply_service_requests(runtime, &mut *self.backend, &mut *self.desktop);
-        // Motion-only turns handle their frame callbacks first and
-        // poll the services after; every other turn polls first, as it
-        // always has. A deferred poll that owes a repaint is painted by
-        // this same turn's frame below.
-        let motion_only = frame_only && commands_processed == 0 && !repaint;
-        if !motion_only {
-            let (polled, took) = poll_stage(self.report_slow, &name, runtime);
-            repaint |= polled;
-            services_took = took;
-        }
-        for event in events {
-            if matches!(&event, Event::Configure { id, .. } if *id == PRIMARY_LAYER) {
-                self.primary_configured = true;
-            }
-            self.follow_up = true;
-            let handling = Instant::now();
-            let handled = self.handle_event(runtime, event, links.map(|links| links.tx));
-            handlers_took += handling.elapsed();
-            repaint |= handled?;
-        }
-        if motion_only {
-            let (polled, took) = poll_stage(self.report_slow, &name, runtime);
-            repaint |= polled;
-            services_took = took;
-        }
-        apply_service_requests(runtime, &mut *self.backend, &mut *self.desktop);
-        if let Some(renderer) = self.state.painter.gpu() {
-            crate::capture::apply_capture_releases(runtime, renderer);
-        }
-        crate::host::actions::apply_window_surface_actions(
-            runtime,
-            &*self.backend,
-            &self.state.windows,
-        );
-        advance_without_callbacks(runtime, &*self.backend, &mut self.state)?;
-        let framing = Instant::now();
-        let framed = self.frame(runtime, repaint);
-        self.frame_accounting.record(
-            turn_started.elapsed(),
-            self.state.refresh,
-            services_took,
-            handlers_took,
-            framing.elapsed(),
-        );
-        framed
+        repaint |= self.apply_runtime_changes(runtime)?;
+        repaint |= self.handle_events(runtime, events, links, true)?;
+        self.finish_turn(runtime, repaint)
     }
 
     /// Hands the host one event, as the turn does each one the backend
@@ -383,7 +287,8 @@ impl Host {
         Ok(())
     }
 
-    /// Now and then, what keeps the loop drawing, when anything does.
+    /// Now and then, what keeps the loop drawing, when anything does, and
+    /// the frame accounting since the last report.
     fn report_motion(&mut self, runtime: &Runtime) {
         if wake_log_wanted()
             && (runtime.has_motion() || self.frame_accounting.overruns() > 0)
@@ -396,9 +301,10 @@ impl Host {
                 eprintln!("morf: output {}: moving: {line}", self.name);
             }
             eprintln!(
-                "morf: output {}: {}",
+                "{} morf: output {}: {}",
+                stamp(),
                 self.name,
-                self.frame_accounting.take_summary()
+                self.frame_accounting.take()
             );
         }
     }
@@ -436,15 +342,6 @@ fn event_kind(event: &Event) -> &'static str {
 /// output's: the next paint starts from the scene as it is then.
 fn is_layout_error(error: &str) -> bool {
     error.contains("scene layout error") || error.contains("stale scene node handle")
-}
-
-/// One services poll, timed for the frame accounting: timers, service
-/// results and the effect flush inside it.
-fn poll_stage(report_slow: bool, name: &str, runtime: &mut Runtime) -> (bool, Duration) {
-    let polling = Instant::now();
-    let repaint = runtime.poll_services();
-    slow(report_slow, name, "services, timers and callbacks", polling);
-    (repaint, polling.elapsed())
 }
 
 /// Says what the layout could not do, at most once a second, so a scene

@@ -257,6 +257,7 @@ pub fn paint_layer_surface(
     surface: &mut Window,
     text: Option<&mut morf_text::TextSystem>,
 ) -> Result<(), String> {
+    let _stage = morf_lua::profile::stage(morf_lua::profile::Stage::Paint);
     if let Some(text) = text {
         return super::lay_out_layer_surface(runtime, text, client, surface);
     }
