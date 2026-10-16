@@ -178,6 +178,8 @@ pub(crate) fn install_ui_json_api<'gc>(
         let Some(spec) = spec else {
             return Ok(CallbackReturn::Return);
         };
+        crate::api::ui::scene::refuse_claimed(&state, target.handle, &property)
+            .map_err(HostError)?;
         let source: UserRef<NodeToken> = match spec.get_value(ctx, "node") {
             LuaValue::Nil => {
                 return Err(HostError("ui.follow needs a `node` to follow".into()).into());

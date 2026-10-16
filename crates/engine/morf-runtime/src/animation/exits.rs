@@ -58,6 +58,8 @@ pub fn cancel_exit(
     if !scene.cancel_exit(node).unwrap_or(false) {
         return false;
     }
+    // A claim change the exit held back is owed now.
+    animation.claims.touch(node);
     if animation.exit_registered.remove(&node) {
         retention.unregister(node);
     } else {

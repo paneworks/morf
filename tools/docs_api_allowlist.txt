@@ -293,11 +293,14 @@ ui.Inset	undocumented: constructor with no guide section yet
 +morf.capabilities.hdr_transfer	dynamic: compositor capability filled by the host, not a types field
 +morf.capabilities.idle_inhibit	dynamic: compositor capability filled by the host, not a types field
 +morf.capabilities.outputless	dynamic: compositor capability filled by the host, not a types field
++morf.surface.height	dynamic: surface property served through __index in api/window/layer.rs
 +morf.surface.blend	dynamic: surface property served through __index in api/window/layer.rs
 +morf.surface.keyboard_focus	dynamic: surface property served through __index in api/window/layer.rs
++morf.surface.namespace	dynamic: surface property served through __index in api/window/layer.rs
 +morf.surface.on_focus_changed	dynamic: surface callback served through __index in api/window/layer.rs
 +morf.surface.on_pointer_changed	dynamic: surface callback served through __index in api/window/layer.rs
 +morf.surface.opaque	dynamic: surface property served through __index in api/window/layer.rs
 +morf.surface.outputless	dynamic: surface property served through __index in api/window/layer.rs
 +morf.surface.subpixel_text	dynamic: surface property served through __index in api/window/layer.rs
++morf.surface.width	dynamic: surface property served through __index in api/window/layer.rs
 +morf.toplevels.model	dynamic: list model served through __index in api/desktop/toplevels.rs

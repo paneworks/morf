@@ -141,6 +141,7 @@ pub(crate) fn evaluate_effect(
                     node,
                     value,
                 ),
+                EffectSink::Claim(sink) => state.borrow_mut().feed_claim(&sink, value.clone()),
                 EffectSink::State(_) => Ok(()),
             }
         } else {

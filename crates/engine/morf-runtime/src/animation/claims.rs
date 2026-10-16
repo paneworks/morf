@@ -1,26 +1,27 @@
-//! Claims: which state owns a property right now (PLAN item 5).
+//! Claims: which state owns a property right now.
 //!
-//! A claim is a record -- target property, target value, motion
-//! specification, priority class, declared order -- and for each
-//! claimed property the highest-class active claim wins. The evaluator
-//! only ever *retargets* the property's existing animation: it installs
-//! the winning claim's behaviour or physics once and writes the target
-//! through `Scene::assign`, which carries the property's current value
-//! and velocity into the new motion. It never integrates motion
-//! itself, so there is no second animation system to disagree with the
-//! scene's. Properties with no claims are never touched.
+//! A claim is a record: the properties it sets and their targets, how they
+//! travel there, a condition, a priority class and a declared order. For
+//! each claimed property the highest-class active claim wins, and inside a
+//! class the claim declared first. The evaluator ([`Claims::evaluate`])
+//! runs in the animation tick and only aims each property's own animation
+//! at its winner's target through [`morf_scene::Scene::retarget`], which
+//! carries the value and its speed across a change of motion; it moves
+//! nothing itself. Properties no claim names are never touched.
 //!
-//! Each claim owns a presence, 0 while it yields and 1 while it owns
-//! its properties, moved over the claim's motion duration. Presence is
-//! an ordinary number the scripting layer mirrors into a signal, so
-//! painting "according to who is in charge" is a binding like any
-//! other.
+//! Each claim owns a presence, 0 while it yields and 1 while it owns every
+//! property it sets, moved by the motion that moves those properties.
 
-use std::collections::HashMap;
-use std::time::Duration;
+mod evaluate;
+#[cfg(test)]
+mod tests;
+
+use std::collections::{HashMap, HashSet};
 
 use morf_scene::reactive::SignalId;
-use morf_scene::{Behavior, NodeHandle, Physics, Scene, SceneError, Value};
+use morf_scene::{Motion, NodeHandle, Physics, Repeat, ScalarMotion, Scene, Value};
+
+pub use evaluate::{ClaimsFrame, ClaimsHost};
 
 /// Priority classes, lowest first: the ordering is the semantics.
 /// `state > asked > reflex > posture > ambient`.
@@ -60,347 +61,355 @@ impl Priority {
     }
 }
 
-/// How a claim's target is travelled to: the property's own motion.
-#[derive(Clone, Copy, Debug)]
-pub enum ClaimMotion {
-    Spring(Physics),
-    Tween(Behavior),
-    None,
+/// One registered claim, by the order it was registered in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ClaimId(u64);
+
+/// A claim as declared, before it is registered.
+#[derive(Clone, Debug)]
+pub struct ClaimSpec {
+    pub name: String,
+    pub class: Priority,
+    /// The claim's own motion; `None` moves each property by the motion
+    /// the property declares.
+    pub motion: Option<Motion>,
+    /// Whether its condition holds now.
+    pub holds: bool,
+    /// Each property it sets and the target, `None` until a target that
+    /// is a binding first gives one.
+    pub targets: Vec<(String, Option<Value>)>,
 }
 
-impl ClaimMotion {
-    fn presence_duration(self) -> Duration {
-        match self {
-            Self::Tween(behavior) => behavior.duration,
-            _ => Duration::from_millis(250),
-        }
-    }
+#[derive(Clone, Debug)]
+struct Target {
+    property: String,
+    value: Option<Value>,
 }
 
-/// One registered claim. Ids are assigned by [`Claims::add`].
+/// One registered claim.
 #[derive(Clone, Debug)]
 pub struct Claim {
-    /// Whoever the claim speaks for (the Lua spec's key, for messages).
     pub name: String,
     pub node: NodeHandle,
-    pub property: String,
-    pub target: Value,
     pub class: Priority,
-    /// Declared order: inside a class, the lower order wins.
-    pub order: u32,
-    pub motion: ClaimMotion,
-    /// Whether the claim's condition currently holds (its condition
-    /// signal or its manual ask, synced by the scripting layer).
-    pub active: bool,
-    /// Asked by hand (`ask()` from a handler), independent of the
-    /// condition signal: the claim is active while either holds.
-    pub manual: bool,
-    /// The reactive signal the condition is read from, if any.
-    pub condition: Option<SignalId>,
-    /// The reactive signal presence is mirrored into, if any.
-    pub presence_signal: Option<SignalId>,
-    presence: f64,
-    winner: bool,
+    order: u64,
+    motion: Option<Motion>,
+    holds: bool,
+    asked: bool,
+    targets: Vec<Target>,
+    presence: ScalarMotion,
+    presence_signal: Option<SignalId>,
+    owns: bool,
+    effects: Vec<u64>,
 }
 
 impl Claim {
-    /// A claim that is not active yet and has no presence.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        name: String,
-        node: NodeHandle,
-        property: String,
-        target: Value,
-        class: Priority,
-        order: u32,
-        motion: ClaimMotion,
-    ) -> Self {
-        Self {
-            name,
-            node,
-            property,
-            target,
-            class,
-            order,
-            motion,
-            active: false,
-            manual: false,
-            condition: None,
-            presence_signal: None,
-            presence: 0.0,
-            winner: false,
-        }
+    /// Whether its condition holds, or a handler asked for it.
+    pub fn is_active(&self) -> bool {
+        self.holds || self.asked
+    }
+
+    fn target(&self, property: &str) -> Option<&Value> {
+        self.targets
+            .iter()
+            .find(|target| target.property == property)?
+            .value
+            .as_ref()
     }
 }
 
-/// Every claim a runtime holds, and the winner last evaluated per
-/// claimed property.
+/// One claimed property of a node: who claims it, who won it last, and
+/// what the evaluator last aimed it at.
+#[derive(Clone, Debug)]
+struct Slot {
+    property: String,
+    claims: Vec<ClaimId>,
+    winner: Option<ClaimId>,
+    aimed: Option<(ClaimId, Value)>,
+}
+
+/// What a removed claim leaves for its owner to let go of.
+#[derive(Debug, Default)]
+pub struct Released {
+    pub signals: HashSet<SignalId>,
+    pub effects: Vec<u64>,
+}
+
+/// Every claim a runtime holds, indexed by node and property.
 #[derive(Default)]
 pub struct Claims {
-    claims: Vec<Claim>,
-    winners: HashMap<(NodeHandle, String), Option<usize>>,
+    claims: HashMap<ClaimId, Claim>,
+    nodes: HashMap<NodeHandle, Vec<Slot>>,
+    /// Nodes whose winners have to be worked out again.
+    dirty: HashSet<NodeHandle>,
+    /// Claims whose presence is moving.
+    moving: HashSet<ClaimId>,
+    next_id: u64,
+    next_order: u64,
 }
 
 impl Claims {
-    /// Registers a claim and installs its motion on the property, so a
-    /// later retarget travels the way the claim asked. The claim's
-    /// motion replaces the property's previous behaviour, as any
-    /// `behavior` write does.
-    pub fn add(&mut self, scene: &mut Scene, claim: Claim) -> Result<usize, SceneError> {
-        match claim.motion {
-            ClaimMotion::Spring(physics) => {
-                scene.set_physics(claim.node, &claim.property, Some(physics))?;
+    /// Registers a node's claims, all of them or none: every property must
+    /// be the node's, every fixed target one it takes, every motion one
+    /// that can move it. Declared order is registration order, and inside
+    /// one registration the claims' names in byte order. The ids come back
+    /// in the order the specs were given.
+    pub fn register(
+        &mut self,
+        scene: &Scene,
+        node: NodeHandle,
+        mut specs: Vec<ClaimSpec>,
+    ) -> Result<Vec<ClaimId>, String> {
+        if !scene.contains(node) {
+            return Err("ui.claims needs a live node".to_owned());
+        }
+        for spec in &mut specs {
+            check_spec(scene, node, spec)?;
+        }
+        let mut ranked = (0..specs.len()).collect::<Vec<_>>();
+        ranked.sort_by(|a, b| specs[*a].name.cmp(&specs[*b].name));
+        let mut rank = vec![0; specs.len()];
+        for (position, index) in ranked.into_iter().enumerate() {
+            rank[index] = position as u64;
+        }
+        let first_order = self.next_order;
+        self.next_order += specs.len() as u64;
+        let mut ids = Vec::with_capacity(specs.len());
+        for (index, spec) in specs.into_iter().enumerate() {
+            let id = ClaimId(self.next_id);
+            self.next_id += 1;
+            let slots = self.nodes.entry(node).or_default();
+            for (property, _) in &spec.targets {
+                match slots.iter_mut().find(|slot| slot.property == *property) {
+                    Some(slot) => slot.claims.push(id),
+                    None => slots.push(Slot {
+                        property: property.clone(),
+                        claims: vec![id],
+                        winner: None,
+                        aimed: None,
+                    }),
+                }
             }
-            ClaimMotion::Tween(behavior) => {
-                scene.set_behavior(claim.node, &claim.property, Some(behavior))?;
+            let claim = Claim {
+                name: spec.name,
+                node,
+                class: spec.class,
+                order: first_order + rank[index],
+                motion: spec.motion,
+                holds: spec.holds,
+                asked: false,
+                targets: spec
+                    .targets
+                    .into_iter()
+                    .map(|(property, value)| Target { property, value })
+                    .collect(),
+                presence: ScalarMotion::new(0.0),
+                presence_signal: None,
+                owns: false,
+                effects: Vec::new(),
+            };
+            self.claims.insert(id, claim);
+            ids.push(id);
+        }
+        self.dirty.insert(node);
+        Ok(ids)
+    }
+
+    /// Gives a claim the signal its presence is mirrored into and the
+    /// effects that feed its condition and targets, for its removal.
+    pub fn attach(&mut self, id: ClaimId, presence: Option<SignalId>, effects: Vec<u64>) {
+        if let Some(claim) = self.claims.get_mut(&id) {
+            claim.presence_signal = presence;
+            claim.effects.extend(effects);
+        }
+    }
+
+    /// Sets whether a claim's condition holds.
+    pub fn set_holds(&mut self, id: ClaimId, holds: bool) {
+        if let Some(claim) = self.claims.get_mut(&id)
+            && claim.holds != holds
+        {
+            claim.holds = holds;
+            self.dirty.insert(claim.node);
+        }
+    }
+
+    /// Asks for an `asked` claim by hand, or lets it go.
+    pub fn set_asked(&mut self, id: ClaimId, asked: bool) -> Result<(), String> {
+        let claim = self
+            .claims
+            .get_mut(&id)
+            .ok_or_else(|| "this claim was removed".to_owned())?;
+        if claim.class != Priority::Asked {
+            return Err(format!(
+                "claim `{}` is a {} claim: only an asked claim is asked for by hand",
+                claim.name,
+                claim.class.name()
+            ));
+        }
+        if claim.asked != asked {
+            claim.asked = asked;
+            self.dirty.insert(claim.node);
+        }
+        Ok(())
+    }
+
+    /// Sets the target a binding gave one of a claim's properties.
+    pub fn set_target(
+        &mut self,
+        scene: &Scene,
+        id: ClaimId,
+        property: &str,
+        value: Value,
+    ) -> Result<(), String> {
+        let claim = self
+            .claims
+            .get_mut(&id)
+            .ok_or_else(|| "this claim was removed".to_owned())?;
+        let value = scene
+            .coerce_value(claim.node, property, value)
+            .map_err(|error| format!("claim `{}` target `{property}`: {error}", claim.name))?;
+        let target = claim
+            .targets
+            .iter_mut()
+            .find(|target| target.property == property)
+            .ok_or_else(|| format!("claim `{}` does not set `{property}`", claim.name))?;
+        if target.value.as_ref() != Some(&value) {
+            target.value = Some(value);
+            self.dirty.insert(claim.node);
+        }
+        Ok(())
+    }
+
+    /// Takes a claim out. Its properties go to whoever wins them without
+    /// it, and stay where they are when no claim is left on them.
+    pub fn remove(&mut self, id: ClaimId) -> Option<Released> {
+        let claim = self.claims.remove(&id)?;
+        self.moving.remove(&id);
+        if let Some(slots) = self.nodes.get_mut(&claim.node) {
+            for slot in slots.iter_mut() {
+                slot.claims.retain(|other| *other != id);
+                if slot.winner == Some(id) {
+                    slot.winner = None;
+                }
             }
-            ClaimMotion::None => {}
+            slots.retain(|slot| !slot.claims.is_empty());
+            if slots.is_empty() {
+                self.nodes.remove(&claim.node);
+                self.dirty.remove(&claim.node);
+            } else {
+                self.dirty.insert(claim.node);
+            }
         }
-        let id = self.claims.len();
-        self.claims.push(claim);
-        Ok(id)
+        Some(Released {
+            signals: claim.presence_signal.into_iter().collect(),
+            effects: claim.effects,
+        })
     }
 
-    pub fn set_active(&mut self, id: usize, active: bool) {
-        if let Some(claim) = self.claims.get_mut(id) {
-            claim.active = active;
+    /// Lets go of every claim on nodes that were removed: the presence
+    /// signals they leave, for the graph to let go of.
+    pub fn forget(&mut self, removed: &HashSet<NodeHandle>) -> HashSet<SignalId> {
+        let mut signals = HashSet::new();
+        if self.claims.is_empty() {
+            return signals;
+        }
+        let gone = self
+            .claims
+            .iter()
+            .filter(|(_, claim)| removed.contains(&claim.node))
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>();
+        for id in gone {
+            if let Some(released) = self.remove(id) {
+                signals.extend(released.signals);
+            }
+        }
+        signals
+    }
+
+    /// Asks for a node's winners to be worked out again: its exit was
+    /// taken back, and a deferred change may be owed.
+    pub fn touch(&mut self, node: NodeHandle) {
+        if self.nodes.contains_key(&node) {
+            self.dirty.insert(node);
         }
     }
 
-    /// Asks for a claim by hand, or lets it go: one half of its
-    /// condition, the other being its condition signal.
-    pub fn set_manual(&mut self, id: usize, manual: bool) {
-        if let Some(claim) = self.claims.get_mut(id) {
-            claim.manual = manual;
-            claim.active = manual || claim.active;
-        }
+    /// Whether claims own `property` of `node`.
+    pub fn is_claimed(&self, node: NodeHandle, property: &str) -> bool {
+        self.nodes
+            .get(&node)
+            .is_some_and(|slots| slots.iter().any(|slot| slot.property == property))
     }
 
-    /// Every claim, for the scripting layer to sync conditions and
-    /// mirror presences.
-    pub fn claims(&self) -> &[Claim] {
-        &self.claims
-    }
-
-    pub fn claims_mut(&mut self) -> &mut [Claim] {
-        &mut self.claims
-    }
-
-    pub fn is_active(&self, id: usize) -> bool {
-        self.claims.get(id).is_some_and(|claim| claim.active)
-    }
-
-    /// The claim's presence: 0 while it yields, 1 while it owns.
-    pub fn presence(&self, id: usize) -> f64 {
-        self.claims.get(id).map_or(0.0, |claim| claim.presence)
+    /// Whether the next tick has work: a winner to work out or a presence
+    /// on the move.
+    pub fn wants_tick(&self) -> bool {
+        !self.dirty.is_empty() || !self.moving.is_empty()
     }
 
     pub fn is_empty(&self) -> bool {
         self.claims.is_empty()
     }
 
-    /// One frame of the evaluator, run inside the animation tick
-    /// before the scene ticks: for each claimed property, retarget to
-    /// the winning active claim's target when the winner changed, and
-    /// move every claim's presence toward its goal.
-    pub fn evaluate(&mut self, scene: &mut Scene, delta: Duration) -> Result<(), SceneError> {
-        if self.claims.is_empty() {
-            return Ok(());
-        }
-        // The winner per property: highest class, then lowest order.
-        let mut best: HashMap<(NodeHandle, String), usize> = HashMap::new();
-        for (id, claim) in self.claims.iter().enumerate() {
-            if !claim.active || !scene.contains(claim.node) {
-                continue;
-            }
-            let key = (claim.node, claim.property.clone());
-            let wins = best.get(&key).is_none_or(|&current| {
-                let current = &self.claims[current];
-                claim.class > current.class
-                    || (claim.class == current.class && claim.order < current.order)
-            });
-            if wins {
-                best.insert(key, id);
-            }
-        }
-        for claim in &mut self.claims {
-            claim.winner = false;
-        }
-        for (key, id) in &best {
-            self.claims[*id].winner = true;
-            if self.winners.get(key) != Some(&Some(*id)) {
-                let claim = &self.claims[*id];
-                scene.assign(claim.node, &claim.property, claim.target.clone())?;
-            }
-        }
-        for key in best.keys() {
-            self.winners.insert(key.clone(), best.get(key).copied());
-        }
-        // Properties whose claims all went inactive keep their last
-        // winner's target; nothing retargets.
-        for (key, winner) in self.winners.iter_mut() {
-            if !best.contains_key(key) {
-                *winner = None;
-            }
-        }
-        for claim in &mut self.claims {
-            let goal = if claim.winner { 1.0 } else { 0.0 };
-            let span = claim.motion.presence_duration().as_secs_f64();
-            let step = if span > 0.0 {
-                delta.as_secs_f64() / span
-            } else {
-                1.0
-            };
-            claim.presence =
-                (claim.presence + (goal - claim.presence).clamp(-step, step)).clamp(0.0, 1.0);
-        }
-        Ok(())
+    /// How many claims are registered.
+    pub fn len(&self) -> usize {
+        self.claims.len()
+    }
+
+    pub fn claim(&self, id: ClaimId) -> Option<&Claim> {
+        self.claims.get(&id)
+    }
+
+    /// The claim's presence: 0 while it yields, 1 while it owns.
+    pub fn presence(&self, id: ClaimId) -> f64 {
+        self.claims
+            .get(&id)
+            .map_or(0.0, |claim| claim.presence.value())
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use morf_scene::Element;
-
-    fn scene_with_node() -> (Scene, NodeHandle) {
-        let mut scene = Scene::default();
-        let node = scene.create(Element::Rect);
-        scene.assign(node, "x", 0.0).unwrap();
-        (scene, node)
+/// Checks one claim against its node; a fixed target is coerced to what
+/// the property holds.
+fn check_spec(scene: &Scene, node: NodeHandle, spec: &mut ClaimSpec) -> Result<(), String> {
+    let name = spec.name.clone();
+    let fail = |message: String| format!("claim `{name}`: {message}");
+    if spec.targets.is_empty() {
+        return Err(fail("its `set` names no property".to_owned()));
     }
-
-    fn claim(name: &str, node: NodeHandle, target: f64, class: Priority, order: u32) -> Claim {
-        Claim {
-            name: name.to_owned(),
-            node,
-            property: "x".to_owned(),
-            target: Value::Number(target),
-            class,
-            order,
-            motion: ClaimMotion::Tween(Behavior::timed(
-                Duration::from_millis(200),
-                morf_scene::Easing::Linear,
-            )),
-            active: true,
-            manual: false,
-            condition: None,
-            presence_signal: None,
-            presence: 0.0,
-            winner: false,
+    if let Some(Motion::Tween(behavior)) = spec.motion
+        && behavior.repeat != Repeat::Once
+    {
+        return Err(fail(
+            "a claim's motion travels once; it cannot loop".to_owned(),
+        ));
+    }
+    if let Some(Motion::Physics(Physics::Decay { .. })) = spec.motion {
+        return Err(fail("a coast has no target to travel to".to_owned()));
+    }
+    spec.targets.sort_by(|a, b| a.0.cmp(&b.0));
+    for (property, value) in &mut spec.targets {
+        if !scene
+            .has_property(node, property)
+            .map_err(|error| fail(error.to_string()))?
+        {
+            let element = scene
+                .element(node)
+                .map_err(|error| fail(error.to_string()))?;
+            return Err(fail(format!("unknown {element:?} property `{property}`")));
+        }
+        if let Some(motion) = spec.motion {
+            scene
+                .check_motion(node, property, motion)
+                .map_err(|error| fail(error.to_string()))?;
+        }
+        if let Some(fixed) = value.take() {
+            let coerced = scene
+                .coerce_value(node, property, fixed)
+                .map_err(|error| fail(error.to_string()))?;
+            *value = Some(coerced);
         }
     }
-
-    #[test]
-    fn the_highest_class_active_claim_wins_and_ties_break_by_order() {
-        let (mut scene, node) = scene_with_node();
-        let mut claims = Claims::default();
-        let ambient = claims
-            .add(
-                &mut scene,
-                claim("ambient", node, 10.0, Priority::Ambient, 0),
-            )
-            .unwrap();
-        let state = claims
-            .add(&mut scene, claim("state", node, 90.0, Priority::State, 5))
-            .unwrap();
-        claims
-            .evaluate(&mut scene, Duration::from_millis(16))
-            .unwrap();
-        assert_eq!(scene.target(node, "x").unwrap(), &Value::Number(90.0));
-        claims.set_active(state, false);
-        claims
-            .evaluate(&mut scene, Duration::from_millis(16))
-            .unwrap();
-        assert_eq!(scene.target(node, "x").unwrap(), &Value::Number(10.0));
-        let _ = ambient;
-
-        // Same class: the lower declared order wins.
-        let mut claims = Claims::default();
-        claims
-            .add(&mut scene, claim("second", node, 50.0, Priority::Asked, 2))
-            .unwrap();
-        claims
-            .add(&mut scene, claim("first", node, 60.0, Priority::Asked, 1))
-            .unwrap();
-        claims
-            .evaluate(&mut scene, Duration::from_millis(16))
-            .unwrap();
-        assert_eq!(scene.target(node, "x").unwrap(), &Value::Number(60.0));
-    }
-
-    #[test]
-    fn preemption_is_position_continuous_with_finite_velocity() {
-        let (mut scene, node) = scene_with_node();
-        let mut claims = Claims::default();
-        claims
-            .add(
-                &mut scene,
-                claim("ambient", node, 100.0, Priority::Ambient, 0),
-            )
-            .unwrap();
-        let state = claims
-            .add(&mut scene, {
-                let mut claim = claim("state", node, 200.0, Priority::State, 0);
-                claim.active = false;
-                claim
-            })
-            .unwrap();
-        for _ in 0..5 {
-            claims
-                .evaluate(&mut scene, Duration::from_millis(16))
-                .unwrap();
-            scene.tick_animations(Duration::from_millis(16)).unwrap();
-        }
-        let before = scene.number(node, "x").unwrap();
-        assert!(before > 0.0 && before < 100.0, "mid-flight at {before}");
-        claims.set_active(state, true);
-        claims
-            .evaluate(&mut scene, Duration::from_millis(16))
-            .unwrap();
-        let at_retarget = scene.number(node, "x").unwrap();
-        assert_eq!(at_retarget, before, "the retarget itself moves nothing");
-        scene.tick_animations(Duration::from_millis(16)).unwrap();
-        let after = scene.number(node, "x").unwrap();
-        assert!(
-            (after - before).abs() < 20.0,
-            "velocity stays finite: {before} -> {after}"
-        );
-        assert_eq!(scene.target(node, "x").unwrap(), &Value::Number(200.0));
-    }
-
-    #[test]
-    fn presence_follows_the_winner() {
-        let (mut scene, node) = scene_with_node();
-        let mut claims = Claims::default();
-        let ambient = claims
-            .add(
-                &mut scene,
-                claim("ambient", node, 10.0, Priority::Ambient, 0),
-            )
-            .unwrap();
-        for _ in 0..20 {
-            claims
-                .evaluate(&mut scene, Duration::from_millis(16))
-                .unwrap();
-        }
-        assert_eq!(claims.presence(ambient), 1.0);
-        claims.set_active(ambient, false);
-        for _ in 0..20 {
-            claims
-                .evaluate(&mut scene, Duration::from_millis(16))
-                .unwrap();
-        }
-        assert_eq!(claims.presence(ambient), 0.0);
-    }
-
-    #[test]
-    fn unclaimed_properties_are_untouched() {
-        let (mut scene, node) = scene_with_node();
-        let mut claims = Claims::default();
-        claims
-            .evaluate(&mut scene, Duration::from_millis(16))
-            .unwrap();
-        assert_eq!(scene.target(node, "x").unwrap(), &Value::Number(0.0));
-    }
+    Ok(())
 }

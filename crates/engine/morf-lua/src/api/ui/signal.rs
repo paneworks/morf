@@ -71,10 +71,23 @@ pub(crate) fn install_signal_api<'gc>(
     let signal_metatable = Table::new(&ctx);
     signal_metatable.set_field(ctx, "__index", methods);
     let signal_metatable = ctx.stash(signal_metatable);
+    // A signal only its owner writes (a claim's presence): read as any
+    // other, and a `set` refused.
+    let read_only = Table::new(&ctx);
+    read_only.set_field(ctx, "get", get);
+    read_only.set_field(
+        ctx,
+        "set",
+        Callback::from_fn(&ctx, |_, _, _| {
+            Err(HostError("this signal is read-only: its owner moves it".to_owned()).into())
+        }),
+    );
+    let read_only_metatable = Table::new(&ctx);
+    read_only_metatable.set_field(ctx, "__index", read_only);
     state
         .borrow_mut()
         .metatables_mut()
-        .set_signal(signal_metatable.clone());
+        .set_read_only_signal(ctx.stash(read_only_metatable));
 
     let signal = Callback::from_fn(&ctx, {
         let state = Rc::clone(&state);

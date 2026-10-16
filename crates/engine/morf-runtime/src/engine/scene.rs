@@ -78,13 +78,15 @@ impl Engine {
         self.editing.forget(&removed);
         self.focus.forget(&removed);
         self.animation.forget(&removed);
+        let presences = self.animation.claims.forget(&removed);
         self.events.forget(&removed);
         self.timers.retain_nodes(|node| !removed.contains(&node));
         // Bindings that drive a removed node, and the signals that tracked
         // its properties' reads: the graph forgets both, or every one of them
         // keeps re-running and growing for the life of the shell.
         self.reactive.forget_effects_of(&removed);
-        let dead_signals = self.tracking.forget_nodes(&removed);
+        let mut dead_signals = self.tracking.forget_nodes(&removed);
+        dead_signals.extend(presences);
         self.reactive.forget_signals(dead_signals);
         self.collect_graph_garbage();
         let windows = &mut self.windows;
@@ -125,6 +127,41 @@ impl Engine {
         }
         self.revisions.bump_scene();
         true
+    }
+
+    /// Registers a node's claims, all of them or none.
+    pub fn register_claims(
+        &mut self,
+        node: NodeHandle,
+        specs: Vec<crate::animation::claims::ClaimSpec>,
+    ) -> Result<Vec<crate::animation::claims::ClaimId>, String> {
+        self.animation.claims.register(&self.scene, node, specs)
+    }
+
+    /// A claim's condition or target, as the binding that gives it ran:
+    /// a condition holds by Lua's truth, a target is checked against the
+    /// property.
+    pub fn feed_claim(
+        &mut self,
+        sink: &crate::reactive::ClaimSink,
+        value: morf_scene::Value,
+    ) -> Result<(), String> {
+        use crate::reactive::ClaimInput;
+        match &sink.input {
+            ClaimInput::Condition => {
+                let holds = !matches!(
+                    value,
+                    morf_scene::Value::Nil | morf_scene::Value::Bool(false)
+                );
+                self.animation.claims.set_holds(sink.claim, holds);
+                Ok(())
+            }
+            ClaimInput::Target(property) => {
+                self.animation
+                    .claims
+                    .set_target(&self.scene, sink.claim, property, value)
+            }
+        }
     }
 
     /// A value kept across reloads by `name`: its signal, starting from what

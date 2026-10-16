@@ -547,25 +547,65 @@ or at rest -- `ui.claims(node, { ... })` says who owns it instead of
 chaining conditionals in a binding:
 
 ```lua
+local morf = require("morf")
+local ui = require("morf.ui")
+morf.surface.namespace = "claims"
+morf.surface.width = 320
+morf.surface.height = 200
+
+local opened = morf.signal("panel.opened", false)
+local panel = ui.Rect { width = 288, height = 200, color = "#20242c" }
 local claims = ui.claims(panel, {
-  open = { when = opened, class = "state", spring = { stiffness = 260 },
+  motion = { duration = 200, easing = "out_cubic" },
+  open = { when = opened, motion = ui.spring { stiffness = 260, damping = 32 },
            set = { x = 0, opacity = 1 } },
-  peek = { class = "asked", duration = 200, set = { x = -40 } },
-  rest = { class = "ambient", duration = 200, set = { x = -288, opacity = 0 } },
+  peek = { class = "asked", set = { x = -248, opacity = 1 } },
+  rest = { set = { x = -288, opacity = 0 } },
 })
+-- A scrim behind the panel, as dark as `open` is in charge.
+local scrim = ui.Rect { width = 320, height = 200, color = "#000000",
+  opacity = function() return claims.open.presence:get() * 0.4 end }
+ui.Item { width = 320, height = 200, scrim, panel }
+
+morf.ipc["toggle"] = function() opened:set(not opened:get()) end
+morf.ipc["peek"] = function() claims.peek.ask() end
+morf.ipc["unpeek"] = function() claims.peek.release() end
 ```
 
-Each claim names a priority class (`state` over `asked` over `reflex`
-over `posture` over `ambient`; ties break by claim name), the
-properties it sets, and its own motion (`spring = { ... }` or
-`duration = <ms>` with an `easing`). `when` is a signal; without one
-the claim holds from the start and `claims.peek.ask()` /
-`claims.peek.release()` move it from a handler. The winning claim's
-target retargets the property's motion -- value and velocity carry
-over, nothing integrates twice. `claims.open.presence` is an ordinary
-signal, 0 while the claim yields and 1 while it owns, for painting
-according to who is in charge. Writing a claimed property directly is
-refused while its claims stand.
+Each named entry claims the properties in its `set` while it is active;
+for each property the active claim of the highest class wins: `state`
+over `asked` over `reflex` over `posture` over `ambient`. Two active
+claims of one class on one property go to the one declared first:
+claims from an earlier `ui.claims` call before a later one, and inside
+one call, by their names in byte order (`beta` before `zeta`). A claim
+is active while its `when` holds -- a function read like a binding, a
+signal, or a boolean, true by Lua's truth (`0` and `""` hold). With no
+`when` a claim always holds, except an `asked` one: it holds from
+`claims.peek.ask()` until `claims.peek.release()`, which only asked
+claims have. `class` is `state` by default for a claim with a `when`,
+`ambient` for one without.
+
+A target is a value, a signal or a function; one that changes aims the
+property again. `motion` is a behaviour table (`{ duration, easing }`,
+`ui.spring { ... }`, `ui.smoothed { ... }`) for the whole set or one
+claim, and a property with neither moves by its own `behavior`. When a
+property's winner or its target changes, the property's animation is
+aimed at the new target by the winner's motion: it goes on from where
+it is with the speed it has, whether a spring takes over from a tween or
+the other way round. The claims that win when `ui.claims` is called set
+their properties at once, as a constructor would.
+
+`claims.open.presence` is a read-only signal, 0 while the claim yields
+and 1 while it owns every property it sets, moved by the motion moving
+its first property -- along the same easing curve, or the same spring
+-- so binding a shade, a radius or an outline to it paints according to
+who is in charge. A claimed property is the claims' alone: writing it,
+binding it, playing or flinging it, following another node with it is
+refused, and claiming a property that already has a binding, a `loop`,
+a follow or a `states` change is refused too, the whole `ui.claims`
+call with it. While its node leaves, the properties its `exit` moves are
+the exit's; taken back, they go where their claims say. `claims.open.remove()`
+takes a claim out, and a node's claims go with it.
 
 An `easing` is a name (`"out_cubic"`), a cubic Bézier `{ x1, y1, x2, y2 }` (four numbers in order, or those named fields),
 or a spline of several: `{ spline = { x1, y1, x2, y2, x, y, ... } }`, each

@@ -10,3 +10,6 @@ pub mod surfaces;
 
 // What the module of the same name held, where it has always been found.
 pub use headless::*;
+
+#[cfg(test)]
+mod live_claims;

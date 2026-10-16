@@ -64,6 +64,8 @@ pub(crate) fn install_fling_api<'gc>(
         let high = optional_number(ctx, table, "max")?;
         let physics = fling::decay(friction, min_velocity, gravity, restitution, low, high)
             .map_err(HostError)?;
+        crate::api::ui::scene::refuse_claimed(&state.borrow(), node, &property)
+            .map_err(HostError)?;
 
         state
             .borrow_mut()

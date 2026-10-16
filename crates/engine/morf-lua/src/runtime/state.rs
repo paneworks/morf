@@ -20,6 +20,7 @@ pub(crate) use crate::vm::state_cell::{StateCell, StateRef, StateRefMut};
 mod access;
 mod auth;
 mod bridges;
+mod claims;
 mod dbus;
 mod feeds;
 mod follow;
@@ -31,6 +32,7 @@ pub(crate) use dbus::DbusState;
 pub(crate) use feeds::Feeds;
 pub(crate) use metatables::Metatables;
 
+pub(crate) use claims::{ClaimsPass, run_claims};
 pub(crate) use follow::apply_follows;
 pub(crate) use morf_runtime::animation::Follow;
 
@@ -71,7 +73,7 @@ pub(crate) use morf_runtime::reactive::Effect as LuaEffect;
 
 pub(crate) use morf_runtime::retention::RetainCallbacks;
 
-pub(crate) use morf_runtime::reactive::{EffectSink, PropertySink};
+pub(crate) use morf_runtime::reactive::{ClaimInput, ClaimSink, EffectSink, PropertySink};
 
 #[cfg(test)]
 pub(crate) use morf_runtime::log::MAX_LOG_ENTRIES;

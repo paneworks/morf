@@ -79,6 +79,11 @@ pub fn apply_loops(
             running.insert(property, old.clone());
             continue;
         }
+        if host.animation().claims.is_claimed(node, &property) {
+            return Err(format!(
+                "loop `{property}`: the property is claimed, and ui.claims owns it"
+            ));
+        }
         let parsed = LoopSpec::parse(&property, &spec)?;
         let hold = parsed.hold;
         let from = match parsed.from {
