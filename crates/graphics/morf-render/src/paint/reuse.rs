@@ -18,6 +18,7 @@ use morf_layout::{Geometry, Layout, Transform2D};
 use morf_scene::{Color, FastMap, NodeHandle, Scene};
 
 use super::{PaintContext, paint_node};
+use crate::Overlay;
 use crate::commands::{AlphaMask, DrawList};
 use crate::sdf::RenderError;
 
@@ -197,6 +198,7 @@ impl DrawList {
         &mut self,
         scene: &Scene,
         layout: &Layout,
+        overlay: Option<Overlay<'_>>,
         previous: &DrawList,
         cache: &mut PaintCache,
     ) -> Result<(), RenderError> {
@@ -217,7 +219,7 @@ impl DrawList {
             revision: scene.paint_revision(),
             volatile: false,
         };
-        let built = self.rebuild_with(scene, layout, base, Some(&mut reuse));
+        let built = self.rebuild_with(scene, layout, overlay, base, Some(&mut reuse));
         if built.is_err() {
             reuse.cache.forget();
         }

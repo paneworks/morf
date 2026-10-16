@@ -2,7 +2,7 @@
 //! damage to the backend.
 
 use morf_layout::Layout;
-use morf_scene::Scene;
+use morf_scene::{NodeHandle, Scene};
 use std::error::Error as StdError;
 
 use super::explain::damage_log_wanted;
@@ -46,6 +46,14 @@ pub trait RenderBackend {
     fn resize(&mut self, width: u32, height: u32);
 }
 
+/// A tree laid out on its own and painted after every root of a frame:
+/// over the surface's scene and outside its layout.
+#[derive(Clone, Copy, Debug)]
+pub struct Overlay<'a> {
+    pub root: NodeHandle,
+    pub layout: &'a Layout,
+}
+
 /// Scene painter and damage tracker driving a selected backend.
 pub struct RenderEngine<B> {
     backend: B,
@@ -86,10 +94,28 @@ impl<B: RenderBackend> RenderEngine<B> {
         scale_120: u32,
         declare: impl FnOnce(&[DamageRect]),
     ) -> Result<Vec<DamageRect>, RenderError> {
+        self.render_over(scene, layout, None, scale_120, declare)
+    }
+
+    /// Paints one resolved scene frame with `overlay` drawn over it.
+    pub fn render_over(
+        &mut self,
+        scene: &Scene,
+        layout: &Layout,
+        overlay: Option<Overlay<'_>>,
+        scale_120: u32,
+        declare: impl FnOnce(&[DamageRect]),
+    ) -> Result<Vec<DamageRect>, RenderError> {
         // The list is kept between frames so its buffers are not returned to
         // the allocator and reclaimed sixty times a second.
         let mut list = std::mem::take(&mut self.list);
-        let built = list.rebuild_from(scene, layout, &self.damage.previous, &mut self.paint);
+        let built = list.rebuild_from(
+            scene,
+            layout,
+            overlay,
+            &self.damage.previous,
+            &mut self.paint,
+        );
         let result = built.and_then(|()| {
             let copies = self.paint.copies();
             let damage = self.damage.diff_copied(&list, copies.runs, scale_120);
