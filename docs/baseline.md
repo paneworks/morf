@@ -273,6 +273,32 @@ motion-only turns, handlers hold over ten times paint and the flush, no
 overrun is paint's, and a calibrated tenth-of-a-second stall is an overrun
 owned by handlers. It fails against the build without the fast path.
 
+## In a GPU sandbox
+
+`tools/sandbox/headless.sh` (the nested Hyprland cannot allocate its
+buffers on this NVIDIA-only desk): morf on the RTX 4080 through
+`nixVulkanNvidia`, under a headless sway given the host's NVIDIA EGL
+(`HOST_GL=1`), release builds of 50b37e6c (before the fast path) and of
+the fast path's tree, three rounds alternating, load average 2.5-4.7.
+The output's callbacks come near 30 Hz, so the unstalled run, not 16.7 ms,
+is the bar. Mean and worst frame (ms) and overruns, per 6 s:
+
+```
+stall a firing          before                       after
+                        mean     worst     over      mean     worst     over
+none                    27-35    38-46     0         29-31    34-43     0
+12 ms every 16 ms       30-40    48-72     0         30-32    48-64     0
+25 ms every 100 ms      31       58-60     0-2       30-31    57-60     0
+40 ms every 100 ms      34-36    72-160    3-9       34-35    72-90     0-1
+600 ms every 2 s        38-44    603-702   3         39-40    616-627   3
+```
+
+Under a real compositor the fast path takes the overruns of a 25 or 40 ms
+stall to none or one, with means unchanged; the mean frame stays within
+one refresh of the unstalled run for every stall up to 40 ms, and the
+worst frame does not -- the same shortfall as above, with the same
+follow-up.
+
 # Shared blur layers (PLAN item 6, step 3)
 
 The scene: `examples/demos/render/blurred-cards.lua`, sixty cards on a
