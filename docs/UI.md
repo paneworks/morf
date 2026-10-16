@@ -366,6 +366,20 @@ Which one, and when it moves:
   names back before the new file runs, so it finds them free too (a file
   that fails to load leaves the shell without them until the next reload).
 
+A reload that fails -- a syntax error, an error while the new file runs --
+keeps the configuration that was running, and the failure is always shown.
+`morf.on_reload_failed(function(error) end)` hears it (and
+`morf.on_reload_completed(function() end)` a reload that worked). When no
+handler takes it without raising an error of its own, the engine shows a
+band across the top of the shell's own surface instead: the file, the line
+when the error names one, and the error, wrapped to the surface's width
+and capped in height. The band is the engine's, outside the
+configuration's tree and layout, so no root, view or clip can move or
+remove it. It goes on the next reload that works, on any press on that
+surface (a press on the band itself goes no further), or when a handler
+registered later is given the error. `test.reload` in a spec reloads the
+same way ([TESTING.md](TESTING.md)).
+
 Work the primary does for every screen hands its answer over with
 `morf.shared(name, initial)`: a signal like `morf.signal`'s (`get`, `set`,
 read by bindings), whose writes reach the signal of the same name in every
