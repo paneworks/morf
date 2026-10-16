@@ -417,6 +417,9 @@ impl Scene {
         // layout pass is a great deal cheaper than a frame drawn at stale
         // geometry.
         self.touch_layout(id, property_name);
+        if property_name == "glass" {
+            self.expand_glass(node)?;
+        }
         Ok(())
     }
 }

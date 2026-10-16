@@ -81,6 +81,9 @@ pub(crate) fn coerce(
     match property {
         "gradient" => return Gradient::canonical(value).map_err(invalid),
         "mask" => return crate::mask::MaskSpec::canonical(value).map_err(invalid),
+        "glass" | "glass_frost" if matches!(element, Element::Rect | Element::ClipRect) => {
+            return crate::glass::canonical(property, value).map_err(invalid);
+        }
         "decoration" => return TextDecoration::canonical(value).map_err(invalid),
         "spans" if element == Element::Text => {
             return crate::rich_text::canonical_spans(value).map_err(invalid);

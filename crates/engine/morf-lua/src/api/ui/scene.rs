@@ -65,16 +65,26 @@ pub(crate) fn assign_scene_property(
     property: &str,
     value: SceneValue,
 ) -> Result<(), String> {
-    let old_current = state
-        .scene()
-        .current(node, property)
-        .map_err(|error| error.to_string())?
-        .clone();
-    let old_target = state
-        .scene()
-        .target(node, property)
-        .map_err(|error| error.to_string())?
-        .clone();
+    let values = |state: &ReactiveState, property: &str| -> Result<_, String> {
+        let scene = state.scene();
+        let current = scene.current(node, property).map_err(|e| e.to_string())?;
+        let target = scene.target(node, property).map_err(|e| e.to_string())?;
+        Ok((current.clone(), target.clone()))
+    };
+    // The glass table writes the properties it names as well.
+    let glass = match &value {
+        SceneValue::Map(fields)
+            if property == "glass" && state.scene().has_property(node, "glass") == Ok(true) =>
+        {
+            morf_scene::GLASS_KEYS
+                .iter()
+                .filter(|(key, _)| fields.contains_key(*key))
+                .map(|(_, named)| Ok((*named, values(state, named)?)))
+                .collect::<Result<Vec<_>, String>>()?
+        }
+        _ => Vec::new(),
+    };
+    let old = values(state, property)?;
     state
         .scene_mut()
         .assign(node, property, value)
@@ -87,6 +97,21 @@ pub(crate) fn assign_scene_property(
     if matches!(property, "spans" | "markup") {
         state.layout_hooks_mut().link_text(node);
     }
+    announce_change(state, node, property, old)?;
+    for (named, old) in glass {
+        announce_change(state, node, named, old)?;
+    }
+    Ok(())
+}
+
+/// Tells whatever follows `property` that it moved from `old`, its current
+/// value and its target, if it did.
+fn announce_change(
+    state: &mut ReactiveState,
+    node: NodeHandle,
+    property: &str,
+    (old_current, old_target): (SceneValue, SceneValue),
+) -> Result<(), String> {
     let current_changed = state
         .scene()
         .current(node, property)

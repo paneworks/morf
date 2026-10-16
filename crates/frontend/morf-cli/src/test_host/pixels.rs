@@ -59,7 +59,13 @@ fn rgba(picture: &Picture, x: f64, y: f64) -> Result<[u8; 4], String> {
 
 fn hex([r, g, b, a]: [f64; 4]) -> String {
     let byte = |channel: f64| channel.round().clamp(0.0, 255.0) as u8;
-    format!("#{:02x}{:02x}{:02x}{:02x}", byte(r), byte(g), byte(b), byte(a))
+    format!(
+        "#{:02x}{:02x}{:02x}{:02x}",
+        byte(r),
+        byte(g),
+        byte(b),
+        byte(a)
+    )
 }
 
 /// Rec. 709 luma of an encoded pixel, from 0 to 1.
