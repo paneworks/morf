@@ -353,6 +353,10 @@ or an exact `text`), or a function of the node returning true.
   the run's scratch data folder and started through impasto's launcher: a
   window per program, destroyed when it exits, kept up (with the exit code)
   when it fails.
+- `frame_stall_spec.lua`: `examples/demos/motion/frame-stall.lua`, a spring
+  swung beside a timer that burns a Lua budget every frame: the spring's
+  path matches the unstalled run frame for frame, and `test.frames()`
+  charges the stall to the handlers stage, never to paint.
 - `contains_pointer_spec.lua`: a configuration written in the spec, and a
   panel's `contains_pointer` through pointer moves, a leave, a clip, and a
   binding made while the pointer was already there.
