@@ -1,121 +1,305 @@
 # API names the docs gate knows about but docs/UI.md and docs/IO.md do not
-# (yet) spell out. One entry per line: <name>[.*]<TAB><reason>.
-# `+name` entries are the reverse: documented names the generated types
-# cannot see because the engine serves them through __index (dynamic).
-# Entries nothing needs any more fail the gate; this list only shrinks.
+# (yet) spell out. One entry per line: <name><TAB><kind>: <reason>.
+#
+#   undocumented:  public, and not yet in the UI or IO guide
+#   internal:      not for shell authors; named here so the gate knows it
+#   mirror:        another spelling of documented names (a `.*` subtree; the
+#                  gate checks every name under it has its morf.* original)
+#   data:          constants, not functions (a `.*` subtree; the gate checks
+#                  every field under it is not a function)
+#   dynamic:       a `+name` the docs mention that the generated types cannot
+#                  see, because the engine serves it through __index
+#
+# Only mirror and data entries may be subtrees, so a new public name is never
+# hidden by a wildcard. Entries nothing needs any more fail the gate; this
+# list only shrinks.
 
-morf.animation.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.app_id	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.args	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.audio.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.broadcast	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.cache_dir	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.cache_path	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.clipboard.subscribe	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.color.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.color_quantizer	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.config_path	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.core.*	internal mirror of the top-level morf table; not a public spelling (subtree)
-morf.data_dir	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.data_path	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.dbus.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.density	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.desktop_entries	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.drag.supported	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.easing.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.easing_curve	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.elapsed_timer	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.encoding.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.env	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.exec_detached	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.executable	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.fs.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.geometry.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.greetd.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.has_icon	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.has_version	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.http.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.icon_path	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.image.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.input_method.*	input-method protocol API; engine-internal surface (subtree)
-morf.instance_id	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.io.*	mirror of the top-level I/O functions, documented under their morf.* spellings in IO.md (subtree)
-morf.json.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.keys.*	keysym name constants; morf.keys is documented as a whole, key names are data (subtree)
-morf.launch_time_ms	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.lock_surface	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.log.*	logging levels and sinks are covered by `morf log` CLI docs, not the Lua guide (subtree)
-morf.menu	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.on_backdrop_click	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.on_keyboard_focus	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.on_reload_completed	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.on_reload_failed	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.on_session_lock_state	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.on_session_locked	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.operands	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.options	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.output_power	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.output_power.set	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.pam.*	PAM conversation API used by lock/greeter configs; covered in docs/LOCK_PROVIDER.md (subtree)
-morf.persistent	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.process_id	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.process_view	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.quit	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.retain_lock	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.retainable	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.scope	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.screencopy.*	screen capture API used by capture tooling; not part of the UI guide (subtree)
-morf.session_lock	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.session_lock_state	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.session_paths	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.shader	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.shader_data	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.shell_dir	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.shell_id	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.shell_path	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.shortcuts.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.socket_server	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.split_parser	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.state_dir	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.state_path	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.status_notifier	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.status_notifier.subscribe	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.stream_collector	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.text_input.*	input-method protocol API for text fields; engine-internal surface (subtree)
-morf.time.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.toplevel.*	window object methods are reached through morf.toplevels rows in the guide (subtree)
-morf.toplevels.get	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.toplevels.revision	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.transition_parent	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.udev	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.udev.subscribe	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.ui.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.variants	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.version	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.view_extent	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.view_item_start	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.virtual_keyboard.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.virtual_list	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.watch_files	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.window.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.working_directory	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.workspace.*	workspace object methods are reached through morf.workspaces rows in the guide (subtree)
-morf.workspaces	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.xkb.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-ui.Icon	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-ui.Inset	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-+morf.audio.sinks	device list models served through __index in api/media/audio.rs
-+morf.capabilities.backdrop_blur	compositor capability filled by the host (turn/start.rs), not a types field
-+morf.capabilities.gamma_control	compositor capability filled by the host, not a types field
-+morf.capabilities.hdr	compositor capability filled by the host, not a types field
-+morf.capabilities.hdr_transfer	compositor capability filled by the host, not a types field
-+morf.capabilities.idle_inhibit	compositor capability filled by the host, not a types field
-+morf.capabilities.outputless	compositor capability filled by the host, not a types field
-+morf.surface.blend	surface property served through __index in api/window/layer.rs
-+morf.surface.keyboard_focus	surface property served through __index in api/window/layer.rs
-+morf.surface.on_focus_changed	surface callback served through __index in api/window/layer.rs
-+morf.surface.on_pointer_changed	surface callback served through __index in api/window/layer.rs
-+morf.surface.opaque	surface property served through __index in api/window/layer.rs
-+morf.surface.outputless	surface property served through __index in api/window/layer.rs
-+morf.surface.subpixel_text	surface property served through __index in api/window/layer.rs
-+morf.toplevels.model	list model served through __index in api/desktop/toplevels.rs
+morf.core.*	mirror: the same table as morf.*, documented under those spellings
+morf.image.limits.*	data: decode limits as numbers, read by the image loader's callers
+morf.io.*	mirror: the same functions as morf.*, documented under those spellings
+morf.keys.*	data: keysym constants; morf.keys is documented as a whole
+morf.animation.active	undocumented: animation handle controls; the guide shows morf.animation.play only
+morf.animation.finish	undocumented: animation handle controls; the guide shows morf.animation.play only
+morf.animation.impulse	undocumented: animation handle controls; the guide shows morf.animation.play only
+morf.animation.pause	undocumented: animation handle controls; the guide shows morf.animation.play only
+morf.animation.paused	undocumented: animation handle controls; the guide shows morf.animation.play only
+morf.animation.progress	undocumented: animation handle controls; the guide shows morf.animation.play only
+morf.animation.restart	undocumented: animation handle controls; the guide shows morf.animation.play only
+morf.animation.resume	undocumented: animation handle controls; the guide shows morf.animation.play only
+morf.animation.reverse	undocumented: animation handle controls; the guide shows morf.animation.play only
+morf.animation.seek	undocumented: animation handle controls; the guide shows morf.animation.play only
+morf.animation.set_enabled	undocumented: animation handle controls; the guide shows morf.animation.play only
+morf.animation.stop	undocumented: animation handle controls; the guide shows morf.animation.play only
+morf.app_id	undocumented: process and path introspection; no guide section yet
+morf.args	undocumented: process and path introspection; no guide section yet
+morf.audio.available	undocumented: PipeWire audio API used by library/lib/services; no guide section yet
+morf.audio.backend	undocumented: PipeWire audio API used by library/lib/services; no guide section yet
+morf.audio.default_sink	undocumented: PipeWire audio API used by library/lib/services; no guide section yet
+morf.audio.default_source	undocumented: PipeWire audio API used by library/lib/services; no guide section yet
+morf.audio.device	undocumented: PipeWire audio API used by library/lib/services; no guide section yet
+morf.audio.equalizer_curve	undocumented: PipeWire audio API used by library/lib/services; no guide section yet
+morf.audio.move_stream	undocumented: PipeWire audio API used by library/lib/services; no guide section yet
+morf.audio.on_changed	undocumented: PipeWire audio API used by library/lib/services; no guide section yet
+morf.audio.set_channel_volumes	undocumented: PipeWire audio API used by library/lib/services; no guide section yet
+morf.audio.set_default	undocumented: PipeWire audio API used by library/lib/services; no guide section yet
+morf.audio.set_mute	undocumented: PipeWire audio API used by library/lib/services; no guide section yet
+morf.audio.set_volume	undocumented: PipeWire audio API used by library/lib/services; no guide section yet
+morf.audio.stream	undocumented: PipeWire audio API used by library/lib/services; no guide section yet
+morf.broadcast	undocumented: process and stream helpers beyond morf.run and morf.spawn
+morf.cache_dir	undocumented: process and path introspection; no guide section yet
+morf.cache_path	undocumented: process and path introspection; no guide section yet
+morf.clipboard.subscribe	undocumented: clipboard change subscription; the guide documents watch
+morf.color.ansi8	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color.cmyk	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color.distinct	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color.gray	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color.hsl	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color.hsv	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color.lab	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color.lch	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color.lms	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color.mix	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color.named	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color.names	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color.oklab	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color.oklch	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color.random	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color.scale	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color.xyz	undocumented: colour-space constructors; the guide documents colour values and methods
+morf.color_quantizer	undocumented: no guide section yet
+morf.config_path	undocumented: process and path introspection; no guide section yet
+morf.data_dir	undocumented: process and path introspection; no guide section yet
+morf.data_path	undocumented: process and path introspection; no guide section yet
+morf.dbus.call_async	undocumented: D-Bus client behind library/lib/services; no guide section yet
+morf.dbus.list_names	undocumented: D-Bus client behind library/lib/services; no guide section yet
+morf.dbus.name_has_owner	undocumented: D-Bus client behind library/lib/services; no guide section yet
+morf.dbus.name_owner	undocumented: D-Bus client behind library/lib/services; no guide section yet
+morf.dbus.on_name_owner_changed	undocumented: D-Bus client behind library/lib/services; no guide section yet
+morf.dbus.proxy	undocumented: D-Bus client behind library/lib/services; no guide section yet
+morf.density	undocumented: no guide section yet
+morf.desktop_entries	undocumented: no guide section yet
+morf.drag.supported	undocumented: drag support query; the guide documents drop areas
+morf.easing.color	undocumented: easing interpolators; the guide documents easing names only
+morf.easing.number	undocumented: easing interpolators; the guide documents easing names only
+morf.easing.point	undocumented: easing interpolators; the guide documents easing names only
+morf.easing.rect	undocumented: easing interpolators; the guide documents easing names only
+morf.easing.value	undocumented: easing interpolators; the guide documents easing names only
+morf.easing_curve	undocumented: no guide section yet
+morf.elapsed_timer	undocumented: no guide section yet
+morf.encoding.base64_decode	undocumented: byte encodings and hashes; IO.md documents compression only
+morf.encoding.base64_encode	undocumented: byte encodings and hashes; IO.md documents compression only
+morf.encoding.crc32	undocumented: byte encodings and hashes; IO.md documents compression only
+morf.encoding.hex_decode	undocumented: byte encodings and hashes; IO.md documents compression only
+morf.encoding.hex_encode	undocumented: byte encodings and hashes; IO.md documents compression only
+morf.encoding.random_bytes	undocumented: byte encodings and hashes; IO.md documents compression only
+morf.encoding.sha1	undocumented: byte encodings and hashes; IO.md documents compression only
+morf.encoding.sha256	undocumented: byte encodings and hashes; IO.md documents compression only
+morf.encoding.url_decode	undocumented: byte encodings and hashes; IO.md documents compression only
+morf.encoding.url_encode	undocumented: byte encodings and hashes; IO.md documents compression only
+morf.encoding.uuid	undocumented: byte encodings and hashes; IO.md documents compression only
+morf.env	undocumented: process and path introspection; no guide section yet
+morf.exec_detached	undocumented: process and stream helpers beyond morf.run and morf.spawn
+morf.executable	undocumented: process and path introspection; no guide section yet
+morf.fs.append	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.basename	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.copy	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.dir	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.dirname	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.disk	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.exists	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.expand	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.extension	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.glob	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.home	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.is_dir	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.is_file	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.is_link	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.join	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.lines	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.matches	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.mkdir	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.normalize	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.read_link	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.realpath	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.remove	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.rename	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.stat	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.stem	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.symlink	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.fs.write	undocumented: filesystem helpers; IO.md documents reading and watching only
+morf.geometry.arc	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.graph_grid	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.graph_series	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.hatch	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.hatch_under	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.lobes	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.plot	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.polygon	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.regular	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.ruler	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.sector	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.segments	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.shape_curves	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.shape_names	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.shape_path	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.shape_segments	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.star	undocumented: path geometry generators; the guide documents ui.Path
+morf.geometry.ticks	undocumented: path geometry generators; the guide documents ui.Path
+morf.greetd	undocumented: greetd client for greeter configurations (docs/LOCK_PROVIDER.md)
+morf.greetd.connect	undocumented: greetd client for greeter configurations (docs/LOCK_PROVIDER.md)
+morf.greetd.converse	undocumented: greetd client for greeter configurations (docs/LOCK_PROVIDER.md)
+morf.has_icon	undocumented: icon theme lookups; the guide documents ui.Image sources
+morf.has_version	undocumented: no guide section yet
+morf.http.get	undocumented: HTTP client; no guide section yet
+morf.http.post	undocumented: HTTP client; no guide section yet
+morf.http.query	undocumented: HTTP client; no guide section yet
+morf.http.request	undocumented: HTTP client; no guide section yet
+morf.http.url_decode	undocumented: HTTP client; no guide section yet
+morf.http.url_encode	undocumented: HTTP client; no guide section yet
+morf.icon_path	undocumented: icon theme lookups; the guide documents ui.Image sources
+morf.image.annotation_hit	undocumented: image inspection and annotation helpers; the guide documents loading
+morf.image.annotation_pick	undocumented: image inspection and annotation helpers; the guide documents loading
+morf.image.info	undocumented: image inspection and annotation helpers; the guide documents loading
+morf.image.palette	undocumented: image inspection and annotation helpers; the guide documents loading
+morf.image.pixel	undocumented: image inspection and annotation helpers; the guide documents loading
+morf.input_method	undocumented: input-method protocol for on-screen keyboards
+morf.input_method.commit	undocumented: input-method protocol for on-screen keyboards
+morf.input_method.delete	undocumented: input-method protocol for on-screen keyboards
+morf.input_method.preedit	undocumented: input-method protocol for on-screen keyboards
+morf.input_method.subscribe	undocumented: input-method protocol for on-screen keyboards
+morf.instance_id	undocumented: process and path introspection; no guide section yet
+morf.json.array	undocumented: JSON helpers beyond decode; no guide section yet
+morf.json.encode	undocumented: JSON helpers beyond decode; no guide section yet
+morf.json.null	undocumented: JSON helpers beyond decode; no guide section yet
+morf.json.object	undocumented: JSON helpers beyond decode; no guide section yet
+morf.json.read_file	undocumented: JSON helpers beyond decode; no guide section yet
+morf.json.write_file	undocumented: JSON helpers beyond decode; no guide section yet
+morf.launch_time_ms	undocumented: process and path introspection; no guide section yet
+morf.lock_surface	undocumented: session-lock API for lock configurations (docs/LOCK_PROVIDER.md)
+morf.log	undocumented: Lua logging functions; reading the log is `morf log` (docs/TESTING.md)
+morf.log.debug	undocumented: Lua logging functions; reading the log is `morf log` (docs/TESTING.md)
+morf.log.error	undocumented: Lua logging functions; reading the log is `morf log` (docs/TESTING.md)
+morf.log.info	undocumented: Lua logging functions; reading the log is `morf log` (docs/TESTING.md)
+morf.log.warn	undocumented: Lua logging functions; reading the log is `morf log` (docs/TESTING.md)
+morf.menu	undocumented: no guide section yet
+morf.on_backdrop_click	undocumented: surface input hooks; no guide section yet
+morf.on_keyboard_focus	undocumented: surface input hooks; no guide section yet
+morf.on_reload_completed	undocumented: lifecycle and reload hooks; no guide section yet
+morf.on_reload_failed	undocumented: lifecycle and reload hooks; no guide section yet
+morf.on_session_lock_state	undocumented: session-lock API for lock configurations (docs/LOCK_PROVIDER.md)
+morf.on_session_locked	undocumented: session-lock API for lock configurations (docs/LOCK_PROVIDER.md)
+morf.operands	undocumented: process and path introspection; no guide section yet
+morf.options	undocumented: process and path introspection; no guide section yet
+morf.output_power	undocumented: output power control; no guide section yet
+morf.output_power.set	undocumented: output power control; no guide section yet
+morf.pam	undocumented: PAM conversation for lock and greeter configurations (docs/LOCK_PROVIDER.md)
+morf.pam.authenticate	undocumented: PAM conversation for lock and greeter configurations (docs/LOCK_PROVIDER.md)
+morf.pam.authenticate_unlock	undocumented: PAM conversation for lock and greeter configurations (docs/LOCK_PROVIDER.md)
+morf.pam.session	undocumented: PAM conversation for lock and greeter configurations (docs/LOCK_PROVIDER.md)
+morf.persistent	undocumented: lifecycle and reload hooks; no guide section yet
+morf.process_id	undocumented: process and path introspection; no guide section yet
+morf.process_view	undocumented: process and stream helpers beyond morf.run and morf.spawn
+morf.quit	undocumented: lifecycle and reload hooks; no guide section yet
+morf.reload	undocumented: lifecycle and reload hooks; no guide section yet
+morf.retain_lock	undocumented: lifecycle and reload hooks; no guide section yet
+morf.retainable	undocumented: lifecycle and reload hooks; no guide section yet
+morf.scope	undocumented: lifecycle and reload hooks; no guide section yet
+morf.screencopy	undocumented: screen capture for capture tooling
+morf.screencopy.capture	undocumented: screen capture for capture tooling
+morf.screencopy.capture_window	undocumented: screen capture for capture tooling
+morf.screencopy.release	undocumented: screen capture for capture tooling
+morf.screencopy.save	undocumented: screen capture for capture tooling
+morf.session_lock	undocumented: session-lock API for lock configurations (docs/LOCK_PROVIDER.md)
+morf.session_lock_state	undocumented: session-lock API for lock configurations (docs/LOCK_PROVIDER.md)
+morf.session_paths	undocumented: process and path introspection; no guide section yet
+morf.shader	undocumented: shader programs; the guide documents shader properties on nodes
+morf.shader_data	undocumented: shader programs; the guide documents shader properties on nodes
+morf.shell_dir	undocumented: process and path introspection; no guide section yet
+morf.shell_id	undocumented: process and path introspection; no guide section yet
+morf.shell_path	undocumented: process and path introspection; no guide section yet
+morf.shortcuts	undocumented: compositor shortcut inhibition and global shortcuts
+morf.shortcuts.inhibit	undocumented: compositor shortcut inhibition and global shortcuts
+morf.shortcuts.subscribe	undocumented: compositor shortcut inhibition and global shortcuts
+morf.socket_server	undocumented: process and stream helpers beyond morf.run and morf.spawn
+morf.split_parser	undocumented: process and stream helpers beyond morf.run and morf.spawn
+morf.state_dir	undocumented: process and path introspection; no guide section yet
+morf.state_path	undocumented: process and path introspection; no guide section yet
+morf.status_notifier	undocumented: StatusNotifier tray host; no guide section yet
+morf.status_notifier.subscribe	undocumented: StatusNotifier tray host; no guide section yet
+morf.stream_collector	undocumented: process and stream helpers beyond morf.run and morf.spawn
+morf.text_input	undocumented: text-input protocol for on-screen keyboards
+morf.text_input.content_type	undocumented: text-input protocol for on-screen keyboards
+morf.text_input.cursor_rect	undocumented: text-input protocol for on-screen keyboards
+morf.text_input.disable	undocumented: text-input protocol for on-screen keyboards
+morf.text_input.subscribe	undocumented: text-input protocol for on-screen keyboards
+morf.text_input.surrounding	undocumented: text-input protocol for on-screen keyboards
+morf.time	undocumented: calendar and duration helpers; no guide section yet
+morf.time.add	undocumented: calendar and duration helpers; no guide section yet
+morf.time.date	undocumented: calendar and duration helpers; no guide section yet
+morf.time.days_between	undocumented: calendar and duration helpers; no guide section yet
+morf.time.days_in_month	undocumented: calendar and duration helpers; no guide section yet
+morf.time.duration	undocumented: calendar and duration helpers; no guide section yet
+morf.time.format	undocumented: calendar and duration helpers; no guide section yet
+morf.time.is_leap_year	undocumented: calendar and duration helpers; no guide section yet
+morf.time.month	undocumented: calendar and duration helpers; no guide section yet
+morf.time.now	undocumented: calendar and duration helpers; no guide section yet
+morf.time.now_ms	undocumented: calendar and duration helpers; no guide section yet
+morf.time.parse	undocumented: calendar and duration helpers; no guide section yet
+morf.time.relative	undocumented: calendar and duration helpers; no guide section yet
+morf.time.start_of	undocumented: calendar and duration helpers; no guide section yet
+morf.time.time	undocumented: calendar and duration helpers; no guide section yet
+morf.time.timezone	undocumented: calendar and duration helpers; no guide section yet
+morf.time.weekday	undocumented: calendar and duration helpers; no guide section yet
+morf.toplevel	undocumented: foreign-toplevel actions by identifier; the guide documents the rows
+morf.toplevel.activate	undocumented: foreign-toplevel actions by identifier; the guide documents the rows
+morf.toplevel.close	undocumented: foreign-toplevel actions by identifier; the guide documents the rows
+morf.toplevel.set_fullscreen	undocumented: foreign-toplevel actions by identifier; the guide documents the rows
+morf.toplevel.set_maximized	undocumented: foreign-toplevel actions by identifier; the guide documents the rows
+morf.toplevel.set_minimize_target	undocumented: foreign-toplevel actions by identifier; the guide documents the rows
+morf.toplevel.set_minimized	undocumented: foreign-toplevel actions by identifier; the guide documents the rows
+morf.toplevels.get	undocumented: named in the guide only in shorthand (`.get(id)`, `.revision()`)
+morf.toplevels.revision	undocumented: named in the guide only in shorthand (`.get(id)`, `.revision()`)
+morf.transition_parent	undocumented: lifecycle and reload hooks; no guide section yet
+morf.udev	undocumented: udev device events; no guide section yet
+morf.udev.subscribe	undocumented: udev device events; no guide section yet
+morf.ui.Icon	undocumented: constructor with no guide section yet
+morf.ui.Inset	undocumented: constructor with no guide section yet
+morf.ui.follow	undocumented: constructor with no guide section yet
+morf.variants	undocumented: lifecycle and reload hooks; no guide section yet
+morf.version	undocumented: process and path introspection; no guide section yet
+morf.view_extent	internal: layout helpers the library's list views call
+morf.view_item_start	internal: layout helpers the library's list views call
+morf.virtual_keyboard	undocumented: virtual-keyboard protocol for on-screen keyboards
+morf.virtual_keyboard.key	undocumented: virtual-keyboard protocol for on-screen keyboards
+morf.virtual_keyboard.modifiers	undocumented: virtual-keyboard protocol for on-screen keyboards
+morf.virtual_list	undocumented: virtualised list primitive behind ui.ListView
+morf.watch_files	undocumented: process and stream helpers beyond morf.run and morf.spawn
+morf.window.floating	undocumented: window kinds beyond toplevel and popup; no guide section yet
+morf.window.layer_surface	undocumented: window kinds beyond toplevel and popup; no guide section yet
+morf.window.region	undocumented: window kinds beyond toplevel and popup; no guide section yet
+morf.working_directory	undocumented: process and path introspection; no guide section yet
+morf.workspace	undocumented: workspace actions and snapshot; no guide section yet
+morf.workspace.activate	undocumented: workspace actions and snapshot; no guide section yet
+morf.workspace.assign	undocumented: workspace actions and snapshot; no guide section yet
+morf.workspace.remove	undocumented: workspace actions and snapshot; no guide section yet
+morf.workspaces	undocumented: workspace actions and snapshot; no guide section yet
+morf.xkb	undocumented: keymap compilation for keyboard layouts
+morf.xkb.compile	undocumented: keymap compilation for keyboard layouts
+morf.xkb.include_paths	undocumented: keymap compilation for keyboard layouts
+ui.Icon	undocumented: constructor with no guide section yet
+ui.Inset	undocumented: constructor with no guide section yet
++morf.audio.sinks	dynamic: device list models served through __index in api/media/audio.rs
++morf.capabilities.backdrop_blur	dynamic: compositor capability filled by the host (turn/start.rs), not a types field
++morf.capabilities.gamma_control	dynamic: compositor capability filled by the host, not a types field
++morf.capabilities.hdr	dynamic: compositor capability filled by the host, not a types field
++morf.capabilities.hdr_transfer	dynamic: compositor capability filled by the host, not a types field
++morf.capabilities.idle_inhibit	dynamic: compositor capability filled by the host, not a types field
++morf.capabilities.outputless	dynamic: compositor capability filled by the host, not a types field
++morf.surface.blend	dynamic: surface property served through __index in api/window/layer.rs
++morf.surface.keyboard_focus	dynamic: surface property served through __index in api/window/layer.rs
++morf.surface.on_focus_changed	dynamic: surface callback served through __index in api/window/layer.rs
++morf.surface.on_pointer_changed	dynamic: surface callback served through __index in api/window/layer.rs
++morf.surface.opaque	dynamic: surface property served through __index in api/window/layer.rs
++morf.surface.outputless	dynamic: surface property served through __index in api/window/layer.rs
++morf.surface.subpixel_text	dynamic: surface property served through __index in api/window/layer.rs
++morf.toplevels.model	dynamic: list model served through __index in api/desktop/toplevels.rs
