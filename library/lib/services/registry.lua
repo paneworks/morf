@@ -1,269 +1,298 @@
--- A registry of system services, and the generic binder most of them
--- were hand-rolling (PLAN item 7).
+-- System services described as data, and the one binder that runs them.
 --
--- A service is data plus a short list of what is genuinely its own:
+-- A descriptor names a service by the capability a shell uses ("power",
+-- "media") and says, as data, which D-Bus objects it reads, which signals
+-- change what, and how each raw property becomes a state field:
 --
---   local upower = registry.define {
---     name = "upower", bus = "system",
---     service = "org.freedesktop.UPower",
---     path = "/org/freedesktop/UPower",
---     interface = "org.freedesktop.UPower",
---     properties = {
---       on_battery = "OnBattery",
---       lid_closed = { prop = "LidIsClosed", default = false },
+--   registry.define {
+--     name = "power", bus = "system", service = "org.freedesktop.UPower",
+--     debounce_ms = 60,
+--     interfaces = {
+--       root = { path = "/org/freedesktop/UPower", interface = "org.freedesktop.UPower" },
 --     },
---     objects = {
---       field = "devices", key = "path",
---       list = function(client, svc) return svc.enumerate() end,
---       interface = "org.freedesktop.UPower.Device",
---       map = function(props, path) return { path = path, pct = props.Percentage } end,
+--     fields = {
+--       available = { from = "root", meta = "available" },
+--       on_battery = { from = "root", prop = "OnBattery", as = "bool" },
 --     },
---     methods = function(client, svc, state)
---       return { refresh = function() ... end }
---     end,
 --   }
---   local power = upower.connect()
+--   local power = registry.connect("power")   -- or morf.service("power")
 --   ui.Text { text = function() return power.state.on_battery and "battery" or "ac" end }
 --
--- The binder owns the pattern every D-Bus service repeated: create the
--- client (through dbus_client, so the test seam is the same), watch
--- the name, read once, subscribe to PropertiesChanged (debounced),
--- re-read on change, follow the service away and back, and close
--- everything on `close()`. Property values land in `state` under their
--- descriptor names; `available` says whether the name is owned.
--- Derived values are ordinary bindings in the descriptor's `state`
--- table, computed by the reactive graph like anywhere else.
+-- The binder owns what every hand-written service used to redo: it reads
+-- each object once, merges `PropertiesChanged` in place, re-reads only what
+-- a signal invalidated (debounced), follows names coming and going, keeps
+-- dynamic object sets (objects a method lists, or every bus name under a
+-- prefix) with a subscription per member, and closes all of it on
+-- `close()`. Nothing in a descriptor is procedural except `bind`, the one
+-- escape hatch, for what the format cannot say. The full format is in
+-- docs/IO.md, "System services".
 --
--- Descriptor names are the permission vocabulary of
--- `crates/engine/morf-lua/src/vm/permissions.rs`: a service a shell
--- binds is a capability it uses, named the same in both places.
-
-local dbus_client = require("lib.services.dbus_client")
+-- Descriptor names are the capability vocabulary a permissions manifest
+-- lists (`services = { "media", "power" }`); `registry.names()` is that list.
 
 local registry = {}
+
+--- The services the library ships, by name: the module that defines each.
+--- `registry.connect` requires the module on first use.
+registry.catalog = {
+  media = "lib.services.mpris",
+  power = "lib.services.upower",
+}
+
 registry.definitions = {}
-registry.services = {}
 
---- Defines a service. The result has `connect(options)`; options are
---- `dbus` (the test seam), `bus`, and `debounce_ms` (60).
-function registry.define(descriptor)
-  assert(type(descriptor) == "table", "a service descriptor is a table")
-  assert(type(descriptor.name) == "string", "a service needs a name")
-  assert(type(descriptor.service) == "string", "a service needs a bus name")
-  assert(type(descriptor.path) == "string", "a service needs an object path")
-  assert(type(descriptor.interface) == "string", "a service needs an interface")
-  registry.definitions[descriptor.name] = descriptor
+------------------------------------------------------------------ coercion
 
-  local service = { descriptor = descriptor }
-  registry.services[descriptor.name] = service
+local coerce = {}
+registry.coerce = coerce
 
-  function service.connect(options)
-    options = options or {}
-    local client = dbus_client.new({ dbus = options.dbus, bus = options.bus or descriptor.bus })
-    local svc = descriptor.service
-
-    local initial = { available = false }
-    for field, spec in pairs(descriptor.properties or {}) do
-      initial[field] = (type(spec) == "table" and spec.default) or false
-    end
-    -- Fixed-path property groups (a display device, a power-profiles
-    -- daemon): each writes into its own sub-table of the state, and
-    -- may live on a second bus name.
-    for target, group in pairs(descriptor.groups or {}) do
-      local sub = { available = false }
-      for field, spec in pairs(group.properties or {}) do
-        sub[field] = (type(spec) == "table" and spec.default) or false
-      end
-      initial[target] = sub
-    end
-    if descriptor.objects then initial[descriptor.objects.field] = {} end
-    for field, value in pairs(descriptor.state or {}) do initial[field] = value end
-    local state = morf.state(initial)
-
-    local handles = {}
-    local object_handles = {}
-    local closed = false
-    -- Property deltas heard from PropertiesChanged, by path: a
-    -- re-read may race the change it answers, so the heard values
-    -- overlay the read ones until the next delta replaces them.
-    local heard = {}
-    local function note_heard(path, changed, invalidated)
-      local cache = heard[path]
-      if not cache then cache = {} heard[path] = cache end
-      for key, value in pairs(changed or {}) do cache[key] = value end
-      for _, key in ipairs(invalidated or {}) do cache[key] = nil end
-    end
-    local function overlay(path, all)
-      local cache = heard[path]
-      if not cache then return all end
-      local merged = {}
-      for key, value in pairs(all) do merged[key] = value end
-      for key, value in pairs(cache) do merged[key] = value end
-      return merged
-    end
-
-    local bound = { state = state, client = client }
-
-    local function read_properties()
-      if not client.has_owner(svc) then
-        state.available = false
-        return false
-      end
-      local all = client.get_all(svc, descriptor.path, descriptor.interface)
-      if not all then
-        state.available = false
-        return false
-      end
-      all = overlay(descriptor.path, all)
-      state.available = true
-      for field, spec in pairs(descriptor.properties or {}) do
-        local prop, default = spec, nil
-        if type(spec) == "table" then prop, default = spec.prop, spec.default end
-        local value = all[prop]
-        if value == nil then value = default end
-        if type(spec) == "table" and spec.map then value = spec.map(value) end
-        state[field] = value
-      end
-      return true
-    end
-
-    local read_objects
-    if descriptor.objects then
-      local objects = descriptor.objects
-      read_objects = function()
-        local paths = objects.list(client, bound) or {}
-        local rows, present = {}, {}
-        for _, path in ipairs(paths) do
-          present[path] = true
-          local props = client.get_all(svc, path, objects.interface)
-          if props then rows[#rows + 1] = objects.map(overlay(path, props), path) end
-          if not object_handles[path] and not closed then
-            object_handles[path] = client.on_properties(svc, path, function(_, changed, invalidated)
-              note_heard(path, changed, invalidated)
-              bound._schedule_objects()
-            end)
-          end
-        end
-        local gone = {}
-        for path in pairs(object_handles) do
-          if not present[path] then gone[#gone + 1] = path end
-        end
-        for _, path in ipairs(gone) do
-          local handle = object_handles[path]
-          if handle and handle.close then handle.close() end
-          object_handles[path] = nil
-        end
-        table.sort(rows, function(a, b) return tostring(a[objects.key or "path"]) < tostring(b[objects.key or "path"]) end)
-        bound.rows = rows
-        state[objects.field]:replace(rows, objects.key or "path")
-      end
-    end
-
-    local function read_group(target, group)
-      local owner = group.service or svc
-      if not client.has_owner(owner) then
-        state[target].available = false
-        return
-      end
-      local all = client.get_all(owner, group.path, group.interface)
-      if not all then
-        state[target].available = false
-        return
-      end
-      all = overlay(group.path, all)
-      state[target].available = true
-      for field, spec in pairs(group.properties or {}) do
-        local prop, default = spec, nil
-        if type(spec) == "table" then prop, default = spec.prop, spec.default end
-        local value = all[prop]
-        if value == nil then value = default end
-        if type(spec) == "table" and spec.map then value = spec.map(value) end
-        state[target][field] = value
-      end
-    end
-
-    local function refresh_now()
-      if closed then return end
-      read_properties()
-      for target, group in pairs(descriptor.groups or {}) do read_group(target, group) end
-      if read_objects then read_objects() end
-      if descriptor.on_refresh then descriptor.on_refresh(bound, client, state) end
-    end
-    local schedule = dbus_client.debounce(
-      options.debounce_ms or descriptor.debounce_ms or 60, refresh_now)
-    bound._schedule_objects = schedule
-
-    if descriptor.methods then
-      for name, method in pairs(descriptor.methods(client, bound, state)) do
-        bound[name] = method
-      end
-    end
-
-    -- After the descriptor's methods, on purpose: a method named
-    -- `refresh` or `close` must not replace the binder's own, or it
-    -- would call itself forever.
-    function bound.refresh()
-      schedule()
-    end
-
-    function bound.close()
-      closed = true
-      for _, handle in ipairs(handles) do
-        if handle and handle.close then handle.close() end
-      end
-      handles = {}
-      local gone = {}
-      for path in pairs(object_handles) do gone[#gone + 1] = path end
-      for _, path in ipairs(gone) do
-        local handle = object_handles[path]
-        if handle and handle.close then handle.close() end
-        object_handles[path] = nil
-      end
-    end
-
-    handles[#handles + 1] = client.watch_name(svc, function() schedule() end)
-    handles[#handles + 1] = client.on_properties(svc, descriptor.path,
-      function(_, changed, invalidated)
-        note_heard(descriptor.path, changed, invalidated)
-        schedule()
-      end)
-    for _, signal in ipairs(descriptor.signals or {}) do
-      handles[#handles + 1] = client.on_signal(
-        svc, signal.path or descriptor.path, signal.interface or descriptor.interface,
-        signal.member, function(body) signal.fn(bound, body) end)
-    end
-    for _, group in pairs(descriptor.groups or {}) do
-      local owner = group.service or svc
-      if owner ~= svc then
-        handles[#handles + 1] = client.watch_name(owner, function() schedule() end)
-      end
-      handles[#handles + 1] = client.on_properties(owner, group.path,
-        function(_, changed, invalidated)
-          note_heard(group.path, changed, invalidated)
-          schedule()
-        end)
-    end
-    -- The first read is not debounced: a consumer that connects and
-    -- reads its state in the same turn finds it there.
-    refresh_now()
-    return bound
-  end
-
-  return service
+local function fallback(spec, neutral)
+  if spec.default ~= nil then return spec.default end
+  return neutral
 end
 
---- Connects to a service by its registered name. An unknown name
---- fails naming what is registered, so a typo is answered in place.
-function registry.connect(name, options)
-  local service = registry.services[name]
-  if not service then
-    local names = {}
-    for registered in pairs(registry.services) do names[#names + 1] = registered end
-    table.sort(names)
-    error(("unknown service `%s` (registered: %s)"):format(
-      tostring(name), table.concat(names, ", ")), 2)
+function coerce.raw(value, spec)
+  if value == nil then return spec.default end
+  return value
+end
+
+function coerce.bool(value, spec)
+  if value == nil then return fallback(spec, false) end
+  return value == true
+end
+
+function coerce.number(value, spec)
+  return tonumber(value) or fallback(spec, 0)
+end
+
+function coerce.percent(value, spec)
+  local number = tonumber(value)
+  if number == nil then return fallback(spec, 0) end
+  return math.max(0, math.min(100, number))
+end
+
+--- `value / by`: microseconds to seconds is `{ as = "divide", by = 1e6 }`.
+function coerce.divide(value, spec)
+  local number = tonumber(value)
+  if number == nil then return fallback(spec, 0) end
+  return number / spec.by
+end
+
+function coerce.string(value, spec)
+  if value == nil then return fallback(spec, "") end
+  return tostring(value)
+end
+
+function coerce.lower(value, spec)
+  return string.lower(coerce.string(value, spec))
+end
+
+--- `values[value]`: a number on the wire as a word.
+function coerce.enum(value, spec)
+  local word = value ~= nil and spec.values[value] or nil
+  if word == nil then return fallback(spec, "") end
+  return word
+end
+
+--- Whether `value` is one of `values`.
+function coerce.one_of(value, spec)
+  for _, each in ipairs(spec.values) do
+    if each == value then return true end
   end
-  return service.connect(options)
+  return false
+end
+
+--- A list as "a, b"; a scalar as text.
+function coerce.list_text(value, spec)
+  if type(value) == "table" then
+    local parts = {}
+    for _, each in ipairs(value) do parts[#parts + 1] = tostring(each) end
+    return table.concat(parts, ", ")
+  end
+  if value == nil then return fallback(spec, "") end
+  return tostring(value)
+end
+
+function coerce.object_paths(value)
+  local paths = {}
+  if type(value) ~= "table" then return paths end
+  for _, each in ipairs(value) do
+    if type(each) == "string" then paths[#paths + 1] = each end
+  end
+  return paths
+end
+
+local coerce_fields
+
+--- A list of dictionaries as rows of `fields`; an entry without the
+--- `key` field's property is skipped.
+function coerce.records(value, spec)
+  local rows = {}
+  if type(value) ~= "table" then return rows end
+  local key_prop = spec.fields[spec.key].prop
+  for _, entry in ipairs(value) do
+    if type(entry) == "table" and entry[key_prop] ~= nil then
+      rows[#rows + 1] = coerce_fields(spec.fields, function() return entry end)
+    end
+  end
+  return rows
+end
+
+local function raw_of(props, prop)
+  if props == nil or prop == nil then return nil end
+  if type(prop) ~= "table" then return props[prop] end
+  local value = props
+  for _, key in ipairs(prop) do
+    if type(value) ~= "table" then return nil end
+    value = value[key]
+  end
+  return value
+end
+
+local function coerced(spec, raw)
+  return coerce[spec.as or "raw"](raw, spec)
+end
+
+-- `props_for(alias)` answers the raw properties a field reads; `meta` the
+-- binder's own facts (`available`, `service`, `count`, `key`).
+function coerce_fields(fields, props_for, meta)
+  local out = {}
+  for name, spec in pairs(fields) do
+    if spec.meta then
+      out[name] = meta and meta(spec.meta, spec.from)
+    else
+      out[name] = coerced(spec, raw_of(props_for(spec.from), spec.prop))
+    end
+  end
+  return out
+end
+
+---------------------------------------------------------------- definition
+
+local METAS = { available = true, service = true, count = true, key = true }
+
+local function inherit(fields, from)
+  for _, spec in pairs(fields) do
+    if spec.from == nil then spec.from = from end
+    if spec.fields and spec.as ~= "records" then inherit(spec.fields, spec.from) end
+  end
+end
+
+local function check_fields(name, fields, known, where)
+  for field, spec in pairs(fields) do
+    local at = ("service `%s` %s `%s`"):format(name, where, field)
+    assert(type(spec) == "table", at .. " is not a table")
+    if spec.meta then
+      assert(METAS[spec.meta], at .. " names an unknown meta `" .. tostring(spec.meta) .. "`")
+    elseif spec.fields and spec.as ~= "records" then
+      check_fields(name, spec.fields, known, "field")
+    elseif spec.as == "records" then
+      assert(spec.key and spec.fields[spec.key], at .. " records need a `key` among their fields")
+      for _, each in pairs(spec.fields) do
+        assert(coerce[each.as or "raw"], at .. " uses an unknown coercion")
+      end
+    elseif spec.prop == nil and not spec.only and not spec.where then
+      assert(known.sets[spec.from], at .. " needs a `prop`, a `meta` or `fields`")
+    end
+    if not spec.meta and spec.as then
+      assert(coerce[spec.as], at .. " uses an unknown coercion `" .. tostring(spec.as) .. "`")
+    end
+    if spec.from ~= nil then
+      assert(known.sources[spec.from] or known.sets[spec.from] or spec.as == "records",
+        at .. " reads from unknown `" .. tostring(spec.from) .. "`")
+    end
+  end
+end
+
+--- Registers a descriptor under its name and returns it. Errors name the
+--- descriptor and the part of it that is wrong.
+function registry.define(descriptor)
+  assert(type(descriptor) == "table", "a service descriptor is a table")
+  local name = descriptor.name
+  assert(type(name) == "string" and name:match("^[a-z][a-z0-9_]*$"),
+    "a service needs a name: a short lowercase capability noun")
+  assert(descriptor.bus == "system" or descriptor.bus == "session",
+    ("service `%s` needs bus = \"system\" or \"session\""):format(name))
+  assert(type(descriptor.interfaces) == "table", ("service `%s` needs interfaces"):format(name))
+  assert(type(descriptor.fields) == "table", ("service `%s` needs fields"):format(name))
+  local known = { sources = descriptor.interfaces, sets = descriptor.objects or {} }
+  for alias, source in pairs(descriptor.interfaces) do
+    local at = ("service `%s` interface `%s`"):format(name, alias)
+    if source.any_of then
+      assert(type(source.any_of) == "table", at .. " lists its alternatives in any_of")
+    else
+      assert(type(source.interface) == "string", at .. " needs an interface")
+      assert(source.set == nil or known.sets[source.set], at .. " belongs to an unknown set")
+      assert(source.set or type(source.path) == "string", at .. " needs a path")
+    end
+  end
+  for set, spec in pairs(known.sets) do
+    local at = ("service `%s` set `%s`"):format(name, set)
+    assert(spec.names or spec.list, at .. " needs `names` or `list`")
+    assert(spec.names == nil or type(spec.names.prefix) == "string", at .. " needs a name prefix")
+    assert(spec.list == nil or known.sources[spec.list.from], at .. " lists from an unknown interface")
+    assert(type(spec.fields) == "table", at .. " needs fields")
+    local keyed = false
+    for _, field in pairs(spec.fields) do keyed = keyed or field.meta == "key" end
+    assert(keyed, at .. " needs a field with meta = \"key\"")
+    inherit(spec.fields, spec.from)
+    check_fields(name, spec.fields, known, "set field")
+  end
+  inherit(descriptor.fields, nil)
+  check_fields(name, descriptor.fields, known, "field")
+  for _, signal in ipairs(descriptor.signals or {}) do
+    assert(known.sources[signal.from], ("service `%s` signal `%s` is on an unknown interface")
+      :format(name, tostring(signal.member)))
+  end
+  for action, spec in pairs(descriptor.actions or {}) do
+    local at = ("service `%s` action `%s`"):format(name, action)
+    if spec.write then
+      local source = known.sources[spec.on]
+      assert(source and not source.set, at .. " writes to an unknown interface")
+    else
+      assert(spec.rows and descriptor.fields[spec.rows], at .. " needs `write` or `rows`")
+    end
+  end
+  assert(descriptor.bind == nil or type(descriptor.bind) == "function",
+    ("service `%s`: bind is a function"):format(name))
+  registry.definitions[name] = descriptor
+  return descriptor
+end
+
+--- Every service name the registry can bind, sorted: the catalog and
+--- anything defined since.
+function registry.names()
+  local seen, names = {}, {}
+  for name in pairs(registry.catalog) do seen[name] = true end
+  for name in pairs(registry.definitions) do seen[name] = true end
+  for name in pairs(seen) do names[#names + 1] = name end
+  table.sort(names)
+  return names
+end
+
+--- The descriptor for `name`, or nil and an error naming every service
+--- that is registered.
+function registry.find(name)
+  local descriptor = registry.definitions[name]
+  if not descriptor and type(name) == "string" and registry.catalog[name] then
+    require(registry.catalog[name])
+    descriptor = registry.definitions[name]
+  end
+  if descriptor then return descriptor end
+  return nil, ("unknown service `%s` (registered: %s)"):format(
+    tostring(name), table.concat(registry.names(), ", "))
+end
+
+--- Binds a service by name. Options: `dbus` (the test seam), `bus`,
+--- `service` (the main bus name), `debounce_ms`, `interfaces` and
+--- `objects` (partial overrides by alias), and whatever the descriptor's
+--- `bind` reads. An unknown name raises, listing the registered ones.
+function registry.connect(name, options)
+  local descriptor, err = registry.find(name)
+  if not descriptor then error(err, 2) end
+  return require("lib.services.binder").bind(descriptor, options or {}, {
+    coerce_fields = coerce_fields, coerced = coerced, raw_of = raw_of,
+  })
 end
 
 return registry
