@@ -145,14 +145,15 @@ pub(crate) fn finish_reactive_api<'gc>(
                     // gated -- gated APIs refuse with nil and a reason
                     // while it loads. Handlers it registers carry no
                     // origin yet, so nothing is promised past load.
-                    let gated = imported && !{
-                        let root = state.borrow().shell_root().to_path_buf();
-                        shell_storage_dir(&root, StorageKind::State)
-                            .map(|dir| dir.join("permissions-approvals.json"))
-                            .and_then(|path| crate::vm::permissions::Approvals::load(&path))
-                            .map(|approvals| approvals.is_approved(&declaration))
-                            .unwrap_or(false)
-                    };
+                    let gated = imported
+                        && !{
+                            let root = state.borrow().shell_root().to_path_buf();
+                            shell_storage_dir(&root, StorageKind::State)
+                                .map(|dir| dir.join("permissions-approvals.json"))
+                                .and_then(|path| crate::vm::permissions::Approvals::load(&path))
+                                .map(|approvals| approvals.is_approved(&declaration))
+                                .unwrap_or(false)
+                        };
                     if gated {
                         state.borrow_mut().begin_loading_unapproved(name.clone());
                     }

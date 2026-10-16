@@ -239,7 +239,11 @@ fn an_unapproved_imported_module_is_gated_at_load_time() {
     let probe = b"local child, err = morf.spawn { command = { \"printf\", \"x\" } }\n\
                   return { child = child, err = err }";
     fs::write(imported_dir.join("plug/widget.lua"), probe).unwrap();
-    fs::write(imported_dir.join("plug/permissions.lua"), b"return { run = true }").unwrap();
+    fs::write(
+        imported_dir.join("plug/permissions.lua"),
+        b"return { run = true }",
+    )
+    .unwrap();
     fs::write(config_dir.join("helper.lua"), probe).unwrap();
     let config = config_dir.join("shell.lua");
 
