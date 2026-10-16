@@ -160,6 +160,11 @@ impl<B: Backend + ?Sized> Backend for Dense<B> {
     fn own_output(&self) -> Option<Output> {
         self.inner.own_output()
     }
+    fn layer_space(&self, id: u64) -> Option<crate::LayerSpace> {
+        let mut space = self.inner.layer_space(id)?;
+        space.local_scale *= self.zoom(WindowId::Layer(id)).point_out(1.0);
+        Some(space)
+    }
     fn physical_size(&self) -> (u32, u32) {
         self.inner.physical_size()
     }

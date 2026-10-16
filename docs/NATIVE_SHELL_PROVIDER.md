@@ -53,10 +53,51 @@ output providers and missing/mismatched outputs. The public
 `prek.morf.providers()` API copies these verified connection states with its
 session fence and exact decimal-string process birth.
 
-The endpoint also implements the bounded root controller protocol below. It
-supplies no recognizer ownership, native lock completion, keyboard state,
-rendered regions or arbitrary IPC bridge. Production broker/logind and physical
+The endpoint also implements submitted-frame inspection and the bounded root
+controller protocol below. Its connection state alone supplies no recognizer
+ownership, native lock completion, keyboard state or arbitrary IPC bridge. Production broker/logind and physical
 acceptance remain separate from private-socket/model and local Cage checks.
+
+## Submitted primary frame
+
+`{"version":1,"op":"rendered-context"}` is read-only for owner/root when
+`control-capabilities.rendered_context=true`. It returns the connection `epoch`,
+decimal-string `ui_generation`, `revision` and monotonic `sampled_ns`,
+`coverage="primary_surface_named_bounds"` and `frame`. The frame is null when
+unavailable, busy, stale or lacking a matching GPU submission. Reads wake the
+UI for a new observation but never refresh the timestamp themselves.
+
+The frame supplies Morf layout `width`, `height`, `scale_120` and up to 256
+named `regions` with decimal-string native `node`, scene `id`, clipped
+`bounds={x,y,width,height}` and `interactive`. Names may repeat; node identities
+are distinct within the endpoint epoch and Lua generation. Hidden, transparent
+and exiting subtrees are excluded. These are transformed bounding boxes, not
+exact hit shapes or compositor presentation. The entire reply is at most
+128 KiB; excessive metadata withdraws the frame instead of truncating it.
+
+With `semantic_regions=true`, `input_context={role,layout?}` on an actual named
+node supplies optional `semantic` metadata. Roles are `keyboard`,
+`secure_overlay`, `clock_background`, `content_bottom`, `physical_bottom`,
+`top_left`, `top_right`, `side_left`, `side_right` and `local_control`. A keyboard
+requires its layout name; other roles forbid one. No coordinates, credentials
+or ownership claims can be attached through this annotation.
+
+With `layer_space=true`, a configured primary Wayland layer additionally
+supplies `surface={namespace,width,height,local_scale}`. The namespace is fixed
+at layer creation; the dimensions are the native logical viewport. Multiplying
+Morf local coordinates by `local_scale` applies the actual density conversion.
+Fallback/window backends omit this field. A compositor layout match can map
+these bounds to a global layout box, but cannot prove animated position,
+stacking, surface input coverage or presentation.
+
+With `keyboard_registry=true`, `keyboard` supplies
+`{scope:"registered_morf_primary",registered,state,node?,layout?}`. The registry
+walks every scene root and accepts a known `hidden` or `visible` state only for
+one named keyboard under the primary root. Known states include its node and
+layout. Other-root declarations, multiple/no declarations, exiting nodes or
+incomplete visible bounds yield `unknown`. Changes outside the primary root
+also invalidate the registry cache. This coverage cannot establish the absence
+of another program's keyboard or grant input authority.
 
 ## Root controller protocol
 

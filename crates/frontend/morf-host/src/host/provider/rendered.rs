@@ -5,6 +5,7 @@ use morf_app::Backend;
 use morf_layout::{Geometry, Layout, Transform2D, node_transform};
 use morf_scene::{Element, NodeHandle, Scene, Value};
 use serde_json::{Value as Json, json};
+mod registry;
 
 const LIMIT: usize = 256;
 const FRESH_NS: u64 = 250_000_000;
@@ -25,6 +26,8 @@ pub(super) struct Frame {
     size: (u32, u32),
     scale_120: u32,
     regions: Vec<Region>,
+    space: Option<morf_app::LayerSpace>,
+    keyboard: Json,
 }
 
 #[derive(Default)]
@@ -34,7 +37,7 @@ pub(super) struct Rendered {
     revision: u64,
     generation: u64,
     sampled: u64,
-    stamp: Option<u64>,
+    stamp: Option<(u64, u64)>,
     frame: Option<Frame>,
 }
 impl Rendered {
@@ -50,9 +53,11 @@ impl Rendered {
         self.busy = false;
         let cache = &host.state.layout;
         let scene = runtime.scene();
-        let stamp = scene.paint_stamp(host.state.primary_root).ok();
+        let paint = scene.paint_stamp(host.state.primary_root).ok();
+        let stamp = paint.map(|paint| (paint, scene.paint_revision()));
+        let space = host.backend.layer_space(morf_app::PRIMARY_LAYER);
         let current = cache.painted.is_some()
-            && cache.painted == stamp
+            && cache.painted == paint
             && cache.revision == scene.layout_revision_of(host.state.primary_root)
             && host.backend.layer_logical_size(morf_app::PRIMARY_LAYER) == Some(cache.size)
             && host.backend.layer_scale_120(morf_app::PRIMARY_LAYER) == Some(cache.scale_120);
@@ -70,7 +75,13 @@ impl Rendered {
         // A shell with no observer pays only the stamp check. A read wakes the
         // UI thread and requests one observation; it never timestamps itself.
         if !std::mem::take(&mut self.requested) {
-            if self.generation != generation || self.stamp != stamp {
+            if self.generation != generation
+                || self.stamp != stamp
+                || self
+                    .frame
+                    .as_ref()
+                    .is_some_and(|frame| frame.space != space)
+            {
                 self.frame = None;
                 self.stamp = None;
             }
@@ -78,17 +89,26 @@ impl Rendered {
         }
         // Idle observations refresh the same submitted frame without walking
         // the scene or painting again. Every scene mutation changes its stamp.
-        if self.generation == generation && self.stamp == stamp && self.frame.is_some() {
+        if self.generation == generation
+            && self.stamp == stamp
+            && self
+                .frame
+                .as_ref()
+                .is_some_and(|frame| frame.space == space)
+        {
             self.sampled = now;
             return;
         }
-        let frame = capture(
+        let mut frame = capture(
             &scene,
             &cache.layout,
             host.state.primary_root,
             cache.size,
             cache.scale_120,
         );
+        if let Some(frame) = &mut frame {
+            frame.space = space;
+        }
         if self.generation != generation || self.frame != frame {
             let Some(next) = self.revision.checked_add(1) else {
                 self.frame = None;
@@ -123,11 +143,14 @@ impl Rendered {
                     value
                 })
                 .collect();
-            let frame = json!({"width":frame.size.0,"height":frame.size.1,
-                "scale_120":frame.scale_120,"regions":regions});
+            let mut value = json!({"width":frame.size.0,"height":frame.size.1,
+                "scale_120":frame.scale_120,"regions":regions,"keyboard":frame.keyboard});
+            if let Some(space)=&frame.space {
+                value["surface"]=json!({"namespace":space.namespace,"width":space.width,"height":space.height,"local_scale":space.local_scale});
+            }
             // Escaping names/layouts can exceed the wire budget even when
             // every individual field and the region count are valid.
-            (serde_json::to_vec(&frame).ok()?.len() <= MAX_FRAME_BYTES).then_some(frame)
+            (serde_json::to_vec(&value).ok()?.len() <= MAX_FRAME_BYTES).then_some(value)
         });
         json!({"version":1,"epoch":epoch,"ui_generation":generation.to_string(),
             "revision":self.revision.to_string(),"sampled_ns":self.sampled.to_string(),
@@ -164,10 +187,13 @@ fn capture(
     )
     .ok()?;
     regions.sort_by_key(|region| region.node);
+    let keyboard = registry::keyboard(scene, root, &regions).ok()?;
     Some(Frame {
         size,
         scale_120,
         regions,
+        space: None,
+        keyboard,
     })
 }
 
@@ -325,6 +351,54 @@ mod tests {
         }
     }
     #[test]
+    fn registered_keyboard_distinguishes_hidden_foreign_and_ambiguous_nodes() {
+        let mut scene = Scene::new();
+        let root = scene.create(Element::Item);
+        scene.assign(root, "width", 100.0).unwrap();
+        scene.assign(root, "height", 100.0).unwrap();
+        let keyboard = scene.create(Element::Item);
+        scene.reparent(keyboard, Some(root)).unwrap();
+        scene.assign(keyboard, "id", "keyboard").unwrap();
+        scene.assign(keyboard, "width", 100.0).unwrap();
+        scene.assign(keyboard, "height", 20.0).unwrap();
+        let declaration = Value::Map(
+            [
+                ("role".into(), Value::String("keyboard".into())),
+                ("layout".into(), Value::String("full".into())),
+            ]
+            .into(),
+        );
+        scene
+            .assign(keyboard, "input_context", declaration.clone())
+            .unwrap();
+        let snapshot = |scene: &Scene| {
+            let layout = Layout::compute(
+                scene,
+                root,
+                Size {
+                    width: 100.0,
+                    height: 100.0,
+                },
+                &mut NoText,
+            )
+            .unwrap();
+            capture(scene, &layout, root, (100, 100), 120).unwrap()
+        };
+        assert_eq!(snapshot(&scene).keyboard["state"], "visible");
+        scene.assign(keyboard, "visible", false).unwrap();
+        let hidden = snapshot(&scene).keyboard;
+        assert_eq!(hidden["state"], "hidden");
+        assert_eq!(hidden["registered"], 1);
+        scene.reparent(keyboard, None).unwrap();
+        assert_eq!(snapshot(&scene).keyboard["state"], "unknown");
+        scene.reparent(keyboard, Some(root)).unwrap();
+        let other = scene.create(Element::Item);
+        scene.assign(other, "input_context", declaration).unwrap();
+        let ambiguous = snapshot(&scene).keyboard;
+        assert_eq!(ambiguous["state"], "unknown");
+        assert_eq!(ambiguous["registered"], 2);
+    }
+    #[test]
     fn escaped_semantics_obey_the_total_reply_budget_without_truncation() {
         let regions = (1..=LIMIT)
             .map(|node| Region {
@@ -346,6 +420,8 @@ mod tests {
             sampled: 1_000,
             frame: Some(Frame {
                 size: (100, 100),
+                space: None,
+                keyboard: json!({"scope":"registered_morf_primary","registered":0,"state":"unknown"}),
                 scale_120: 120,
                 regions,
             }),
@@ -492,6 +568,8 @@ mod tests {
             sampled: 1_000,
             frame: Some(Frame {
                 size: (100, 200),
+                space: None,
+                keyboard: json!({"scope":"registered_morf_primary","registered":0,"state":"unknown"}),
                 scale_120: 120,
                 regions: Vec::new(),
             }),

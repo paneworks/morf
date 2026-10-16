@@ -69,6 +69,17 @@ pub struct LayerConfig {
     pub keyboard_focus: KeyboardFocus,
 }
 
+/// Identity and coordinate conversion of an actual native layer-shell surface.
+/// A fallback toplevel/subsurface cannot provide this witness.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LayerSpace {
+    pub namespace: String,
+    pub width: u32,
+    pub height: u32,
+    /// Compositor logical units per local layout unit.
+    pub local_scale: f64,
+}
+
 impl Default for LayerConfig {
     fn default() -> Self {
         Self {

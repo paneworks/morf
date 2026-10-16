@@ -108,6 +108,8 @@ impl Drop for AuxSurfaceScale {
 /// One live wlr-layer-shell surface and the per-surface state the compositor
 /// configures independently of every other layer surface this client owns.
 pub(crate) struct LayerRecord {
+    /// Namespace sent at creation; it cannot change through geometry updates.
+    pub(crate) namespace: String,
     pub(crate) surface: ShellSurface,
     pub(crate) fractional_scale: Option<WpFractionalScaleV1>,
     pub(crate) viewport: Option<WpViewport>,

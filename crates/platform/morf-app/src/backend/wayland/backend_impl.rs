@@ -216,6 +216,16 @@ impl Backend for LayerClient {
     fn layer_logical_size(&self, id: u64) -> Option<(u32, u32)> {
         LayerClient::layer_logical_size(self, id)
     }
+    fn layer_space(&self, id: u64) -> Option<crate::LayerSpace> {
+        let record = self.state.layers.get(&id)?;
+        record.surface.as_layer()?;
+        record.configured.then(|| crate::LayerSpace {
+            namespace: record.namespace.clone(),
+            width: record.width,
+            height: record.height,
+            local_scale: 1.0,
+        })
+    }
     fn layer_scale_120(&self, id: u64) -> Option<u32> {
         LayerClient::layer_scale_120(self, id)
     }

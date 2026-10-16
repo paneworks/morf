@@ -214,6 +214,9 @@ pub trait Backend {
     fn layer_logical_size(&self, id: u64) -> Option<(u32, u32)> {
         self.logical_size(WindowId::Layer(id))
     }
+    fn layer_space(&self, _id: u64) -> Option<crate::LayerSpace> {
+        None
+    }
     fn layer_scale_120(&self, id: u64) -> Option<u32> {
         self.has_window(WindowId::Layer(id))
             .then(|| self.scale_120(WindowId::Layer(id)))

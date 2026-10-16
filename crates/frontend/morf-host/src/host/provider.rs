@@ -101,6 +101,8 @@ impl Provider {
                             let mut capabilities = controller.lock().ok()?.capabilities();
                             capabilities["rendered_context"] = serde_json::json!(true);
                             capabilities["semantic_regions"] = serde_json::json!(true);
+                            capabilities["layer_space"] = serde_json::json!(true);
+                            capabilities["keyboard_registry"] = serde_json::json!(true);
                             capabilities
                         } else if request["op"] == "rendered-context"
                             && request["version"] == 1

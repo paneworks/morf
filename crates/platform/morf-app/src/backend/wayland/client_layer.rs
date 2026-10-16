@@ -216,6 +216,7 @@ impl LayerClient {
         self.state.layers.insert(
             id,
             LayerRecord {
+                namespace: config.namespace.clone(),
                 surface: layer,
                 backdrop,
                 fractional_scale,
