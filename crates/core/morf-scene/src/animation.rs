@@ -315,6 +315,13 @@ pub enum Physics {
     },
 }
 
+/// How a property travels to a target: a timed tween or physics.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Motion {
+    Tween(Behavior),
+    Physics(Physics),
+}
+
 /// Why an animation left the active set.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AnimationEnd {
