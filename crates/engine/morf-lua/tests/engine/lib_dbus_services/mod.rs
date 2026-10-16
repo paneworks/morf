@@ -133,4 +133,5 @@ mod logind;
 mod mpris;
 mod networkmanager;
 mod private_bus;
+mod registry;
 mod upower;

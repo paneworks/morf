@@ -23,6 +23,7 @@ local HOST = [[
   local CYCLE = "org.example.Cycle"
   fake.object("system", CYCLE, ROOT, IFACE, { Level = 1 }, { ListItems = function() return { { A } } end })
   fake.object("system", CYCLE, A, ITEM, { Label = "a" })
+  local holder = ui.Item { width = 20, height = 20 }
 
   registry.define {
     name = "demo", bus = "system", service = DEMO, debounce_ms = 5,
@@ -132,7 +133,9 @@ local HOST = [[
   morf.ipc.subscribed = function() return fake.subscription_total() end
   morf.ipc.unknown = function(name)
     local ok, err = pcall(registry.connect, name)
-    return { connected = ok, registry = tostring(err), names = table.concat(registry.names(), ", ") }
+    local ok_service, err_service = pcall(morf.service, name)
+    return { connected = ok or ok_service, registry = tostring(err), service = tostring(err_service),
+             names = table.concat(registry.names(), ", ") }
   end
   morf.ipc.malformed = function()
     local ok, err = pcall(registry.define, { name = "broken", bus = "system", service = DEMO,
@@ -141,21 +144,30 @@ local HOST = [[
     return ok and "defined" or tostring(err)
   end
 
-  -- Bindings made and closed, each left with a re-read pending so its
-  -- debounce timer is live when it goes.
+  -- Bindings made and let go of, by owner node or by close(), each left
+  -- with a re-read pending so its debounce timer is live when it goes.
   local held = {}
   morf.ipc.bind_all = function()
     for _, name in ipairs({ "demo", "power", "media" }) do
-      held[#held + 1] = registry.connect(name, { dbus = fake.dbus, debounce_ms = 5,
-        service = name == "demo" and CYCLE or nil })
+      local node = ui.Item {}
+      ui.reparent(node, holder)
+      local binding = assert(morf.service(name, { dbus = fake.dbus, owner = node, debounce_ms = 5,
+        service = name == "demo" and CYCLE or nil }))
+      held[#held + 1] = { node = node, binding = binding }
     end
     fake.emit("system", CYCLE, ROOT, PROPS, "PropertiesChanged", { IFACE, {}, { "Level" } })
     return #held
   end
   morf.ipc.close_all = function()
-    for _, each in ipairs(held) do assert(each.close(), "closed once") end
-    for _, each in ipairs(held) do assert(each.close() == false, "and only once") end
+    for _, each in ipairs(held) do assert(each.binding.close(), "closed once") end
+    for _, each in ipairs(held) do assert(each.binding.close() == false, "and only once") end
+  end
+  morf.ipc.destroy_all = function()
+    for _, each in ipairs(held) do ui.destroy(each.node, true) end
+    local closed = 0
+    for _, each in ipairs(held) do if each.binding.closed() then closed = closed + 1 end end
     held = {}
+    return closed
   end
 ]]
 
@@ -246,19 +258,27 @@ test.describe("service registry", function()
     test.eq(refusal.connected, false)
     local expected = "unknown service `nonesuch` (registered: " .. refusal.names .. ")"
     test.eq(refusal.registry, expected)
+    test.eq(refusal.service, expected, "morf.service says the same")
     test.eq(refusal.names, "demo, media, power", "the catalog and what the configuration defined")
     test.matches(test.ipc("malformed"), "service `broken` field `level` uses an unknown coercion `numbr`")
   end)
 
-  test.it("creates and closes bindings repeatedly and leaves nothing behind", function()
+  test.it("creates and destroys bindings repeatedly and leaves nothing behind", function()
     local baseline = counts()
     test.eq(baseline.processes, 0)
     for round = 1, 40 do
       test.eq(test.ipc("bind_all"), 3)
       local bound = counts()
+      test.eq(bound.owned_hooks, baseline.owned_hooks + 3, "round " .. round .. ": each owned by its node")
       test.truthy(bound.subscribed > baseline.subscribed, "round " .. round .. ": subscribed")
       test.truthy(bound.timers > baseline.timers, "round " .. round .. ": a re-read and a tick pending")
-      test.ipc("close_all")
+      if round % 2 == 0 then
+        test.eq(test.ipc("destroy_all"), 3, "round " .. round .. ": destroying the owner closes")
+      else
+        test.ipc("close_all")
+        same(counts(), baseline, "round " .. round .. " closed")
+        test.eq(test.ipc("destroy_all"), 3)
+      end
       same(counts(), baseline, "round " .. round)
     end
     test.advance(50)

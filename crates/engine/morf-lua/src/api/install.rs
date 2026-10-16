@@ -226,6 +226,7 @@ pub(crate) fn install_reactive_api(
         crate::api::desktop::toplevels::install_toplevels_api(ctx, Rc::clone(&state), morf);
         install_socket_api(ctx, morf);
         install_system_service_api(ctx, Rc::clone(&state), morf);
+        crate::api::system::service::install_service_api(ctx, Rc::clone(&state), morf);
         let (ui, json, json_kinds) = install_ui_json_api(ctx, Rc::clone(&state), morf, limits);
         crate::api::motion::claims::install_claims_api(ctx, Rc::clone(&state), ui);
         crate::api::io::http::install_http_api(ctx, Rc::clone(&state), morf, json_kinds);
