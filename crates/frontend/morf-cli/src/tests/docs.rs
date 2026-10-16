@@ -38,9 +38,11 @@ fn every_docs_flag_parses_and_an_unknown_one_is_refused() {
     assert_eq!(docs_of(&["docs", "--io"]), Ok(Docs::Io));
     let error = docs_of(&["docs", "--guide"]).unwrap_err();
     assert!(
-        error.contains("--guide") && error.contains("--io"),
+        error.contains("not `--guide`") && error.contains("--io"),
         "{error}"
     );
+    let error = docs_of(&["docs", "--api", "--ui"]).unwrap_err();
+    assert!(error.contains("not `--api --ui`"), "{error}");
 }
 
 #[test]

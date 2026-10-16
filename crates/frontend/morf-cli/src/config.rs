@@ -248,8 +248,9 @@ pub(crate) fn parse_command(args: &[std::ffi::OsString]) -> Result<Command, Stri
         ["docs"] | ["docs", "--api"] => Ok(Command::Docs(crate::docs::Docs::Api)),
         ["docs", "--ui"] => Ok(Command::Docs(crate::docs::Docs::Ui)),
         ["docs", "--io"] => Ok(Command::Docs(crate::docs::Docs::Io)),
-        ["docs", other, ..] => Err(format!(
-            "unknown option `{other}` for `morf docs` (--api, --ui or --io)"
+        ["docs", args @ ..] => Err(format!(
+            "`morf docs` takes one of --api, --ui or --io, not `{}`",
+            args.join(" ")
         )),
         ["approve", "--yes", config] => Ok(Command::Approve {
             config: PathBuf::from(config),
