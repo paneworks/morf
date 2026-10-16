@@ -32,12 +32,13 @@
 
 local registry = {}
 
---- The services the library ships, by name: the module that defines each.
---- `registry.connect` requires the module on first use.
-registry.catalog = {
-  media = "lib.services.mpris",
-  power = "lib.services.upower",
-}
+--- The services the library ships, by name: the module that defines each,
+--- from `lib.services.catalog`. `registry.connect` requires the module on
+--- first use.
+registry.catalog = {}
+for name, entry in pairs(require("lib.services.catalog")) do
+  registry.catalog[name] = entry.module
+end
 
 registry.definitions = {}
 

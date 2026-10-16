@@ -241,8 +241,10 @@ what the service's module reads itself (`media`: `tick_ms`, `clock`,
 options they always took.
 
 - An unknown name raises ``unknown service `x` (registered: media, power)``;
-  `registry.names()` is the list. The names are the capability vocabulary a
-  module's permissions manifest lists (`services = { "media", "power" }`).
+  `registry.names()` is the list. The names come from one data file,
+  `lib/services/catalog.lua` (each service's module and what it holds),
+  and are the capability vocabulary a module's permissions manifest lists
+  (`services = { "media", "power" }`).
 - While an imported module with no approval runs its top level,
   `morf.service` refuses with `nil` and a reason, as `morf.run` does (the
   `services` permission group).
@@ -687,6 +689,12 @@ read as data, once per load: it runs in an empty environment -- no
 `morf`, no `require`, no globals -- with a small instruction budget, so
 reading one can only ever produce a value. One that does not return such a
 table is reported, and its module loads as undeclared.
+
+The names a `services` list may hold are the ones `morf.service` binds,
+read from the same catalog (`lib/services/catalog.lua`) the service
+registry binds from: `morf check` and `morf approve` say what each one
+holds, and a name the catalog does not have is an error in `morf check`,
+worded as the registry refuses it.
 
 A grant of `run = true`, or a `run` list naming a program that runs
 whatever it is handed -- a shell (`sh`, `bash`, `zsh`, ...), an

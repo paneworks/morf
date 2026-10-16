@@ -124,11 +124,12 @@ pub(crate) fn approve(
         say(out, note.to_owned())?;
         return Ok(Outcome::Approved);
     }
+    let catalog = runtime.service_catalog().ok();
     let store_path = runtime.approvals_path()?;
     let mut approvals = Approvals::load(&store_path)?;
     let (mut approved, mut denied, mut changed) = (0, 0, false);
     for record in &imported {
-        for line in describe(record) {
+        for line in describe(record, catalog.as_deref()) {
             say(out, line)?;
         }
         let status = approvals.status(record);

@@ -1,7 +1,7 @@
 //! An imported module's declaration in plain words, as `morf check` and
 //! `morf approve` both print it.
 
-use morf_lua::{Approval, Grant, ModuleDeclaration, ModuleKind};
+use morf_lua::{Approval, Grant, ModuleDeclaration, ModuleKind, ServiceEntry, unknown_service};
 
 /// The line every surface prints for a grant that can run anything.
 pub(crate) const EVERYTHING: &str = "runs anything it is told: this asks for everything.";
@@ -148,8 +148,44 @@ fn group_words(group: &str, grant: &Grant) -> String {
     }
 }
 
-/// The module's name, kind and file, then one line per grant, indented.
-pub(crate) fn describe(record: &ModuleDeclaration) -> Vec<String> {
+/// The services a `services` grant names, each with what it holds as the
+/// catalog says, when there is a catalog to ask.
+fn services_words(names: &[String], catalog: Option<&[ServiceEntry]>) -> String {
+    let named: Vec<String> = names
+        .iter()
+        .map(|name| {
+            let entry = catalog.and_then(|catalog| catalog.iter().find(|e| &e.name == name));
+            match entry {
+                Some(entry) if !entry.holds.is_empty() => format!("{name} ({})", entry.holds),
+                _ => name.clone(),
+            }
+        })
+        .collect();
+    format!("use the system services {}", named.join(", "))
+}
+
+/// The names a module lists under `services` that the catalog does not
+/// hold, each as the registry would refuse it.
+pub(crate) fn unknown_services(
+    record: &ModuleDeclaration,
+    catalog: Option<&[ServiceEntry]>,
+) -> Vec<String> {
+    let (Some(catalog), Some(Grant::Names(names))) = (catalog, record.grants.get("services"))
+    else {
+        return Vec::new();
+    };
+    names
+        .iter()
+        .filter_map(|name| unknown_service(name, catalog))
+        .collect()
+}
+
+/// The module's name, kind and file, then one line per grant, indented;
+/// `catalog` words the services it names.
+pub(crate) fn describe(
+    record: &ModuleDeclaration,
+    catalog: Option<&[ServiceEntry]>,
+) -> Vec<String> {
     let kind = match record.kind {
         ModuleKind::Module => "module",
         ModuleKind::Plugin => "plugin",
@@ -167,7 +203,14 @@ pub(crate) fn describe(record: &ModuleDeclaration) -> Vec<String> {
         lines.push("  asks for nothing".to_owned());
     }
     for (group, grant) in &record.grants {
-        lines.push(format!("  may {}", group_words(group, grant)));
+        let words = match (group.as_str(), grant) {
+            ("services", Grant::Names(names)) => services_words(names, catalog),
+            _ => group_words(group, grant),
+        };
+        lines.push(format!("  may {words}"));
+    }
+    for unknown in unknown_services(record, catalog) {
+        lines.push(format!("  {unknown}"));
     }
     if asks_for_everything(record) {
         lines.push(format!("  {EVERYTHING}"));
@@ -186,10 +229,13 @@ pub(crate) struct Report {
 }
 
 /// Each imported module and plugin the run met, with where it stands and
-/// what it declares; a manifest that cannot be read is an error, and so,
-/// under `strict`, is an imported integration with no manifest.
-pub(crate) fn report(runtime: &morf_lua::Runtime, strict: bool) -> Report {
+/// what it declares; a manifest that cannot be read or that lists a
+/// service the catalog does not hold is an error, and so, under `strict`,
+/// is an imported integration with no manifest.
+pub(crate) fn report(runtime: &mut morf_lua::Runtime, strict: bool) -> Report {
     let mut report = Report::default();
+    let catalog = runtime.service_catalog().ok();
+    let catalog = catalog.as_deref();
     let approvals = runtime
         .approvals_path()
         .and_then(|path| morf_lua::Approvals::load(&path))
@@ -198,7 +244,7 @@ pub(crate) fn report(runtime: &morf_lua::Runtime, strict: bool) -> Report {
         if !record.imported() {
             continue;
         }
-        let mut lines = describe(&record).into_iter();
+        let mut lines = describe(&record, catalog).into_iter();
         if let Some(head) = lines.next() {
             let status = status_words(approvals.status(&record));
             report.lines.push(format!("imported {head}: {status}"));
@@ -206,6 +252,9 @@ pub(crate) fn report(runtime: &morf_lua::Runtime, strict: bool) -> Report {
         report.lines.extend(lines);
         if let Some(problem) = &record.problem {
             report.errors.push(format!("{}: {problem}", record.name));
+        }
+        for unknown in unknown_services(&record, catalog) {
+            report.errors.push(format!("{}: {unknown}", record.name));
         }
         if strict && record.is_integration() && !record.declared() {
             report.errors.push(format!(

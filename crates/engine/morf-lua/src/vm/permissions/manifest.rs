@@ -38,10 +38,23 @@ pub(crate) fn read_manifest<'gc>(
     path: &Path,
     limits: Limits,
 ) -> Result<Declaration, String> {
+    let table = run_data(ctx, path, limits, "a manifest")?;
+    parse_table(ctx, table).map_err(|error| format!("{}: {error}", path.display()))
+}
+
+/// Runs the Lua source at `path` in an empty environment on a manifest's
+/// budget and returns the table it gives back; `what` names the file in
+/// errors.
+pub(crate) fn run_data<'gc>(
+    ctx: Context<'gc>,
+    path: &Path,
+    limits: Limits,
+    what: &str,
+) -> Result<Table<'gc>, String> {
     let source = std::fs::read(path).map_err(|error| format!("{}: {error}", path.display()))?;
     if luna::dump::is_binary_chunk(&source) {
         return Err(format!(
-            "{}: a manifest is Lua source, not bytecode",
+            "{}: {what} is Lua source, not bytecode",
             path.display()
         ));
     }
@@ -51,13 +64,8 @@ pub(crate) fn read_manifest<'gc>(
     let executor = Executor::start(ctx, closure.into(), ());
     drive_executor(ctx, executor, limits, MANIFEST_FUEL, "manifest")?;
     match executor.take_result::<LuaValue>(ctx) {
-        Ok(Ok(LuaValue::Table(table))) => {
-            parse_table(ctx, table).map_err(|error| format!("{}: {error}", path.display()))
-        }
-        Ok(Ok(_)) => Err(format!(
-            "{}: a manifest must return a table",
-            path.display()
-        )),
+        Ok(Ok(LuaValue::Table(table))) => Ok(table),
+        Ok(Ok(_)) => Err(format!("{}: {what} must return a table", path.display())),
         Ok(Err(error)) => Err(error.to_string()),
         Err(error) => Err(error.to_string()),
     }

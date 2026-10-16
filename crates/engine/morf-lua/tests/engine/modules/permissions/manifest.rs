@@ -113,3 +113,30 @@ fn a_manifest_is_data_with_no_api_and_its_module_still_loads() {
     }
     assert!(stays_absent(&marker), "a manifest never runs with the API");
 }
+
+#[test]
+fn the_library_catalog_names_what_the_registry_binds() {
+    let library = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../library");
+    let mut runtime = morf_lua::Runtime::default();
+    runtime.set_module_roots(vec![library]);
+    let catalog = runtime.service_catalog().unwrap();
+    let names: Vec<&str> = catalog.iter().map(|entry| entry.name.as_str()).collect();
+    assert_eq!(names, ["media", "power"]);
+    assert!(catalog.iter().all(|entry| !entry.holds.is_empty()));
+    assert_eq!(
+        morf_lua::unknown_service("nonesuch", &catalog).as_deref(),
+        Some("unknown service `nonesuch` (registered: media, power)")
+    );
+    runtime
+        .execute(
+            "registry.lua",
+            br#"
+                local registry = require("lib.services.registry")
+                local names = table.concat(registry.names(), ", ")
+                assert(names == "media, power", names)
+                local _, err = registry.find("nonesuch")
+                assert(err == "unknown service `nonesuch` (registered: media, power)", err)
+            "#,
+        )
+        .unwrap();
+}

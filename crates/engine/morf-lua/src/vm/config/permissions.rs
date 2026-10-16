@@ -4,7 +4,9 @@
 use std::path::{Path, PathBuf};
 
 use crate::vm::loader::resolve_runtime_module;
-use crate::vm::permissions::{GateMode, ModuleDeclaration, ModuleKind, canonical};
+use crate::vm::permissions::{
+    GateMode, ModuleDeclaration, ModuleKind, SERVICE_CATALOG, ServiceEntry, canonical,
+};
 use crate::vm::types::{Error, Runtime};
 
 /// How the load-time gate treats imported modules.
@@ -83,6 +85,16 @@ impl Runtime {
         let mut records = self.permissions.borrow().records().to_vec();
         records.sort_by(|a, b| a.name.cmp(&b.name));
         records
+    }
+
+    /// The services `morf.service` can bind, read from the library's
+    /// catalog on this runtime's module roots.
+    pub fn service_catalog(&mut self) -> Result<Vec<ServiceEntry>, String> {
+        let roots = self.module_roots.borrow().clone();
+        let (path, _) = resolve_runtime_module(&roots, SERVICE_CATALOG)?;
+        let limits = self.limits;
+        self.lua
+            .enter(|ctx| crate::vm::permissions::read_catalog(ctx, &path, limits))
     }
 
     /// What `require(name)` would load and declare, without running it.

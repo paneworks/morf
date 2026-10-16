@@ -20,6 +20,7 @@ mod gate;
 mod loading;
 mod manifest;
 mod origin;
+mod services;
 mod store;
 
 use std::collections::BTreeMap;
@@ -32,6 +33,8 @@ pub use manifest::manifest_path;
 pub(crate) use manifest::read_manifest;
 pub(crate) use origin::INTEGRATIONS;
 pub use origin::{Origin, Origins, canonical, engine_library};
+pub(crate) use services::read_catalog;
+pub use services::{SERVICE_CATALOG, ServiceEntry, unknown_service};
 pub use store::{Approval, Approvals, ModuleTree, fingerprint};
 
 /// The groups a declaration may name. The gated ones are enforced at load;

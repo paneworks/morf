@@ -334,7 +334,7 @@ pub(crate) fn check(args: &RunnerArgs) -> Result<bool, String> {
         if !verbs.is_empty() {
             outln!("  ipc     {}", verbs.join(" "));
         }
-        let report = crate::permission_words::report(&headless.runtime, args.strict);
+        let report = crate::permission_words::report(&mut headless.runtime, args.strict);
         for line in &report.lines {
             outln!("  {line}");
         }

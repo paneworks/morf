@@ -33,8 +33,9 @@ pub use self::vm::harness::HostFunction;
 pub use self::vm::loader::{project_library, runtimepath_roots};
 pub use self::vm::permissions::{
     APPROVALS_FILE, Approval, Approvals, Declaration, GATED_GROUPS, Grant, ModuleDeclaration,
-    ModuleKind, ModuleTree, Origin, PERMISSION_GROUPS, canonical as canonical_path, engine_library,
-    fingerprint as module_fingerprint, manifest_path,
+    ModuleKind, ModuleTree, Origin, PERMISSION_GROUPS, SERVICE_CATALOG, ServiceEntry,
+    canonical as canonical_path, engine_library, fingerprint as module_fingerprint, manifest_path,
+    unknown_service,
 };
 pub use self::vm::types::*;
 pub use self::vm::types_gen::generate_types;
