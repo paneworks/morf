@@ -10,7 +10,7 @@ use super::super::targets::{clamp_scissor, create_blur_pass};
 use super::super::textures::TextureBatch;
 use super::{BackdropDraw, BackdropEntry, Beneath, BeneathOp, ChildLayers, beneath_ops};
 use crate::backdrop::{backdrop_plan, level_sizes, pass_order};
-use crate::effects::physical_damage;
+use crate::effects::{color_array, physical_damage};
 use crate::{DamageRect, DrawCommand, DrawList, Layer, LayerMask};
 
 impl WgpuBackend {
@@ -124,9 +124,9 @@ impl WgpuBackend {
                 axes,
                 uv: [0.0, 0.0, 1.0, 1.0],
                 color: [1.0, 1.0, 1.0, 1.0],
-                // The glass tint, straight colour and strength; the
+                // The glass tint in linear light with its strength; the
                 // shader washes it over the saturated backdrop.
-                color_overlay: [tint.red, tint.green, tint.blue, tint.alpha],
+                color_overlay: color_array(*tint),
                 // A layer's composite, marked as a backdrop so the shader
                 // applies the saturation carried in `field`.
                 mode: [2.0, mask_enabled, 0.0, 0.0],

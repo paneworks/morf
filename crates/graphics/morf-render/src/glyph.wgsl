@@ -39,6 +39,18 @@ fn morf_blend_output(color: vec4<f32>) -> vec4<f32> {
     return vec4<f32>(encoded * color.a, color.a);
 }
 
+/// A straight linear colour in the space this pipeline's target holds:
+/// unchanged for a linear target, encoded on the sRGB curve for a gamma one.
+fn morf_target_rgb(linear: vec3<f32>) -> vec3<f32> {
+    if !MORF_GAMMA_BLEND {
+        return linear;
+    }
+    let straight = clamp(linear, vec3<f32>(0.0), vec3<f32>(1.0));
+    let low = straight * 12.92;
+    let high = 1.055 * pow(straight, vec3<f32>(1.0 / 2.4)) - 0.055;
+    return select(high, low, straight <= vec3<f32>(0.0031308));
+}
+
 @group(0) @binding(0) var atlas: texture_2d<f32>;
 @group(0) @binding(1) var atlas_sampler: sampler;
 
@@ -231,7 +243,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             let grey = dot(rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
             rgb = clamp(mix(vec3<f32>(grey), rgb, input.field.x), vec3<f32>(0.0), vec3<f32>(sampled.a));
             // Then the tint: a straight colour washed over by its alpha.
-            rgb = mix(rgb, input.color_overlay.rgb * sampled.a, input.color_overlay.a);
+            let tint = morf_target_rgb(input.color_overlay.rgb);
+            rgb = mix(rgb, tint * sampled.a, input.color_overlay.a);
         }
         return vec4<f32>(rgb * input.color.a, alpha);
     }

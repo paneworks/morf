@@ -126,6 +126,8 @@ mod field_shape_tests;
 #[cfg(test)]
 mod field_tests;
 #[cfg(test)]
+mod glass_tests;
+#[cfg(test)]
 mod inline_source_tests;
 #[cfg(test)]
 mod mask_tests;
