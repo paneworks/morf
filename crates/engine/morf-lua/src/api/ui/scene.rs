@@ -65,6 +65,47 @@ pub(crate) fn assign_scene_property(
     property: &str,
     value: SceneValue,
 ) -> Result<(), String> {
+    refuse_claimed(state, node, property)?;
+    write_scene_property(state, node, property, |scene| {
+        scene.assign(node, property, value)
+    })
+}
+
+/// Aims a claimed property at its winning claim's target by `motion`: the
+/// one write claims make, told to whatever reads the property.
+pub(crate) fn retarget_scene_property(
+    state: &mut ReactiveState,
+    node: NodeHandle,
+    property: &str,
+    value: SceneValue,
+    motion: Option<morf_scene::Motion>,
+) -> Result<(), String> {
+    write_scene_property(state, node, property, |scene| {
+        scene.retarget(node, property, value, motion)
+    })
+}
+
+/// Refuses a write to a property `ui.claims` owns, the way a read-only
+/// write is refused: its winning claim decides where it goes.
+pub(crate) fn refuse_claimed(
+    state: &ReactiveState,
+    node: NodeHandle,
+    property: &str,
+) -> Result<(), String> {
+    if state.animation().claims.is_claimed(node, property) {
+        return Err(format!(
+            "`{property}` is claimed: ui.claims owns it while its claims stand"
+        ));
+    }
+    Ok(())
+}
+
+fn write_scene_property(
+    state: &mut ReactiveState,
+    node: NodeHandle,
+    property: &str,
+    write: impl FnOnce(&mut morf_scene::Scene) -> Result<(), morf_scene::SceneError>,
+) -> Result<(), String> {
     let old_current = state
         .scene()
         .current(node, property)
@@ -75,10 +116,7 @@ pub(crate) fn assign_scene_property(
         .target(node, property)
         .map_err(|error| error.to_string())?
         .clone();
-    state
-        .scene_mut()
-        .assign(node, property, value)
-        .map_err(|error| error.to_string())?;
+    write(state.scene_mut()).map_err(|error| error.to_string())?;
     // A path that draws a channel: watched for the channel's writes.
     if property == "series" {
         state.channels_mut().note_series(node);
@@ -127,6 +165,7 @@ pub(crate) fn animate_scene_property(
     to: SceneValue,
     behavior: Behavior,
 ) -> Result<(), String> {
+    refuse_claimed(state, node, property)?;
     let old_current = state
         .scene()
         .current(node, property)

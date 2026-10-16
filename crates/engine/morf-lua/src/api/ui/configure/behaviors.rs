@@ -41,69 +41,60 @@ pub(crate) fn configure_behaviors<'gc>(
             }
             _ => return Err("behavior on_finished must be a function".to_owned()),
         }
-        let kind = match behavior.get_value(ctx, "kind") {
-            LuaValue::Nil => None,
-            LuaValue::String(value) => Some(value.display_lossy().to_string()),
-            _ => return Err("behavior kind must be a string".to_owned()),
-        };
-        if kind.as_deref() == Some("spring") {
-            let physics = behaviors::spring(
+        let motion = parse_motion(ctx, behavior)?;
+        let mut state = state.borrow_mut();
+        let scene = state.scene_mut();
+        match motion {
+            Motion::Physics(physics) => scene.set_physics(node, &property, Some(physics)),
+            Motion::Tween(behavior) => scene.set_behavior(node, &property, Some(behavior)),
+        }
+        .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+/// One behaviour table as the motion it describes: `kind = "spring"`,
+/// `kind = "smoothed"`, or a tween's `duration` and its settings.
+pub(crate) fn parse_motion<'gc>(ctx: Context<'gc>, behavior: Table<'gc>) -> Result<Motion, String> {
+    let kind = match behavior.get_value(ctx, "kind") {
+        LuaValue::Nil => None,
+        LuaValue::String(value) => Some(value.display_lossy().to_string()),
+        _ => return Err("behavior kind must be a string".to_owned()),
+    };
+    match kind.as_deref() {
+        Some("spring") => {
+            return Ok(Motion::Physics(behaviors::spring(
                 table_number(ctx, behavior, "mass", 1.0)?,
                 table_number(ctx, behavior, "damping", 18.0)?,
                 table_number(ctx, behavior, "stiffness", 180.0)?,
                 table_number(ctx, behavior, "epsilon", 0.001)?,
-            );
-            state
-                .borrow_mut()
-                .scene_mut()
-                .set_physics(node, &property, Some(physics))
-                .map_err(|error| error.to_string())?;
-            continue;
+            )));
         }
-        if kind.as_deref() == Some("smoothed") {
-            let physics = behaviors::smoothed(table_number(ctx, behavior, "velocity", 1_000.0)?);
-            state
-                .borrow_mut()
-                .scene_mut()
-                .set_physics(node, &property, Some(physics))
-                .map_err(|error| error.to_string())?;
-            continue;
+        Some("smoothed") => {
+            return Ok(Motion::Physics(behaviors::smoothed(table_number(
+                ctx, behavior, "velocity", 1_000.0,
+            )?)));
         }
-        if let Some(kind) = kind {
-            return Err(format!("unknown behavior kind `{kind}`"));
-        }
-        let duration = match behavior.get_value(ctx, "duration") {
-            LuaValue::Integer(value) => value as f64,
-            LuaValue::Number(value) if value.is_finite() => value,
-            _ => return Err("behavior duration must be milliseconds".to_owned()),
-        };
-        let duration = behaviors::duration(duration)?;
-        let easing = parse_easing(ctx, behavior.get_value(ctx, "easing"))?;
-        let rotation_direction = parse_rotation_direction(ctx, behavior)?;
-        let delay = behaviors::delay(table_number(ctx, behavior, "delay", 0.0)?)?;
-        let time_scale = behaviors::time_scale(table_number(ctx, behavior, "time_scale", 1.0)?)?;
-        state
-            .borrow_mut()
-            .scene_mut()
-            .set_behavior(
-                node,
-                &property,
-                Some(Behavior {
-                    duration,
-                    easing,
-                    rotation_direction,
-                    delay,
-                    time_scale,
-                    repeat: parse_repeat(ctx, behavior)?,
-                    enabled: parse_enabled(ctx, behavior)?,
-                    color_space: parse_color_space(ctx, behavior)?,
-                    hue: parse_hue(ctx, behavior)?,
-                    keep_velocity: parse_retarget(ctx, behavior)?,
-                }),
-            )
-            .map_err(|error| error.to_string())?;
+        Some(kind) => return Err(format!("unknown behavior kind `{kind}`")),
+        None => {}
     }
-    Ok(())
+    let duration = match behavior.get_value(ctx, "duration") {
+        LuaValue::Integer(value) => value as f64,
+        LuaValue::Number(value) if value.is_finite() => value,
+        _ => return Err("behavior duration must be milliseconds".to_owned()),
+    };
+    Ok(Motion::Tween(Behavior {
+        duration: behaviors::duration(duration)?,
+        easing: parse_easing(ctx, behavior.get_value(ctx, "easing"))?,
+        rotation_direction: parse_rotation_direction(ctx, behavior)?,
+        delay: behaviors::delay(table_number(ctx, behavior, "delay", 0.0)?)?,
+        time_scale: behaviors::time_scale(table_number(ctx, behavior, "time_scale", 1.0)?)?,
+        repeat: parse_repeat(ctx, behavior)?,
+        enabled: parse_enabled(ctx, behavior)?,
+        color_space: parse_color_space(ctx, behavior)?,
+        hue: parse_hue(ctx, behavior)?,
+        keep_velocity: parse_retarget(ctx, behavior)?,
+    }))
 }
 
 /// Reads the `loops` and `ping_pong` pair into a repetition mode.

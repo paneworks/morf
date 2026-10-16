@@ -7,7 +7,7 @@ use luna::{Context, Function, Table, Value as LuaValue};
 use std::rc::Rc;
 use std::time::Duration;
 
-use morf_scene::{Behavior, NodeHandle, Repeat, RotationDirection};
+use morf_scene::{Behavior, Motion, NodeHandle, Repeat, RotationDirection};
 
 use crate::{
     api::ui::bindings::*, api::ui::scene::*, runtime::events::*, runtime::state::*, value::lua::*,
@@ -18,7 +18,8 @@ mod behaviors;
 mod entrance;
 
 pub(crate) use behaviors::{
-    configure_behaviors, parse_color_space, parse_hue, parse_repeat, parse_rotation_direction,
+    configure_behaviors, parse_color_space, parse_hue, parse_motion, parse_repeat,
+    parse_rotation_direction,
 };
 use entrance::{configure_exit, enter_values};
 

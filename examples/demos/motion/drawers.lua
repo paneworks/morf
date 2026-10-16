@@ -57,8 +57,7 @@ local EDGES = {
 }
 local ORDER = { "top", "right", "bottom", "left" }
 
-local opened = {}
-for _, edge in ipairs(ORDER) do opened[edge] = morf.signal("drawers." .. edge, false) end
+local open = morf.state { top = false, bottom = false, left = false, right = false }
 
 --- How far a drawer moves to be out of sight.
 local function tucked(edge)
@@ -75,10 +74,6 @@ for group, edge in ipairs(ORDER) do
     width = spec.width,
     height = spec.height,
     anchors = spec.anchors,
-    -- Where the drawer sits is a claim, not a binding: out in the open
-    -- while its edge is asked for, tucked away the rest of the time.
-    -- It starts tucked; ui.claims is installed on the panel below.
-    [spec.axis] = tucked(edge),
     -- Squash and stretch: longer along the slide, narrower across it.
     stretch = { stiffness = 240, damping = 13, scale = 0.16, max = 0.3 },
     ui.Column {
@@ -93,10 +88,9 @@ for group, edge in ipairs(ORDER) do
     },
   }
   ui.claims(panel, {
-    open = { when = opened[edge], class = "state", duration = 460, easing = slide,
-             set = { [spec.axis] = 0 } },
-    shut = { class = "ambient", duration = 460, easing = slide,
-             set = { [spec.axis] = tucked(edge) } },
+    motion = { duration = 460, easing = slide },
+    open = { when = function() return open[edge] end, set = { [spec.axis] = 0 } },
+    tucked = { set = { [spec.axis] = tucked(edge) } },
   })
   drawers[edge] = panel
   -- The drawer's background: a rounded box in the frame's field, wherever
@@ -155,21 +149,21 @@ local function edges_of(which)
 end
 
 morf.ipc.open = function(which)
-  for _, edge in ipairs(edges_of(which)) do opened[edge]:set(true) end
+  for _, edge in ipairs(edges_of(which)) do open[edge] = true end
   return true
 end
 morf.ipc.close = function(which)
-  for _, edge in ipairs(edges_of(which)) do opened[edge]:set(false) end
+  for _, edge in ipairs(edges_of(which)) do open[edge] = false end
   return true
 end
 morf.ipc.toggle = function(which)
-  for _, edge in ipairs(edges_of(which)) do opened[edge]:set(not opened[edge]:get()) end
+  for _, edge in ipairs(edges_of(which)) do open[edge] = not open[edge] end
   return true
 end
 morf.ipc.opened = function()
   local list = {}
   for _, edge in ipairs(ORDER) do
-    if opened[edge]:get() then list[#list + 1] = edge end
+    if open[edge] then list[#list + 1] = edge end
   end
   return table.concat(list, " ")
 end

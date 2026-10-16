@@ -80,6 +80,7 @@ pub(crate) fn install_group_api<'gc>(
                 steps.push(parse_group_step(ctx, options, 0).map_err(HostError)?);
             }
             let step = AnimationStep::Sequential(steps);
+            refuse_claimed_steps(&state.borrow(), &step).map_err(HostError)?;
             let repeat = parse_repeat(ctx, options).map_err(HostError)?;
             let delay = milliseconds(
                 table_number(ctx, options, "delay", 0.0).map_err(HostError)?,
@@ -121,6 +122,17 @@ pub(crate) fn install_group_api<'gc>(
         _ => unreachable!("the animation table is installed before its group API"),
     };
     animation.set_field(ctx, "play", play);
+}
+
+/// Refuses a group that would animate a property `ui.claims` owns.
+fn refuse_claimed_steps(state: &ReactiveState, step: &AnimationStep) -> Result<(), String> {
+    match step {
+        AnimationStep::Property { node, property, .. } => refuse_claimed(state, *node, property),
+        AnimationStep::Pause(_) => Ok(()),
+        AnimationStep::Sequential(steps) | AnimationStep::Parallel(steps) => steps
+            .iter()
+            .try_for_each(|step| refuse_claimed_steps(state, step)),
+    }
 }
 
 /// Reads the array part of a table as an ordered list of steps.

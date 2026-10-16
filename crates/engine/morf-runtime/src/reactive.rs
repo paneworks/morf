@@ -38,6 +38,23 @@ pub enum EffectSink {
     State(NodeHandle),
     /// A `loop` binding: what it returns is the node's loops.
     Loop(NodeHandle),
+    /// A claim's condition or one of its targets (`ui.claims`).
+    Claim(ClaimSink),
+}
+
+/// The input of a claim on `node` an effect gives.
+#[derive(Clone)]
+pub struct ClaimSink {
+    pub node: NodeHandle,
+    pub claim: crate::animation::claims::ClaimId,
+    pub input: ClaimInput,
+}
+
+/// A claim's condition, or its target for one property.
+#[derive(Clone)]
+pub enum ClaimInput {
+    Condition,
+    Target(String),
 }
 
 /// One effect a configuration declared: a binding or a free-standing
@@ -312,6 +329,7 @@ impl Reactive {
             .filter(|(_, effect)| match &effect.sink {
                 Some(EffectSink::Property(sink)) => removed.contains(&sink.node),
                 Some(EffectSink::State(node) | EffectSink::Loop(node)) => removed.contains(node),
+                Some(EffectSink::Claim(sink)) => removed.contains(&sink.node),
                 // A `morf.effect` given `owner = node` goes with its node.
                 None => effect.owner.is_some_and(|owner| removed.contains(&owner)),
             })

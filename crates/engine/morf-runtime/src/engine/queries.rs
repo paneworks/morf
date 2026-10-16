@@ -49,9 +49,10 @@ fn id_suffix(scene: &Scene, node: NodeHandle) -> String {
 }
 
 impl Engine {
-    /// Whether anything is in motion: the scene's animations or a theme fade.
+    /// Whether anything is in motion: the scene's animations, a theme fade,
+    /// or claims with a winner to work out or a presence on the move.
     pub fn has_motion(&self) -> bool {
-        self.scene.has_motion() || self.animation.fading()
+        self.scene.has_motion() || self.animation.fading() || self.animation.claims.wants_tick()
     }
 
     /// The finest clock anything currently reads, or nothing when no binding

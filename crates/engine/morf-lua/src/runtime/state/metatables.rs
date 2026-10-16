@@ -1,5 +1,5 @@
 //! The metatables shared by every userdata of one kind: list models, scene
-//! nodes and state proxies.
+//! nodes, state proxies and read-only signals.
 
 use luna::StashedTable;
 
@@ -18,9 +18,9 @@ pub(crate) struct Metatables {
     node: Option<StashedTable>,
     /// The one every state proxy shares, so a theme can be one.
     state: Option<StashedTable>,
-    /// The one every signal shares, kept so native code (claims'
-    /// presence) can hand a signal to Lua with its methods on it.
-    signal: Option<StashedTable>,
+    /// The one every read-only signal shares (a claim's presence): `get`,
+    /// and a `set` that refuses.
+    read_only_signal: Option<StashedTable>,
 }
 
 impl Metatables {
@@ -48,11 +48,11 @@ impl Metatables {
         self.state = Some(metatable);
     }
 
-    pub(crate) fn signal(&self) -> Option<StashedTable> {
-        self.signal.clone()
+    pub(crate) fn read_only_signal(&self) -> Option<StashedTable> {
+        self.read_only_signal.clone()
     }
 
-    pub(crate) fn set_signal(&mut self, metatable: StashedTable) {
-        self.signal = Some(metatable);
+    pub(crate) fn set_read_only_signal(&mut self, metatable: StashedTable) {
+        self.read_only_signal = Some(metatable);
     }
 }

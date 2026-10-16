@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use morf_scene::AnimationFrame;
 
-use crate::runtime::host_types::IpcValue;
 use crate::vm::types::*;
 
 // The animation frame tick and the Lua handlers it reports completions to.
@@ -54,45 +53,23 @@ impl Runtime {
         moved
     }
 
-    /// Choreography claims, one frame: sync each claim's condition
-    /// from its signal, let the evaluator retarget whoever won, and
-    /// mirror presences back into their signals so bindings read them.
-    fn evaluate_claims(&mut self, delta: Duration) -> Result<(), Error> {
-        let mut state = self.reactive.borrow_mut();
-        if state.animation_mut().claims.is_empty() {
-            return Ok(());
+    /// Claims, one frame: the evaluator aims every property whose winner
+    /// changed and moves the presences, before the scene ticks. Free when
+    /// no claim has anything to do.
+    fn evaluate_claims(&mut self, delta: Duration) -> morf_runtime::animation::claims::ClaimsFrame {
+        if !self.reactive.borrow().animation().claims.wants_tick() {
+            return Default::default();
         }
-        let mut claims = std::mem::take(&mut state.animation_mut().claims);
-        for claim in claims.claims_mut() {
-            if let Some(condition) = claim.condition {
-                let holds = matches!(
-                    state.reactive().value(condition),
-                    Some(IpcValue::Boolean(true) | IpcValue::Number(_))
-                );
-                claim.active = claim.manual || holds;
-            }
-        }
-        let evaluated = claims.evaluate(state.scene_mut(), delta);
-        // One signal per claim name, however many properties it
-        // claims: the strongest presence is the claim's.
-        let mut mirrors: Vec<(morf_scene::reactive::SignalId, f64)> = Vec::new();
-        for (id, claim) in claims.claims().iter().enumerate() {
-            if let Some(signal) = claim.presence_signal {
-                let presence = claims.presence(id);
-                match mirrors.iter_mut().find(|(held, _)| *held == signal) {
-                    Some((_, held)) => *held = held.max(presence),
-                    None => mirrors.push((signal, presence)),
-                }
-            }
-        }
-        state.animation_mut().claims = claims;
-        evaluated.map_err(|error| Error::Runtime(error.to_string()))?;
-        for (signal, presence) in mirrors {
-            let _ = state
-                .reactive_mut()
-                .write(signal, IpcValue::Number(presence));
-        }
-        Ok(())
+        let limits = self.limits;
+        let reactive = std::rc::Rc::clone(&self.reactive);
+        self.lua.enter(|ctx| {
+            crate::runtime::state::run_claims(
+                &reactive,
+                ctx,
+                limits,
+                crate::runtime::state::ClaimsPass::Tick(delta),
+            )
+        })
     }
 
     /// [`Self::tick_animations`] for a loop driven by a display's frames:
@@ -109,7 +86,7 @@ impl Runtime {
 
     pub fn tick_animations(&mut self, delta: Duration) -> Result<AnimationFrame, Error> {
         self.reactive.borrow_mut().animation_mut().ticked = true;
-        self.evaluate_claims(delta)?;
+        let claims = self.evaluate_claims(delta);
         let fading = self.advance_theme_fades(delta);
         {
             let mut state = self.reactive.borrow_mut();
@@ -135,6 +112,9 @@ impl Runtime {
             frame.active = true;
             frame.changed += fading;
         }
+        // So is a presence: what binds it moves with it.
+        frame.active |= claims.moving;
+        frame.changed += claims.presences.len();
         // Whatever follows a node that just moved moves with it, this tick.
         frame.changed += crate::runtime::state::apply_follows(&mut self.reactive.borrow_mut());
         // Nodes whose exit has ended go now, with their `on_destroyed` hooks.

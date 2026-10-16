@@ -196,6 +196,9 @@ fn effect_label(
         }
         Some(EffectSink::State(node)) => format!("binding {}.state ({origin})", node_path(*node)),
         Some(EffectSink::Loop(node)) => format!("binding {}.loop ({origin})", node_path(*node)),
+        Some(EffectSink::Claim(sink)) => {
+            format!("binding {}.claims ({origin})", node_path(sink.node))
+        }
         None => format!("effect {} ({origin})", pending.name()),
     }
 }
