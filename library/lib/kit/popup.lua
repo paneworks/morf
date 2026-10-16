@@ -361,7 +361,8 @@ function M.tooltip(target, text, delay)
   local tip = M.make("tooltip", spec)
   local waiting
   morf.effect("kit.popup.tooltip." .. tostring(target), function()
-    local over = target.hovered or target.contains_pointer
+    local has_hover, hovered = pcall(function() return target.hovered end)
+    local over = (has_hover and hovered) or target.contains_pointer
     if waiting then waiting:cancel() waiting = nil end
     if over then
       waiting = morf.timer(delay or 600, function() waiting = nil tip.open(target) end, false)
