@@ -193,6 +193,7 @@
             cp -r library/lib library/README.md library/luarc.template.json $library/share/morf/library/
             mkdir -p $library/share/morf/library/docs
             cp docs/UI.md docs/IO.md $library/share/morf/library/docs/
+            $out/bin/morf --version | cut -d' ' -f2 > $library/share/morf/library/docs/VERSION
             substituteInPlace $library/share/morf/library/luarc.template.json \
               --replace-fail '~/.local/share/morf/library' "$library/share/morf/library"
             $out/bin/morf types $library/share/morf/library/types

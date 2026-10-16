@@ -35,7 +35,7 @@ pub(crate) fn follow_logs(follow: bool, level: LogLevel) -> Result<(), String> {
             if entry.level < level {
                 continue;
             }
-            println!("{:<5} {}", entry.level.name(), entry.message);
+            outln!("{:<5} {}", entry.level.name(), entry.message);
         }
         if !follow {
             return Ok(());
@@ -118,7 +118,7 @@ pub(crate) fn list_instances(json: bool, show_dead: bool) -> Result<(), String> 
                 None => serde_json::json!({ "display": display, "dead": true }),
             })
             .collect::<Vec<_>>();
-        println!(
+        outln!(
             "{}",
             serde_json::to_string(&items).map_err(|error| error.to_string())?
         );
@@ -126,8 +126,8 @@ pub(crate) fn list_instances(json: bool, show_dead: bool) -> Result<(), String> 
     }
     for (display, alive) in rows {
         match alive {
-            Some((pid, config, uptime)) => println!("{display}\t{pid}\t{uptime}s\t{config}"),
-            None => println!("{display}\t-\t-\t(dead socket)"),
+            Some((pid, config, uptime)) => outln!("{display}\t{pid}\t{uptime}s\t{config}"),
+            None => outln!("{display}\t-\t-\t(dead socket)"),
         }
     }
     Ok(())
@@ -190,7 +190,7 @@ pub(crate) fn approve_modules(config: &std::path::Path, yes: bool) -> Result<boo
         .filter(|record| record.imported)
         .collect();
     if imported.is_empty() {
-        println!("no imported modules");
+        outln!("no imported modules");
         return Ok(true);
     }
     let store = runtime.approvals_path()?;
@@ -200,15 +200,13 @@ pub(crate) fn approve_modules(config: &std::path::Path, yes: bool) -> Result<boo
     let mut denied = 0;
     let mut changed = false;
     for record in &imported {
-        println!("{}", describe_module(record));
+        outln!("{}", describe_module(record));
         if approvals.is_approved(record) {
-            println!("  already approved");
+            outln!("  already approved");
             continue;
         }
         let approved = yes || {
-            print!("  approve? [y/N] ");
-            use std::io::Write as _;
-            let _ = std::io::stdout().flush();
+            out!("  approve? [y/N] ");
             lines
                 .next()
                 .transpose()
@@ -218,85 +216,17 @@ pub(crate) fn approve_modules(config: &std::path::Path, yes: bool) -> Result<boo
         if approved {
             approvals.approve(record)?;
             changed = true;
-            println!("  approved");
+            outln!("  approved");
         } else {
             denied += 1;
-            println!("  not approved");
+            outln!("  not approved");
         }
     }
     if changed {
         approvals.save(&store)?;
-        println!("approvals written to {}", store.display());
+        outln!("approvals written to {}", store.display());
     }
     Ok(denied == 0)
-}
-
-/// The API reference for this build, rendered from the same generated
-/// LuaLS definitions `morf types` emits, so what `morf docs` prints can
-/// never describe another version's engine.
-pub(crate) fn api_reference() -> String {
-    let mut out = format!("# morf {} API reference\n", env!("CARGO_PKG_VERSION"));
-    for (relative, contents) in morf_lua::generate_types() {
-        out.push_str(&format!("\n## {relative}\n"));
-        for line in contents.lines() {
-            if let Some(name) = line.strip_prefix("---@class ") {
-                out.push_str(&format!("\n### {name}\n"));
-            } else if let Some(field) = line.strip_prefix("---@field ") {
-                out.push_str(&format!("- `{field}`\n"));
-            } else if let Some(function) = line
-                .strip_prefix("function ")
-                .and_then(|rest| rest.strip_suffix(" end"))
-            {
-                out.push_str(&format!("- `{function}`\n"));
-            } else if line.starts_with("---@") {
-                continue;
-            }
-        }
-    }
-    out
-}
-
-/// Where the bundled UI guide lives, in order: the installed library's
-/// `docs/`, beside the executable's share, or this checkout's `docs/`.
-fn guide_candidates() -> Vec<PathBuf> {
-    let mut candidates = Vec::new();
-    if let Some(data) = env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))
-    {
-        candidates.push(data.join("morf/library/docs/UI.md"));
-    }
-    let dirs = env::var_os("XDG_DATA_DIRS")
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "/usr/local/share:/usr/share".into());
-    candidates.extend(env::split_paths(&dirs).map(|dir| dir.join("morf/library/docs/UI.md")));
-    if let Ok(exe) = env::current_exe() {
-        candidates.push(exe.join("../../../share/morf/library/docs/UI.md"));
-        candidates.push(exe.join("../../../docs/UI.md"));
-    }
-    candidates.push(PathBuf::from("docs/UI.md"));
-    candidates
-}
-
-/// The bundled UI guide's text, or what was searched for it.
-pub(crate) fn ui_guide() -> Result<String, String> {
-    ui_guide_from(&guide_candidates())
-}
-
-pub(crate) fn ui_guide_from(candidates: &[PathBuf]) -> Result<String, String> {
-    for candidate in candidates {
-        if let Ok(text) = fs::read_to_string(candidate) {
-            return Ok(text);
-        }
-    }
-    Err(format!(
-        "the UI guide is not bundled here; looked for {} (the library bundle's docs/UI.md)",
-        candidates
-            .iter()
-            .map(|path| path.display().to_string())
-            .collect::<Vec<_>>()
-            .join(", ")
-    ))
 }
 
 /// Prints what a bug report needs: the machine, the display, the instance.
@@ -305,7 +235,7 @@ pub(crate) fn ui_guide_from(candidates: &[PathBuf]) -> Result<String, String> {
 /// running instance -- which GPU, which protocols -- is asked of it, and a
 /// display with no instance says so rather than failing.
 pub(crate) fn print_info() -> Result<(), String> {
-    println!("morf {}", env!("CARGO_PKG_VERSION"));
+    outln!("{}", crate::docs::version_line());
     for name in [
         "WAYLAND_DISPLAY",
         "XDG_RUNTIME_DIR",
@@ -315,21 +245,21 @@ pub(crate) fn print_info() -> Result<(), String> {
         "MORF_CONFIG",
         "MORF_PAM_LIBRARY",
     ] {
-        println!(
+        outln!(
             "{name}={}",
             env::var(name).unwrap_or_else(|_| "(unset)".to_owned())
         );
     }
-    println!(
+    outln!(
         "config_root={}",
         config_root()
             .map(|p| p.display().to_string())
             .unwrap_or_default()
     );
     let socket = socket_path()?;
-    println!("socket={}", socket.display());
+    outln!("socket={}", socket.display());
     let Ok(reply) = ipc_call(&socket, &IpcRequest::Info) else {
-        println!("instance=none (nothing is listening on that socket)");
+        outln!("instance=none (nothing is listening on that socket)");
         return Ok(());
     };
     if let [
@@ -338,12 +268,12 @@ pub(crate) fn print_info() -> Result<(), String> {
         WireValue::Integer(uptime),
     ] = reply.result.as_slice()
     {
-        println!("instance_pid={pid}\ninstance_config={config}\ninstance_uptime_s={uptime}");
+        outln!("instance_pid={pid}\ninstance_config={config}\ninstance_uptime_s={uptime}");
     }
     if let Ok(reply) = ipc_call(&socket, &IpcRequest::Capabilities) {
         for value in &reply.result {
             if let WireValue::String(line) = value {
-                println!("{line}");
+                outln!("{line}");
             }
         }
     }
