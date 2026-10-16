@@ -25,7 +25,7 @@ use crate::runner_args::RunnerArgs;
 use input::{click, key, leave, motion, press, touch, type_text, wheel};
 use morf_host::headless::Headless;
 use query::{accessible, accessible_action, nodes, text_of};
-use subject::{ipc, load, logs, resize_window, snapshot, stub_run, surfaces};
+use subject::{approve, ipc, load, logs, resize_window, snapshot, stub_run, surfaces};
 use values::{number, optional_text};
 
 /// What a spec file shares between its tests.
@@ -139,8 +139,9 @@ impl TestHost {
 /// Installs every host function into the spec's runtime.
 pub(crate) fn install(runtime: &mut Runtime, host: &Shared) {
     type Handler = fn(&mut TestHost, &[IpcValue]) -> Result<Vec<IpcValue>, String>;
-    let handlers: [(&'static str, Handler); 30] = [
+    let handlers: [(&'static str, Handler); 31] = [
         ("load", load),
+        ("approve", approve),
         ("surfaces", |host, _| surfaces(host)),
         ("now", |host, _| {
             let now = host.subject()?.now();

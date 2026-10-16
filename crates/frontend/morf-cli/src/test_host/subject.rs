@@ -54,6 +54,11 @@ pub(super) fn load(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<Ip
         .iter()
         .filter_map(text)
         .collect();
+    options.runtime_path = list(field(options_value, "runtime_path"))
+        .iter()
+        .filter_map(text)
+        .map(|root| morf_host::headless::resolve(&root, Some(&host.spec_dir)))
+        .collect();
     let env = match field(options_value, "env") {
         Some(value) => value.to_json(),
         None => serde_json::json!({}),
@@ -206,6 +211,27 @@ pub(super) fn stub_run(
             .map_err(|error| error.to_string())?;
     }
     Ok(Vec::new())
+}
+
+/// `test.approve(name)`: records the loaded module `name` as approved in
+/// the subject's approvals, which a test run keeps in its scratch state.
+pub(super) fn approve(
+    host: &mut TestHost,
+    arguments: &[IpcValue],
+) -> Result<Vec<IpcValue>, String> {
+    let name = optional_text(arguments.first()).ok_or("test.approve wants a module name")?;
+    let runtime = &mut host.subject()?.runtime;
+    let record = runtime
+        .module_declarations()
+        .into_iter()
+        .find(|record| record.name == name)
+        .ok_or_else(|| format!("test.approve: `{name}` was not loaded"))?;
+    let store = runtime.approvals_path()?;
+    let mut approvals = morf_lua::Approvals::load(&store)?;
+    approvals.approve(&record)?;
+    approvals.save(&store)?;
+    runtime.reload_approvals();
+    Ok(vec![IpcValue::Boolean(true)])
 }
 
 pub(super) fn snapshot(

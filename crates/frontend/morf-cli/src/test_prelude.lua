@@ -398,6 +398,10 @@ end
 
 function test.clear_stubs() host.clear_stubs() end
 
+-- Approves an imported module the configuration loaded, by its `require`
+-- name, in the run's own approvals; the next `test.load` runs it approved.
+function test.approve(name) return host.approve(name) end
+
 -- Every command the configuration asked `morf.run` for, stubbed or not.
 function test.runs() return host.runs() end
 
