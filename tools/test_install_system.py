@@ -93,6 +93,21 @@ source_profile = false
             self.assertEqual((system / 'usr/share/morf/library/lib/old.lua').read_text(), 'old')
             self.assertFalse((system / 'usr/share/morf/library/lib/new.lua').exists())
 
+    def test_runtime_stage_bundles_the_guides_stamped_with_the_binary_version(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            binary = root / 'morf'
+            binary.write_text('#!/bin/sh\ncase "$1" in\n  --version) echo "morf 9.8.7" ;;\n'
+                              '  types) mkdir -p "$2" && echo x > "$2/morf.lua" ;;\nesac\n')
+            binary.chmod(0o755)
+            installer.stage_runtime(root / 'stage', binary)
+            docs = root / 'stage/files/usr/share/morf/library/docs'
+            self.assertEqual((docs / 'VERSION').read_text(), '9.8.7\n')
+            for name in ('UI.md', 'IO.md'):
+                self.assertEqual((docs / name).read_bytes(), (installer.REPO / 'docs' / name).read_bytes())
+            manifest = installer.validate(root / 'stage')
+            self.assertIn('usr/share/morf/library/docs/VERSION', manifest['files'])
+
     def test_backup_replaces_history_and_does_not_follow_symlinks(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

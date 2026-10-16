@@ -41,10 +41,14 @@ jobs:
       - name: Package
         run: |
           stage="$RUNNER_TEMP/morf-release"
-          mkdir -p "$stage/library"
+          mkdir -p "$stage/library/docs"
           cp target/release/morf "$stage/"
           cp -r library/lib library/README.md library/luarc.template.json "$stage/library/"
+          cp docs/UI.md docs/IO.md "$stage/library/docs/"
+          "$stage/morf" --version | cut -d' ' -f2 > "$stage/library/docs/VERSION"
+          test "$(cat "$stage/library/docs/VERSION")" = "${GITHUB_REF_NAME#v}"
           "$stage/morf" types "$stage/library/types"
+          test "$("$stage/morf" docs --ui | head -n 1)" = "# $("$stage/morf" --version) UI guide"
           tar -czf "${{ matrix.artifact }}.tar.gz" -C "$stage" morf library
       - name: Upload artifact
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
