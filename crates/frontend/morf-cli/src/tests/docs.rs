@@ -1,4 +1,4 @@
-//! `morf docs` (PLAN item 8): the API reference is this build's, and a
+//! `morf docs`: the API reference is this build's, and a
 //! guide prints only from a bundle stamped with this executable's version.
 
 use std::ffi::OsString;
