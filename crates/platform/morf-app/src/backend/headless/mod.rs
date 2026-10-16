@@ -36,6 +36,9 @@ pub struct HeadlessBackend {
     /// The windows that asked for a frame (asked through `&self`, as a
     /// compositor's frame callback is).
     frames: RefCell<BTreeSet<WindowKey>>,
+    /// Paced as a compositor paces: when each frame asked for was asked,
+    /// so the host holds a paint back until its callback comes.
+    paced: Option<RefCell<BTreeMap<WindowKey, std::time::Instant>>>,
     /// Where each window takes the pointer; absent is everywhere.
     input_regions: RefCell<BTreeMap<WindowKey, Vec<InputRect>>>,
     /// The clock's reading.
@@ -117,10 +120,19 @@ impl HeadlessBackend {
         self.now
     }
 
+    /// Paces frames as a compositor does: a frame asked for is outstanding
+    /// until the clock is advanced, and the host waits for it to paint.
+    pub fn set_paced(&mut self, paced: bool) {
+        self.paced = paced.then(RefCell::default);
+    }
+
     /// Moves the clock on by `by`: every window that asked for a frame gets
     /// one, stamped with the new reading.
     pub fn advance(&mut self, by: Duration) {
         self.now += by;
+        if let Some(asked) = &self.paced {
+            asked.borrow_mut().clear();
+        }
         let time_ms = self.now.as_millis() as u32;
         for key in self.frames.take() {
             if !self.windows.contains_key(&key) {
@@ -226,6 +238,9 @@ impl Backend for HeadlessBackend {
     fn close(&mut self, id: WindowId) {
         self.windows.remove(&id.into());
         self.frames.borrow_mut().remove(&id.into());
+        if let Some(asked) = &self.paced {
+            asked.borrow_mut().remove(&id.into());
+        }
         self.input_regions.borrow_mut().remove(&id.into());
     }
 
@@ -241,6 +256,19 @@ impl Backend for HeadlessBackend {
 
     fn request_frame(&self, id: WindowId) {
         self.frames.borrow_mut().insert(id.into());
+        if let Some(asked) = &self.paced {
+            asked
+                .borrow_mut()
+                .entry(id.into())
+                .or_insert_with(std::time::Instant::now);
+        }
+    }
+
+    fn layer_frame_wait(&self, id: u64) -> Option<Duration> {
+        let asked = self.paced.as_ref()?.borrow();
+        asked
+            .get(&WindowId::Layer(id).into())
+            .map(std::time::Instant::elapsed)
     }
 
     fn commit(&self, _id: WindowId) {}

@@ -54,6 +54,8 @@ pub struct LoadOptions {
     pub policy: LoadPolicy,
     /// Lua run before the configuration, in the same runtime.
     pub prelude: Option<String>,
+    /// Paint with the GPU, offscreen, rather than only lay out.
+    pub gpu: bool,
 }
 
 impl LoadOptions {
@@ -68,6 +70,7 @@ impl LoadOptions {
             args: Vec::new(),
             policy: LoadPolicy::default(),
             prelude: None,
+            gpu: false,
         }
     }
 }
@@ -162,8 +165,8 @@ pub struct Headless {
     /// could not be worked out.
     pub problems: Vec<String>,
     /// The virtual clock's reading, and when the last frame was.
-    now: Duration,
-    last_frame: Duration,
+    pub(crate) now: Duration,
+    pub(crate) last_frame: Duration,
     /// Loaded with no screen: nothing it declares is mapped.
     pub outputless: bool,
     /// The layout revision each open surface was last linted at.
@@ -275,7 +278,7 @@ impl Headless {
                     Box::new(desktop),
                     StartOptions {
                         name: own.name.clone().unwrap_or_default(),
-                        gpu: false,
+                        gpu: options.gpu,
                         publish_capabilities: false,
                         desktop_canvas: false,
                         report_slow: false,

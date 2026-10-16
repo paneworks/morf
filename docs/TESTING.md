@@ -62,6 +62,7 @@ below).
 ```sh
 morf check shell.lua [--size WxH] [--screens N] [--ipc 'VERB ARGS']...
                      [--after MS] [--wait MS] [--strict] [--kit [default]] [--a11y]
+                     [--frames [--paced] [--gpu]]
                      [--no-dbus | --private-bus] [--isolate] [-- args...]
 ```
 
@@ -88,6 +89,15 @@ answers once it has loaded -- against the widget contract
 archetype skin due at the contract's stage, and an owner in the contract
 for every row of the element catalogue (`library/lib/kit/catalogue.lua`).
 It prints `kit stage N: D due, M missing` and each problem as an error.
+
+`--frames` prints the host's frame accounting over the `--after` run (as
+`test.frames()` returns it): how many frames, how many late and over 2.4x
+the refresh interval and which stage held each of those, and the wall time
+charged to each stage. `--paced` runs `--after` on the wall clock instead,
+a refresh every 16.7 ms with the frame callbacks held to it as a
+compositor holds them, and `--gpu` paints with the GPU, offscreen: together
+they are the frame-stall rehearsal's GPU run where no compositor can be
+started (`examples/demos/motion/frame-stall.lua`, `docs/baseline.md`).
 
 `--a11y` builds the tree a screen reader would be given for every shown
 surface and fails each control it could land on -- one that takes focus,
@@ -325,6 +335,7 @@ or an exact `text`), or a function of the node returning true.
 | `test.runs()` | the argv of every `morf.run` since load, stubbed or not |
 | `test.snapshot(name [, { surface }])` | renders to `name` under `--snapshots DIR` (default `snapshots/` beside the spec); returns `true, path`, or `false, reason` when there is no GPU -- the test goes on, with the reason noted in the output |
 | `test.note(text)`, `test.log(...)` | a line printed under the test's result |
+| `test.frames()` | the host's frame accounting since the last call (or load), and a new window begun: `{ frames, late, overruns, turns, motion_turns, worst_ms, mean_ms, refresh_ms, stages, owners, summary }`. `stages` is the wall time charged to `services`, `handlers`, `flush`, `motion`, `layout`, `paint` and `waiting` (no stage: between turns), `owners` how many overruns -- frames over 2.4x the refresh interval -- each held the most of, and `summary` the line `MORF_WAKE_LOG` prints. Times are the wall clock's, not the virtual one's |
 
 ## Examples
 
