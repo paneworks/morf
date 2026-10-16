@@ -142,7 +142,7 @@ impl Host {
     /// supervisor's commands, the configuration's window and surface changes,
     /// the backend's events, and the paint of whatever changed -- or, owed
     /// only for frame callbacks, the paint first and the rest after
-    /// ([`Host::motion_turn`]). Charged to the frame accounting however it
+    /// (`Host::motion_turn`). Charged to the frame accounting however it
     /// ends.
     pub fn turn(
         &mut self,

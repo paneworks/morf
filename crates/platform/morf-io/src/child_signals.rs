@@ -21,7 +21,7 @@ const RESET: [libc::c_int; 10] = [
     libc::SIGTTOU,
 ];
 
-/// Puts back the default action of every signal in [`RESET`] this process
+/// Puts back the default action of every signal in `RESET` this process
 /// was started ignoring. Call before any thread or child is started.
 pub fn restore_ignored_signals() {
     for signal in RESET {
