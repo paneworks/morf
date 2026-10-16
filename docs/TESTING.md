@@ -323,6 +323,7 @@ or an exact `text`), or a function of the node returning true.
 | `test.stub_run(program, result)` | from now on, `morf.run` of `program` (its `argv[1]`, or that path's last part) does not start anything: the callback gets `result` -- `{ ok, code, stdout, stderr }`, missing fields filled in (`ok` from `code`), or a string meaning `stdout` -- on a later turn of the loop, as a real run's would come. Stubs outlast `test.load` within a spec file |
 | `test.clear_stubs()` | |
 | `test.runs()` | the argv of every `morf.run` since load, stubbed or not |
+| `test.resources()` | what the configuration holds open, as the engine counts it: `{ dbus_subscriptions, dbus_calls, timers, processes, connections, file_watches, owned_hooks }` -- compare with a baseline to prove a teardown gave everything back |
 | `test.snapshot(name [, { surface }])` | renders to `name` under `--snapshots DIR` (default `snapshots/` beside the spec); returns `true, path`, or `false, reason` when there is no GPU -- the test goes on, with the reason noted in the output |
 | `test.note(text)`, `test.log(...)` | a line printed under the test's result |
 

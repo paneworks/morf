@@ -139,7 +139,7 @@ impl TestHost {
 /// Installs every host function into the spec's runtime.
 pub(crate) fn install(runtime: &mut Runtime, host: &Shared) {
     type Handler = fn(&mut TestHost, &[IpcValue]) -> Result<Vec<IpcValue>, String>;
-    let handlers: [(&'static str, Handler); 30] = [
+    let handlers: [(&'static str, Handler); 31] = [
         ("load", load),
         ("surfaces", |host, _| surfaces(host)),
         ("now", |host, _| {
@@ -226,6 +226,7 @@ pub(crate) fn install(runtime: &mut Runtime, host: &Shared) {
                 .push(optional_text(arguments.first()).unwrap_or_default());
             Ok(Vec::new())
         }),
+        ("resources", |host, _| resources(host)),
         ("screen", |host, _| {
             let (width, height) = host.subject()?.screen;
             Ok(vec![
@@ -242,4 +243,19 @@ pub(crate) fn install(runtime: &mut Runtime, host: &Shared) {
             Rc::new(move |arguments| handler(&mut host.borrow_mut(), &arguments)),
         );
     }
+}
+
+/// What the configuration under test holds open: `test.resources()`.
+fn resources(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
+    let counts = host.subject()?.runtime.resource_counts();
+    let count = |n: usize| IpcValue::Integer(i64::try_from(n).unwrap_or(i64::MAX));
+    Ok(vec![values::map(vec![
+        ("dbus_subscriptions", count(counts.dbus_subscriptions)),
+        ("dbus_calls", count(counts.dbus_calls)),
+        ("timers", count(counts.timers)),
+        ("processes", count(counts.processes)),
+        ("connections", count(counts.connections)),
+        ("file_watches", count(counts.file_watches)),
+        ("owned_hooks", count(counts.owned_hooks)),
+    ])])
 }

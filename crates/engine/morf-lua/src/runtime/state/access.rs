@@ -83,6 +83,11 @@ impl ReactiveState {
         &mut self.io
     }
 
+    /// The same, to count.
+    pub(crate) fn io(&self) -> &crate::api::io::io::IoHub {
+        &self.io
+    }
+
     /// How much image work is on its way, for a test to watch drain.
     #[cfg(test)]
     pub(crate) fn image_jobs(&self) -> &crate::runtime::image_jobs::ImageJobs {

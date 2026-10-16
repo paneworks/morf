@@ -22,6 +22,7 @@ pub use self::api::kit::register as register_kit;
 pub use self::runtime::events::*;
 pub use self::runtime::host_types::*;
 pub use self::runtime::layout::SettledLayout;
+pub use self::runtime::resources::ResourceCounts;
 pub use self::runtime::session_lock::SessionLockState;
 pub use self::runtime::text_inputs::KeyModifiers;
 pub use self::runtime::wake::{ClockPrecision, DeadlineCause};

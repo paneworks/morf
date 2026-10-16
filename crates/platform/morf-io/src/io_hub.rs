@@ -263,6 +263,16 @@ impl<C> IoHub<C> {
             .count()
     }
 
+    /// How many children this hub holds open.
+    pub fn processes(&self) -> usize {
+        self.count(true)
+    }
+
+    /// How many connections this hub holds open.
+    pub fn connections(&self) -> usize {
+        self.count(false)
+    }
+
     fn insert(
         &mut self,
         handle: IoHandle,

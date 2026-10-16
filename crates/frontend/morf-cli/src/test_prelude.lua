@@ -196,6 +196,11 @@ end
 -- `synced`, by path, the last `__morf_test.sync>>` line each connection read.
 function test.io() return host.ipc("__morf_test.io") end
 
+-- What the configuration holds open, counted by the engine:
+-- `dbus_subscriptions`, `dbus_calls`, `timers`, `processes`, `connections`,
+-- `file_watches` and `owned_hooks`.
+function test.resources() return host.resources() end
+
 -- Holds the clock while the outside answers: calls `serve` (a fake living
 -- in the spec) until nothing is pending and `predicate(test.io())`, if
 -- given, holds. Fails after `timeout_ms` of wall time.
