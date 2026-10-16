@@ -4,7 +4,7 @@
 //! engine's generic D-Bus client, and every one of them can change the
 //! machine it runs on: turn the radio off, forget a network, suspend. So none
 //! of these tests goes near a real service. Most hand the library a stand-in
-//! for `morf.dbus` written in Lua (`lib_dbus_fake.lua`), which answers in the
+//! for `morf.dbus` written in Lua (`library/tests/dbus_fake.lua`), which answers in the
 //! shapes the engine's decoder produces and records every argument as the
 //! library typed it — the thing a real service would reject if it were wrong.
 //! One goes over a real session bus, to a fake player this test owns under a
@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 
 use super::*;
 
-const FAKE: &str = include_str!("../lib_dbus_fake.lua");
+const FAKE: &str = include_str!("../../../../../../library/tests/dbus_fake.lua");
 
 /// Runs `body` with `fake`, `morf`, `ui` and `done(text)` in scope, beside the
 /// examples so `require("lib.x")` finds the libraries, until `done` is called.
