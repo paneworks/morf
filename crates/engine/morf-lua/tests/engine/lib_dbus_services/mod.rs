@@ -96,7 +96,7 @@ fn services_over_a_private_session_bus() {
     // can be activated: a runtime starting up asks for the desktop portal,
     // and on a stock session bus that would launch one against the private
     // bus for nothing.
-    run_under_private_bus("tests::lib_dbus_services::private_bus::private_bus_");
+    run_under_private_bus("lib_dbus_services::private_bus::private_bus_");
 }
 
 /// Re-runs the ignored tests matching `filter` in a child process under
