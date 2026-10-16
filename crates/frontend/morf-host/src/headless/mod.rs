@@ -1,5 +1,6 @@
 //! The headless runner: `check`, `render` and `test` stand on it.
 
+pub mod discover;
 pub mod env;
 pub mod headless;
 pub mod input;

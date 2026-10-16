@@ -14,7 +14,7 @@ use morf_system::{PamAuthenticator, PamSession, Secret, Zeroizing};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::{api::ui::scene::HostError, runtime::state::*};
+use crate::{api::ui::scene::HostError, runtime::state::*, vm::permissions::gated};
 
 /// How many conversations one configuration may hold open.
 ///
@@ -34,9 +34,12 @@ pub(crate) fn install_pam_api<'gc>(
     // callback. `unlock` is the one difference between the two entries -- a
     // success on the second also lifts the session lock, which is the lock
     // screen's whole reason to call it.
-    for (name, unlock_on_success) in [("authenticate", false), ("authenticate_unlock", true)] {
+    for (name, api, unlock_on_success) in [
+        ("authenticate", "morf.pam.authenticate", false),
+        ("authenticate_unlock", "morf.pam.authenticate_unlock", true),
+    ] {
         let pam_state = Rc::clone(&state);
-        let entry = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        let entry = gated(ctx, &state, "pam", api, move |ctx, _, mut stack| {
             let (service, username, password, callback, confdir): (
                 String,
                 String,
@@ -76,15 +79,21 @@ pub(crate) fn install_pam_api<'gc>(
             .listen_to_session(&session.session, callback);
         Ok(CallbackReturn::Return)
     });
-    let session_respond = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (session, answer): (UserRef<PamSessionToken>, luna::String) = stack.consume(ctx)?;
-        // `false` rather than an error, because a late answer is ordinary: the
-        // person pressed Enter as the module gave up, and the configuration
-        // should learn that its answer went nowhere rather than crash.
-        let taken = session.session.borrow_mut().respond(secret(answer));
-        stack.replace(ctx, taken);
-        Ok(CallbackReturn::Return)
-    });
+    let session_respond = gated(
+        ctx,
+        &state,
+        "pam",
+        "pam session:respond",
+        |ctx, _, mut stack| {
+            let (session, answer): (UserRef<PamSessionToken>, luna::String) = stack.consume(ctx)?;
+            // `false` rather than an error, because a late answer is ordinary: the
+            // person pressed Enter as the module gave up, and the configuration
+            // should learn that its answer went nowhere rather than crash.
+            let taken = session.session.borrow_mut().respond(secret(answer));
+            stack.replace(ctx, taken);
+            Ok(CallbackReturn::Return)
+        },
+    );
     let session_cancel = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let session: UserRef<PamSessionToken> = stack.consume(ctx)?;
         // The listener still gets the final `finished` on the next poll; the
@@ -100,19 +109,26 @@ pub(crate) fn install_pam_api<'gc>(
     session_metatable.set_field(ctx, "__index", session_methods);
     let session_metatable = ctx.stash(session_metatable);
 
-    let session = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (service, username, confdir): (String, String, Option<String>) = stack.consume(ctx)?;
-        let started = PamSession::start(&service, &username, confdir.as_deref());
-        let userdata = UserData::new_static(
-            &ctx,
-            PamSessionToken {
-                session: Rc::new(RefCell::new(started)),
-            },
-        );
-        userdata.set_metatable(ctx, Some(ctx.fetch(&session_metatable)));
-        stack.replace(ctx, userdata);
-        Ok(CallbackReturn::Return)
-    });
+    let session = gated(
+        ctx,
+        &state,
+        "pam",
+        "morf.pam.session",
+        move |ctx, _, mut stack| {
+            let (service, username, confdir): (String, String, Option<String>) =
+                stack.consume(ctx)?;
+            let started = PamSession::start(&service, &username, confdir.as_deref());
+            let userdata = UserData::new_static(
+                &ctx,
+                PamSessionToken {
+                    session: Rc::new(RefCell::new(started)),
+                },
+            );
+            userdata.set_metatable(ctx, Some(ctx.fetch(&session_metatable)));
+            stack.replace(ctx, userdata);
+            Ok(CallbackReturn::Return)
+        },
+    );
     pam.set_field(ctx, "session", session);
     morf.set_field(ctx, "pam", pam);
 }

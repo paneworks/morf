@@ -6,10 +6,12 @@ use std::process::ExitCode;
 
 #[macro_use]
 mod stdout;
+mod approve;
 mod bundle;
 mod commands;
 mod config;
 mod docs;
+mod permission_words;
 mod runner_args;
 mod runners;
 mod test_host;

@@ -339,6 +339,15 @@ pub(crate) fn install_image_ops_api<'gc>(
             };
             let source = source_of(options.get_value(ctx, "source"), "image.process source")?;
             let output = source_of(options.get_value(ctx, "output"), "image.process output")?;
+            if crate::vm::permissions::refused_write(
+                ctx,
+                &process_state,
+                &mut stack,
+                "morf.image.process",
+                &output,
+            ) {
+                return Ok(CallbackReturn::Return);
+            }
             let request = ProcessRequest {
                 ops: parse_ops(ctx, options.get_value(ctx, "ops"))?,
                 format: format_of(options.get_value(ctx, "format"), &output)?,
@@ -422,7 +431,7 @@ pub(crate) fn install_image_ops_api<'gc>(
         crate::runtime::image_jobs::MAX_IN_FLIGHT as i64,
     );
     image.set_field(ctx, "limits", limits);
-    crate::api::media::image_raw::install_raw_image_api(ctx, image);
+    crate::api::media::image_raw::install_raw_image_api(ctx, image, &state);
     crate::api::media::image_annotation::install(ctx, image);
     crate::api::media::image_geometry::install(ctx, image);
     crate::api::media::image_preview::install(ctx, image, &state);

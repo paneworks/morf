@@ -116,6 +116,7 @@ pub(crate) fn install_fs_api<'gc>(
     state: std::rc::Rc<crate::runtime::state::StateCell<crate::runtime::state::ReactiveState>>,
 ) {
     let fs = Table::new(&ctx);
+    let change_state = std::rc::Rc::clone(&state);
 
     // `read_async({ path, ... }, function(ok, contents) end)`: the files are
     // read on a worker, and the callback gets, on a later turn, a list in
@@ -286,7 +287,7 @@ pub(crate) fn install_fs_api<'gc>(
         }),
     );
 
-    change::install_changes(ctx, fs);
+    change::install_changes(ctx, fs, &change_state);
     paths::install_paths(ctx, fs);
     morf.set_field(ctx, "fs", fs);
 }

@@ -6,10 +6,14 @@ use std::process::{Command as StdCommand, Stdio};
 
 use crate::{
     api::io::process_helpers::*, api::ui::scene::*, runtime::state::*, value::table::*,
-    vm::types::*,
+    vm::permissions::gated, vm::types::*,
 };
 
-pub(crate) fn install_image_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
+pub(crate) fn install_image_api<'gc>(
+    ctx: Context<'gc>,
+    state: std::rc::Rc<StateCell<ReactiveState>>,
+    morf: Table<'gc>,
+) {
     let quantizer_colors = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let quantizer: UserRef<ColorQuantizerToken> = stack.consume(ctx)?;
         stack.replace(
@@ -145,29 +149,35 @@ pub(crate) fn install_image_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "has_icon", has_icon);
-    let exec_detached = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let command: Table = stack.consume(ctx)?;
-        let mut command = table_string_array(ctx, command, 64).map_err(HostError)?;
-        if command.is_empty() {
-            return Err(HostError("detached command cannot be empty".into()).into());
-        }
-        let program = command.remove(0);
-        let mut child = StdCommand::new(program)
-            .args(command)
-            // What is started detached outlives the moment and is often an
-            // application; it must not inherit a wrapper's library path.
-            .env_remove("LD_LIBRARY_PATH")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|error| HostError(error.to_string()))?;
-        let id = child.id();
-        std::thread::spawn(move || {
-            let _ = child.wait();
-        });
-        stack.replace(ctx, i64::from(id));
-        Ok(CallbackReturn::Return)
-    });
+    let exec_detached = gated(
+        ctx,
+        &state,
+        "run",
+        "morf.exec_detached",
+        move |ctx, _, mut stack| {
+            let command: Table = stack.consume(ctx)?;
+            let mut command = table_string_array(ctx, command, 64).map_err(HostError)?;
+            if command.is_empty() {
+                return Err(HostError("detached command cannot be empty".into()).into());
+            }
+            let program = command.remove(0);
+            let mut child = StdCommand::new(program)
+                .args(command)
+                // What is started detached outlives the moment and is often an
+                // application; it must not inherit a wrapper's library path.
+                .env_remove("LD_LIBRARY_PATH")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|error| HostError(error.to_string()))?;
+            let id = child.id();
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+            stack.replace(ctx, i64::from(id));
+            Ok(CallbackReturn::Return)
+        },
+    );
     morf.set_field(ctx, "exec_detached", exec_detached);
 }

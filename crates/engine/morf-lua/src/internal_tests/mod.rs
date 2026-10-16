@@ -27,6 +27,7 @@ mod fs_watch;
 mod image_ops;
 mod images;
 mod modules;
+mod permissions;
 mod timers;
 mod wake;
 mod window_events;

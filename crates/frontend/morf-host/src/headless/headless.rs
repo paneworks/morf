@@ -22,7 +22,7 @@ use crate::headless::lock::HeadlessLock;
 use crate::host::surfaces::PointerInput;
 use crate::host::turn::{Host, StartOptions, Turn};
 use crate::process::supervisor::LoadPolicy;
-use crate::process::supervisor::{execute_config_on, lua_screen, lua_screens, store_outputs};
+use crate::process::supervisor::{execute_config_with, lua_screen, lua_screens, store_outputs};
 
 /// One frame of a 60 Hz output, which is what time advances by between
 /// animation ticks.
@@ -56,6 +56,12 @@ pub struct LoadOptions {
     pub prelude: Option<String>,
     /// Paint with the GPU, offscreen, rather than only lay out.
     pub gpu: bool,
+    /// How imported modules are held back while they load.
+    pub permissions: morf_lua::PermissionMode,
+    /// Module roots searched after the configuration's folder.
+    pub runtime_path: Vec<PathBuf>,
+    /// Where approvals are read from, instead of the shell's state folder.
+    pub approvals: Option<PathBuf>,
 }
 
 impl LoadOptions {
@@ -71,6 +77,9 @@ impl LoadOptions {
             policy: LoadPolicy::default(),
             prelude: None,
             gpu: false,
+            permissions: morf_lua::PermissionMode::default(),
+            runtime_path: Vec::new(),
+            approvals: None,
         }
     }
 }
@@ -212,6 +221,10 @@ impl Headless {
             capabilities.push(("outputless".to_owned(), "true".to_owned()));
         }
         runtime.set_capabilities(&capabilities);
+        runtime.set_permission_mode(options.permissions);
+        if let Some(approvals) = &options.approvals {
+            runtime.set_approvals_path(approvals.clone());
+        }
         for warning in warnings {
             runtime.warn(warning);
         }
@@ -229,7 +242,7 @@ impl Headless {
                 ))
             })?,
         };
-        if let Err(error) = execute_config_on(
+        if let Err(error) = execute_config_with(
             &mut runtime,
             &options.path,
             &source,
@@ -237,6 +250,7 @@ impl Headless {
             // Its own list rather than the recorded one another run may be
             // writing at the same moment.
             &lua_screens(&screens),
+            &options.runtime_path,
         ) {
             return Err(LoadFailure {
                 error,

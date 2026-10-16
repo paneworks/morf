@@ -5,10 +5,18 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::{api::ui::scene::*, runtime::state::*, value::lua::*, value::table::*};
+use std::rc::Rc;
 
-pub(crate) fn install_process_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
-    let process_write = Callback::from_fn(&ctx, |ctx, _, mut stack| {
+use crate::{
+    api::ui::scene::*, runtime::state::*, value::lua::*, value::table::*, vm::permissions::gated,
+};
+
+pub(crate) fn install_process_api<'gc>(
+    ctx: Context<'gc>,
+    state: Rc<StateCell<ReactiveState>>,
+    morf: Table<'gc>,
+) {
+    let process_write = gated(ctx, &state, "run", "process:write", |ctx, _, mut stack| {
         let (process, bytes): (UserRef<ProcessToken>, String) = stack.consume(ctx)?;
         process
             .process
@@ -22,7 +30,7 @@ pub(crate) fn install_process_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         process.process.borrow_mut().close_stdin();
         Ok(CallbackReturn::Return)
     });
-    let process_kill = Callback::from_fn(&ctx, |ctx, _, mut stack| {
+    let process_kill = gated(ctx, &state, "run", "process:kill", |ctx, _, mut stack| {
         let process: UserRef<ProcessToken> = stack.consume(ctx)?;
         process
             .process
@@ -54,33 +62,45 @@ pub(crate) fn install_process_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let process_metatable = Table::new(&ctx);
     process_metatable.set_field(ctx, "__index", process_methods);
     let process_metatable = ctx.stash(process_metatable);
-    let process = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (program, args): (String, Table) = stack.consume(ctx)?;
-        let args = table_string_array(ctx, args, 64).map_err(HostError::from)?;
-        let process =
-            Process::spawn(program, args).map_err(|error| HostError(error.to_string()))?;
-        let userdata = UserData::new_static(
-            &ctx,
-            ProcessToken {
-                process: RefCell::new(process),
-            },
-        );
-        userdata.set_metatable(ctx, Some(ctx.fetch(&process_metatable)));
-        stack.replace(ctx, userdata);
-        Ok(CallbackReturn::Return)
-    });
+    let process = gated(
+        ctx,
+        &state,
+        "run",
+        "morf.process",
+        move |ctx, _, mut stack| {
+            let (program, args): (String, Table) = stack.consume(ctx)?;
+            let args = table_string_array(ctx, args, 64).map_err(HostError::from)?;
+            let process =
+                Process::spawn(program, args).map_err(|error| HostError(error.to_string()))?;
+            let userdata = UserData::new_static(
+                &ctx,
+                ProcessToken {
+                    process: RefCell::new(process),
+                },
+            );
+            userdata.set_metatable(ctx, Some(ctx.fetch(&process_metatable)));
+            stack.replace(ctx, userdata);
+            Ok(CallbackReturn::Return)
+        },
+    );
     morf.set_field(ctx, "process", process);
 
-    let process_view_start = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let process: UserRef<ProcessViewToken> = stack.consume(ctx)?;
-        let started = process
-            .state
-            .borrow_mut()
-            .start()
-            .map_err(HostError::from)?;
-        stack.replace(ctx, started);
-        Ok(CallbackReturn::Return)
-    });
+    let process_view_start = gated(
+        ctx,
+        &state,
+        "run",
+        "process_view:start",
+        |ctx, _, mut stack| {
+            let process: UserRef<ProcessViewToken> = stack.consume(ctx)?;
+            let started = process
+                .state
+                .borrow_mut()
+                .start()
+                .map_err(HostError::from)?;
+            stack.replace(ctx, started);
+            Ok(CallbackReturn::Return)
+        },
+    );
     let process_view_running = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let process: UserRef<ProcessViewToken> = stack.consume(ctx)?;
         stack.replace(ctx, process.state.borrow().running());
@@ -94,35 +114,54 @@ pub(crate) fn install_process_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         }
         Ok(CallbackReturn::Return)
     });
-    let process_view_write = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (process, bytes): (UserRef<ProcessViewToken>, String) = stack.consume(ctx)?;
-        process
-            .state
-            .borrow_mut()
-            .write(bytes.as_bytes())
-            .map_err(HostError::from)?;
-        Ok(CallbackReturn::Return)
-    });
+    let process_view_write = gated(
+        ctx,
+        &state,
+        "run",
+        "process_view:write",
+        |ctx, _, mut stack| {
+            let (process, bytes): (UserRef<ProcessViewToken>, String) = stack.consume(ctx)?;
+            process
+                .state
+                .borrow_mut()
+                .write(bytes.as_bytes())
+                .map_err(HostError::from)?;
+            Ok(CallbackReturn::Return)
+        },
+    );
     let process_view_close = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let process: UserRef<ProcessViewToken> = stack.consume(ctx)?;
         process.state.borrow_mut().close_stdin();
         Ok(CallbackReturn::Return)
     });
-    let process_view_kill = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let process: UserRef<ProcessViewToken> = stack.consume(ctx)?;
-        process.state.borrow_mut().kill().map_err(HostError::from)?;
-        Ok(CallbackReturn::Return)
-    });
-    let process_view_signal = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (process, signal): (UserRef<ProcessViewToken>, i64) = stack.consume(ctx)?;
-        let signal = i32::try_from(signal).map_err(|_| HostError("signal must be 1..64".into()))?;
-        process
-            .state
-            .borrow_mut()
-            .signal(signal)
-            .map_err(HostError::from)?;
-        Ok(CallbackReturn::Return)
-    });
+    let process_view_kill = gated(
+        ctx,
+        &state,
+        "run",
+        "process_view:kill",
+        |ctx, _, mut stack| {
+            let process: UserRef<ProcessViewToken> = stack.consume(ctx)?;
+            process.state.borrow_mut().kill().map_err(HostError::from)?;
+            Ok(CallbackReturn::Return)
+        },
+    );
+    let process_view_signal = gated(
+        ctx,
+        &state,
+        "run",
+        "process_view:signal",
+        |ctx, _, mut stack| {
+            let (process, signal): (UserRef<ProcessViewToken>, i64) = stack.consume(ctx)?;
+            let signal =
+                i32::try_from(signal).map_err(|_| HostError("signal must be 1..64".into()))?;
+            process
+                .state
+                .borrow_mut()
+                .signal(signal)
+                .map_err(HostError::from)?;
+            Ok(CallbackReturn::Return)
+        },
+    );
     let process_view_command = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let process: UserRef<ProcessViewToken> = stack.consume(ctx)?;
         let command = string_table(ctx, process.state.borrow().config().command.clone());
@@ -249,66 +288,73 @@ pub(crate) fn install_process_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let process_view_metatable = Table::new(&ctx);
     process_view_metatable.set_field(ctx, "__index", process_view_methods);
     let process_view_metatable = ctx.stash(process_view_metatable);
-    let process_view = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let options: Table = stack.consume(ctx)?;
-        let command = match options.get_value(ctx, "command") {
-            LuaValue::Table(command) => {
-                table_string_array(ctx, command, 64).map_err(HostError::from)?
-            }
-            _ => return Err(HostError("process_view command must be a table".into()).into()),
-        };
-        morf_io::check_command(&command).map_err(HostError::from)?;
-        let environment = match options.get_value(ctx, "environment") {
-            LuaValue::Nil => BTreeMap::new(),
-            LuaValue::Table(environment) => {
-                table_string_map(ctx, environment, 256).map_err(HostError::from)?
-            }
-            _ => {
-                return Err(HostError("process_view environment must be a table".into()).into());
-            }
-        };
-        let clear_environment = match options.get_value(ctx, "clear_environment") {
-            LuaValue::Nil => false,
-            LuaValue::Boolean(value) => value,
-            _ => {
-                return Err(
-                    HostError("process_view clear_environment must be boolean".into()).into(),
-                );
-            }
-        };
-        let working_directory = match options.get_value(ctx, "working_directory") {
-            LuaValue::Nil => None,
-            LuaValue::String(value) => Some(PathBuf::from(value.display_lossy().to_string())),
-            _ => {
-                return Err(
-                    HostError("process_view working_directory must be a string".into()).into(),
-                );
-            }
-        };
-        let running = match options.get_value(ctx, "running") {
-            LuaValue::Nil => false,
-            LuaValue::Boolean(value) => value,
-            _ => {
-                return Err(HostError("process_view running must be boolean".into()).into());
-            }
-        };
-        let config = ProcessConfig {
-            command,
-            environment,
-            clear_environment,
-            working_directory,
-        };
-        let view = ProcessView::new(config, running).map_err(HostError::from)?;
-        let userdata = UserData::new_static(
-            &ctx,
-            ProcessViewToken {
-                state: RefCell::new(view),
-            },
-        );
-        userdata.set_metatable(ctx, Some(ctx.fetch(&process_view_metatable)));
-        stack.replace(ctx, userdata);
-        Ok(CallbackReturn::Return)
-    });
+    let process_view = gated(
+        ctx,
+        &state,
+        "run",
+        "morf.process_view",
+        move |ctx, _, mut stack| {
+            let options: Table = stack.consume(ctx)?;
+            let command = match options.get_value(ctx, "command") {
+                LuaValue::Table(command) => {
+                    table_string_array(ctx, command, 64).map_err(HostError::from)?
+                }
+                _ => return Err(HostError("process_view command must be a table".into()).into()),
+            };
+            morf_io::check_command(&command).map_err(HostError::from)?;
+            let environment = match options.get_value(ctx, "environment") {
+                LuaValue::Nil => BTreeMap::new(),
+                LuaValue::Table(environment) => {
+                    table_string_map(ctx, environment, 256).map_err(HostError::from)?
+                }
+                _ => {
+                    return Err(HostError("process_view environment must be a table".into()).into());
+                }
+            };
+            let clear_environment = match options.get_value(ctx, "clear_environment") {
+                LuaValue::Nil => false,
+                LuaValue::Boolean(value) => value,
+                _ => {
+                    return Err(
+                        HostError("process_view clear_environment must be boolean".into()).into(),
+                    );
+                }
+            };
+            let working_directory = match options.get_value(ctx, "working_directory") {
+                LuaValue::Nil => None,
+                LuaValue::String(value) => Some(PathBuf::from(value.display_lossy().to_string())),
+                _ => {
+                    return Err(HostError(
+                        "process_view working_directory must be a string".into(),
+                    )
+                    .into());
+                }
+            };
+            let running = match options.get_value(ctx, "running") {
+                LuaValue::Nil => false,
+                LuaValue::Boolean(value) => value,
+                _ => {
+                    return Err(HostError("process_view running must be boolean".into()).into());
+                }
+            };
+            let config = ProcessConfig {
+                command,
+                environment,
+                clear_environment,
+                working_directory,
+            };
+            let view = ProcessView::new(config, running).map_err(HostError::from)?;
+            let userdata = UserData::new_static(
+                &ctx,
+                ProcessViewToken {
+                    state: RefCell::new(view),
+                },
+            );
+            userdata.set_metatable(ctx, Some(ctx.fetch(&process_view_metatable)));
+            stack.replace(ctx, userdata);
+            Ok(CallbackReturn::Return)
+        },
+    );
     morf.set_field(ctx, "process_view", process_view);
 }
 

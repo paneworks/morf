@@ -22,6 +22,7 @@ use crate::{
     api::ui::scene::HostError,
     runtime::state::*,
     vm::loader::{dbus_value_to_lua, lua_to_dbus},
+    vm::permissions::gated,
 };
 
 /// Installs `morf.dbus.serve` and the methods on what it returns.
@@ -44,77 +45,107 @@ pub(crate) fn install_dbus_serve_api<'gc>(
     // configuration that has to read a file or wait for a user before it can
     // answer holds the id and replies later; the caller waits, which is what it
     // was going to do anyway.
-    let service_reply = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (service, id, value): (UserRef<DbusServiceToken>, i64, LuaValue) =
-            stack.consume(ctx)?;
-        let value = lua_to_dbus(ctx, value, 0).map_err(HostError::from)?;
-        service
-            .service
-            .borrow_mut()
-            .reply(call_id(id).map_err(HostError::from)?, &value)
-            .map_err(HostError::from)?;
-        Ok(CallbackReturn::Return)
-    });
-    let service_reply_error = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (service, id, name, message): (UserRef<DbusServiceToken>, i64, String, String) =
-            stack.consume(ctx)?;
-        service
-            .service
-            .borrow_mut()
-            .reply_error(call_id(id).map_err(HostError::from)?, &name, &message)
-            .map_err(HostError::from)?;
-        Ok(CallbackReturn::Return)
-    });
-    let service_emit = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (service, path, interface, member, value): (
-            UserRef<DbusServiceToken>,
-            String,
-            String,
-            String,
-            LuaValue,
-        ) = stack.consume(ctx)?;
-        let value = lua_to_dbus(ctx, value, 0).map_err(HostError::from)?;
-        service
-            .service
-            .borrow()
-            .emit(&path, &interface, &member, &value)
-            .map_err(HostError::from)?;
-        Ok(CallbackReturn::Return)
-    });
+    let service_reply = gated(
+        ctx,
+        &state,
+        "dbus",
+        "dbus service:reply",
+        |ctx, _, mut stack| {
+            let (service, id, value): (UserRef<DbusServiceToken>, i64, LuaValue) =
+                stack.consume(ctx)?;
+            let value = lua_to_dbus(ctx, value, 0).map_err(HostError::from)?;
+            service
+                .service
+                .borrow_mut()
+                .reply(call_id(id).map_err(HostError::from)?, &value)
+                .map_err(HostError::from)?;
+            Ok(CallbackReturn::Return)
+        },
+    );
+    let service_reply_error = gated(
+        ctx,
+        &state,
+        "dbus",
+        "dbus service:reply_error",
+        |ctx, _, mut stack| {
+            let (service, id, name, message): (UserRef<DbusServiceToken>, i64, String, String) =
+                stack.consume(ctx)?;
+            service
+                .service
+                .borrow_mut()
+                .reply_error(call_id(id).map_err(HostError::from)?, &name, &message)
+                .map_err(HostError::from)?;
+            Ok(CallbackReturn::Return)
+        },
+    );
+    let service_emit = gated(
+        ctx,
+        &state,
+        "dbus",
+        "dbus service:emit",
+        |ctx, _, mut stack| {
+            let (service, path, interface, member, value): (
+                UserRef<DbusServiceToken>,
+                String,
+                String,
+                String,
+                LuaValue,
+            ) = stack.consume(ctx)?;
+            let value = lua_to_dbus(ctx, value, 0).map_err(HostError::from)?;
+            service
+                .service
+                .borrow()
+                .emit(&path, &interface, &member, &value)
+                .map_err(HostError::from)?;
+            Ok(CallbackReturn::Return)
+        },
+    );
     // `service:call(destination, path, interface, member, args)`: a call
     // made from the service's own connection, for the services that remember
     // who registered with them and call that name back.
-    let service_call = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (service, destination, path, interface, member, value): (
-            UserRef<DbusServiceToken>,
-            String,
-            String,
-            String,
-            String,
-            LuaValue,
-        ) = stack.consume(ctx)?;
-        let value = lua_to_dbus(ctx, value, 0).map_err(HostError::from)?;
-        let reply = service
-            .service
-            .borrow()
-            .call(&destination, &path, &interface, &member, &value)
-            .map_err(HostError::from)?;
-        let reply = dbus_value_to_lua(ctx, reply).map_err(HostError::from)?;
-        stack.replace(ctx, reply);
-        Ok(CallbackReturn::Return)
-    });
+    let service_call = gated(
+        ctx,
+        &state,
+        "dbus",
+        "dbus service:call",
+        |ctx, _, mut stack| {
+            let (service, destination, path, interface, member, value): (
+                UserRef<DbusServiceToken>,
+                String,
+                String,
+                String,
+                String,
+                LuaValue,
+            ) = stack.consume(ctx)?;
+            let value = lua_to_dbus(ctx, value, 0).map_err(HostError::from)?;
+            let reply = service
+                .service
+                .borrow()
+                .call(&destination, &path, &interface, &member, &value)
+                .map_err(HostError::from)?;
+            let reply = dbus_value_to_lua(ctx, reply).map_err(HostError::from)?;
+            stack.replace(ctx, reply);
+            Ok(CallbackReturn::Return)
+        },
+    );
     let on_call_state = Rc::clone(&state);
-    let service_on_call = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (service, callback): (UserRef<DbusServiceToken>, Closure) = stack.consume(ctx)?;
-        let mut state = on_call_state.borrow_mut();
-        // One handler per service; a second replaces the first.
-        let callback = crate::vm::handler_store::register(ctx.stash(callback));
-        state
-            .dbus_mut()
-            .serve(&service.service, callback)
-            .map_err(HostError::from)?;
-        Ok(CallbackReturn::Return)
-    });
+    let service_on_call = gated(
+        ctx,
+        &state,
+        "dbus",
+        "dbus service:on_call",
+        move |ctx, _, mut stack| {
+            let (service, callback): (UserRef<DbusServiceToken>, Closure) = stack.consume(ctx)?;
+            let mut state = on_call_state.borrow_mut();
+            // One handler per service; a second replaces the first.
+            let callback = crate::vm::handler_store::register(ctx.stash(callback));
+            state
+                .dbus_mut()
+                .serve(&service.service, callback)
+                .map_err(HostError::from)?;
+            Ok(CallbackReturn::Return)
+        },
+    );
     let close_state = Rc::clone(&state);
     let service_close = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let service: UserRef<DbusServiceToken> = stack.consume(ctx)?;
@@ -142,29 +173,35 @@ pub(crate) fn install_dbus_serve_api<'gc>(
     let service_metatable = ctx.stash(service_metatable);
 
     let serve_state = Rc::clone(&state);
-    let serve = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (bus, name, path, replace): (String, String, String, Option<bool>) =
-            stack.consume(ctx)?;
-        let bus = bus_named(&bus).map_err(HostError::from)?;
-        // Replacing by default. A shell that cannot be restarted without the
-        // user first killing whatever holds its name is a shell nobody
-        // restarts, and every one of these names is held by a shell.
-        let (service, outcome) = DbusService::own(bus, &name, &path, replace.unwrap_or(true))
-            .map_err(|error| HostError(error.to_string()))?;
-        let service = Rc::new(RefCell::new(service));
-        // Remembered weakly: the runtime gives every name back when it ends
-        // (`Runtime::release_bus_names`), not whenever the collector gets to
-        // the handle -- which is what makes a handover of the primary
-        // runtime's duties clean.
-        serve_state.borrow_mut().dbus_mut().remember_name(&service);
-        let userdata = UserData::new_static(&ctx, DbusServiceToken { service });
-        userdata.set_metatable(ctx, Some(ctx.fetch(&service_metatable)));
-        // Two values, and the second is the one that matters. Taking a name is
-        // allowed to fail without being an error — somebody else runs the
-        // notification server — and a configuration that ignores this reads as
-        // working right up until nothing is ever sent to it.
-        stack.replace(ctx, (userdata, outcome.name()));
-        Ok(CallbackReturn::Return)
-    });
+    let serve = gated(
+        ctx,
+        &state,
+        "dbus",
+        "morf.dbus.serve",
+        move |ctx, _, mut stack| {
+            let (bus, name, path, replace): (String, String, String, Option<bool>) =
+                stack.consume(ctx)?;
+            let bus = bus_named(&bus).map_err(HostError::from)?;
+            // Replacing by default. A shell that cannot be restarted without the
+            // user first killing whatever holds its name is a shell nobody
+            // restarts, and every one of these names is held by a shell.
+            let (service, outcome) = DbusService::own(bus, &name, &path, replace.unwrap_or(true))
+                .map_err(|error| HostError(error.to_string()))?;
+            let service = Rc::new(RefCell::new(service));
+            // Remembered weakly: the runtime gives every name back when it ends
+            // (`Runtime::release_bus_names`), not whenever the collector gets to
+            // the handle -- which is what makes a handover of the primary
+            // runtime's duties clean.
+            serve_state.borrow_mut().dbus_mut().remember_name(&service);
+            let userdata = UserData::new_static(&ctx, DbusServiceToken { service });
+            userdata.set_metatable(ctx, Some(ctx.fetch(&service_metatable)));
+            // Two values, and the second is the one that matters. Taking a name is
+            // allowed to fail without being an error — somebody else runs the
+            // notification server — and a configuration that ignores this reads as
+            // working right up until nothing is ever sent to it.
+            stack.replace(ctx, (userdata, outcome.name()));
+            Ok(CallbackReturn::Return)
+        },
+    );
     dbus.set_field(ctx, "serve", serve);
 }

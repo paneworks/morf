@@ -170,8 +170,9 @@ pub struct Runtime {
     pub(crate) handoff_authorizer: Option<HandoffAuthorizer>,
     pub(crate) policy_retirement: Option<PolicyRetirement>,
     pub(crate) module_roots: Rc<RefCell<Vec<PathBuf>>>,
-    /// Loaded modules and their permission declarations, in load order.
-    pub(crate) module_records: Rc<RefCell<Vec<crate::vm::permissions::ModuleDeclaration>>>,
+    /// The configuration being run, its modules' origins and declarations,
+    /// and the approvals they are checked against.
+    pub(crate) permissions: Rc<RefCell<crate::vm::permissions::Permissions>>,
     /// Lint findings waiting to be logged.
     ///
     /// Its own cell rather than a push straight into the log, because the

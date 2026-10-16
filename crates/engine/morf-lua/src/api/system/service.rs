@@ -66,8 +66,7 @@ pub(crate) fn install_service_api<'gc>(
     };
     let service = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (name, options): (LuaValue, LuaValue) = stack.consume(ctx)?;
-        if let Some(refusal) = state.borrow().permission_refusal("services") {
-            stack.replace(ctx, (LuaValue::Nil, refusal.as_str()));
+        if crate::vm::permissions::refused(ctx, &state, &mut stack, "services", "service") {
             return Ok(CallbackReturn::Return);
         }
         if let LuaValue::Table(options) = options {

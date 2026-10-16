@@ -27,7 +27,23 @@ pub fn execute_config_on(
     policy: LoadPolicy,
     screens: &[Screen],
 ) -> Result<(), String> {
-    let roots = runtimepath_roots(path, policy.external_roots);
+    execute_config_with(runtime, path, source, policy, screens, &[])
+}
+
+/// As [`execute_config_on`], with `runtime_path` searched after the
+/// configuration's own folder, as `MORF_RUNTIME_PATH` entries are.
+pub fn execute_config_with(
+    runtime: &mut Runtime,
+    path: &Path,
+    source: &[u8],
+    policy: LoadPolicy,
+    screens: &[Screen],
+    runtime_path: &[PathBuf],
+) -> Result<(), String> {
+    let canonical = morf_lua::canonical_path(path);
+    let mut roots = runtimepath_roots(&canonical, policy.external_roots);
+    let after_config = roots.len().min(1);
+    roots.splice(after_config..after_config, runtime_path.iter().cloned());
     // Applied before any Lua runs, so a configuration can measure itself
     // against the whole monitor layout while it loads. Index 1 of
     // `morf.screens` stays this runtime's own output.
@@ -41,8 +57,10 @@ pub fn execute_config_on(
         runtime.set_screens(screens);
     }
     runtime.set_module_roots(roots.clone());
+    runtime.set_config_file(&canonical);
     runtime.set_shell_root(
-        path.parent()
+        canonical
+            .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."))
             .to_path_buf(),
@@ -55,7 +73,7 @@ pub fn execute_config_on(
     {
         match fs::read(&plugin) {
             Ok(source) => {
-                if let Err(error) = runtime.execute(&plugin.to_string_lossy(), &source) {
+                if let Err(error) = runtime.execute_plugin(&plugin, &source) {
                     eprintln!("morf: plugin {}: {error}", plugin.display());
                 }
             }
@@ -73,7 +91,7 @@ pub fn execute_config_on(
     {
         match fs::read(&after) {
             Ok(source) => {
-                if let Err(error) = runtime.execute(&after.to_string_lossy(), &source) {
+                if let Err(error) = runtime.execute_plugin(&after, &source) {
                     eprintln!("morf: after plugin {}: {error}", after.display());
                 }
             }
@@ -104,9 +122,14 @@ pub fn collect_lua_scripts(path: &Path, scripts: &mut Vec<PathBuf>) {
     };
     for entry in entries.flatten() {
         let path = entry.path();
+        let name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("");
+        let manifest = name == "permissions.lua" || name.ends_with(".permissions.lua");
         if path.is_dir() {
             collect_lua_scripts(&path, scripts);
-        } else if path.extension().and_then(|value| value.to_str()) == Some("lua") {
+        } else if name.ends_with(".lua") && !manifest {
             scripts.push(path);
         }
     }

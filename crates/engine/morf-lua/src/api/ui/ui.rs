@@ -341,9 +341,20 @@ pub(crate) fn install_ui_json_api<'gc>(
             Ok(CallbackReturn::Return)
         }
     });
+    let json_write_state = Rc::clone(&state);
     let json_file_write = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (file, value, pretty): (UserRef<FileDocumentToken>, LuaValue, LuaValue) =
             stack.consume(ctx)?;
+        let target = file.file.borrow().path().to_path_buf();
+        if crate::vm::permissions::refused_write(
+            ctx,
+            &json_write_state,
+            &mut stack,
+            "morf.json.write_file",
+            &target,
+        ) {
+            return Ok(CallbackReturn::Return);
+        }
         let pretty = match pretty {
             LuaValue::Nil => true,
             LuaValue::Boolean(value) => value,

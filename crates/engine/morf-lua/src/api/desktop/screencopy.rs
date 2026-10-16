@@ -126,6 +126,15 @@ pub(crate) fn install_screencopy_api<'gc>(
     let screencopy_save = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let options: Table = stack.consume(ctx)?;
         let path = source_of(options.get_value(ctx, "path"), "screencopy.save path")?;
+        if crate::vm::permissions::refused_write(
+            ctx,
+            &save_state,
+            &mut stack,
+            "morf.screencopy.save",
+            std::path::Path::new(&path),
+        ) {
+            return Ok(CallbackReturn::Return);
+        }
         let format = format_of(options.get_value(ctx, "format"), &path)?;
         let quality = quality_of(options.get_value(ctx, "quality"))?;
         let region = region_of(ctx, options.get_value(ctx, "region"))?;

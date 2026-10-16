@@ -18,7 +18,9 @@ use std::time::{Duration, Instant};
 use crate::process::socket_path::socket_path;
 use crate::{lock::*, paint::outputless::*, process::services::*, process::workers::*};
 
-pub use config::{collect_lua_scripts, execute_config, execute_config_on, runtime_scripts};
+pub use config::{
+    collect_lua_scripts, execute_config, execute_config_on, execute_config_with, runtime_scripts,
+};
 pub use failure::{FailureStep, PANICKED, SURFACE_CLOSED, failure_step, is_panic};
 pub use follow::{RELOAD_SETTLE, follow_lua_files, lua_snapshot};
 pub use outputs::{OUTPUTS, known_outputs, lua_screen, lua_screens, named_screens, store_outputs};

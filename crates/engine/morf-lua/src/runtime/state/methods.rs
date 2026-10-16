@@ -27,27 +27,7 @@ impl ReactiveState {
             io: Default::default(),
             watches: Default::default(),
             terminals: Default::default(),
-            loading_unapproved: Vec::new(),
+            permissions: Default::default(),
         }
-    }
-
-    pub(crate) fn begin_loading_unapproved(&mut self, module: String) {
-        self.loading_unapproved.push(module);
-    }
-
-    pub(crate) fn end_loading_unapproved(&mut self) {
-        self.loading_unapproved.pop();
-    }
-
-    /// The refusal a gated API returns while an unapproved imported
-    /// module's top level runs: `permission: module `x` is not approved
-    /// to use <group> (run `morf approve`)`.
-    pub(crate) fn permission_refusal(&self, group: &str) -> Option<String> {
-        self.loading_unapproved.last().map(|module| {
-            format!(
-                "permission: module `{module}` is not approved to use {group} \
-                 at load time (run `morf approve`)"
-            )
-        })
     }
 }

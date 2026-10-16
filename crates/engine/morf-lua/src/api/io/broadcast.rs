@@ -18,10 +18,11 @@
 //! when there is no shell socket to send through (a headless test, a lock
 //! screen), so the caller can do the thing itself.
 
-use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
+use luna::{CallbackReturn, Context, Table, Value as LuaValue};
 use morf_io::IpcValue as WireValue;
 
 use crate::api::ui::scene::HostError;
+use crate::vm::permissions::gated;
 
 pub use morf_io::set_shell_socket;
 
@@ -36,20 +37,30 @@ fn wire_value(value: LuaValue<'_>) -> Result<WireValue, String> {
     })
 }
 
-pub(crate) fn install_broadcast_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
-    let broadcast = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let target = match stack.get(0) {
-            LuaValue::String(text) => text.display_lossy().to_string(),
-            _ => return Err(HostError("broadcast needs a verb".into()).into()),
-        };
-        morf_io::check_broadcast_arguments(stack.len().saturating_sub(1))
-            .map_err(HostError::from)?;
-        let mut args = Vec::with_capacity(stack.len().saturating_sub(1));
-        for index in 1..stack.len() {
-            args.push(wire_value(stack.get(index)).map_err(HostError::from)?);
-        }
-        stack.replace(ctx, morf_io::broadcast(target, args));
-        Ok(CallbackReturn::Return)
-    });
+pub(crate) fn install_broadcast_api<'gc>(
+    ctx: Context<'gc>,
+    state: std::rc::Rc<crate::runtime::state::StateCell<crate::runtime::state::ReactiveState>>,
+    morf: Table<'gc>,
+) {
+    let broadcast = gated(
+        ctx,
+        &state,
+        "socket",
+        "morf.broadcast",
+        |ctx, _, mut stack| {
+            let target = match stack.get(0) {
+                LuaValue::String(text) => text.display_lossy().to_string(),
+                _ => return Err(HostError("broadcast needs a verb".into()).into()),
+            };
+            morf_io::check_broadcast_arguments(stack.len().saturating_sub(1))
+                .map_err(HostError::from)?;
+            let mut args = Vec::with_capacity(stack.len().saturating_sub(1));
+            for index in 1..stack.len() {
+                args.push(wire_value(stack.get(index)).map_err(HostError::from)?);
+            }
+            stack.replace(ctx, morf_io::broadcast(target, args));
+            Ok(CallbackReturn::Return)
+        },
+    );
     morf.set_field(ctx, "broadcast", broadcast);
 }

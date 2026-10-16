@@ -11,7 +11,10 @@ use crate::{
 };
 
 mod lint;
+mod permissions;
 pub(crate) mod reload_band;
+
+pub use permissions::PermissionMode;
 
 pub(crate) use lint::lint_path;
 
@@ -33,12 +36,12 @@ impl Runtime {
         let reactive = Rc::new(StateCell::new(ReactiveState::new()));
         *reactive.borrow_mut().limits_mut() = limits;
         let module_roots = Rc::new(RefCell::new(default_module_roots()));
-        let module_records = Rc::new(RefCell::new(Vec::new()));
+        let permissions = Rc::new(RefCell::new(Default::default()));
         install_reactive_api(
             &mut lua,
             Rc::clone(&reactive),
             Rc::clone(&module_roots),
-            Rc::clone(&module_records),
+            Rc::clone(&permissions),
             limits,
             screen.as_ref(),
         );
@@ -51,7 +54,7 @@ impl Runtime {
             handoff_authorizer: None,
             policy_retirement: None,
             module_roots,
-            module_records,
+            permissions,
             lint_queue: RefCell::new(Vec::new()),
             reload_error: RefCell::new(None),
         };
@@ -69,13 +72,45 @@ impl Runtime {
                 .borrow_mut()
                 .insert(0, parent.to_path_buf());
         }
+        self.adopt_config_file(name);
+        self.execute_scoped(name, source, None)
+    }
+
+    /// Runs `source` as one top level; a plugin's runs inside the
+    /// permission gate's scope for it.
+    pub(crate) fn execute_scoped(
+        &mut self,
+        name: &str,
+        source: &[u8],
+        plugin: Option<(&str, &Path)>,
+    ) -> Result<(), Error> {
+        let roots = self.module_roots.borrow().clone();
         let executor = self
             .lua
             .try_enter(|ctx| {
                 let closure = Closure::load(ctx, Some(name), source)?;
+                if let Some((plugin, path)) = plugin {
+                    let holder = self.permissions.borrow_mut().admit(
+                        ctx,
+                        &self.reactive,
+                        &roots,
+                        plugin,
+                        path,
+                        crate::vm::permissions::ModuleKind::Plugin,
+                    );
+                    self.reactive.borrow_mut().permissions_mut().enter(holder);
+                }
                 Ok(ctx.stash(Executor::start(ctx, closure.into(), ())))
             })
             .map_err(|error| Error::Load(format!("{name}: {error}")))?;
+        let result = self.drive_top_level(executor);
+        if plugin.is_some() {
+            self.reactive.borrow_mut().permissions_mut().leave();
+        }
+        result
+    }
+
+    fn drive_top_level(&mut self, executor: luna::StashedExecutor) -> Result<(), Error> {
         self.prepare_jit();
 
         let slice_fuel = self.limits.slice_fuel.max(1);
@@ -119,26 +154,6 @@ impl Runtime {
         self.lua
             .enter(|ctx| run_destroyed_hooks(&self.reactive, ctx, self.limits));
         result
-    }
-
-    /// Every module this runtime has loaded, with its origin and its
-    /// permission declaration (PLAN item 4, step 1: declare only).
-    pub fn module_declarations(&self) -> Vec<crate::vm::permissions::ModuleDeclaration> {
-        let mut records = self.module_records.borrow().clone();
-        records.sort_by(|a, b| a.name.cmp(&b.name));
-        records
-    }
-
-    /// Where this shell's module approvals live: JSON under its XDG
-    /// state directory (PLAN item 4, step 2).
-    pub fn approvals_path(&self) -> Result<PathBuf, String> {
-        let root = self
-            .reactive
-            .borrow()
-            .lifecycle()
-            .shell_root()
-            .to_path_buf();
-        Ok(shell_storage_dir(&root, StorageKind::State)?.join("permissions-approvals.json"))
     }
 
     /// Replaces the ordered filesystem roots used for user Lua modules.

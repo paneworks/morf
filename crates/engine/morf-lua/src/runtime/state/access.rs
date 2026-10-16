@@ -58,6 +58,8 @@ parts! {
     terminals, terminals_mut: crate::runtime::terminals::TerminalHub;
     /// Every `ui.Image`.
     images, images_mut: crate::runtime::images::ImageNodes;
+    /// The load-time gate over imported modules.
+    permissions, permissions_mut: crate::vm::permissions::Gate;
 }
 
 impl ReactiveState {

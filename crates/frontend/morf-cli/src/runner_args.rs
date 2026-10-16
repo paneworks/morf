@@ -85,7 +85,8 @@ impl RunnerArgs {
                 Runner::Test => 0,
             }),
             wait: Duration::ZERO,
-            no_dbus: false,
+            // A check reaches no bus unless given one of its own.
+            no_dbus: runner == Runner::Check,
             private_bus: false,
             // A test must not write to the settings of the person running it;
             // a check or a picture usually wants to read them.
@@ -220,7 +221,10 @@ pub(crate) fn parse_runner(runner: Runner, rest: &[&str]) -> Result<RunnerArgs, 
                 parsed.ipc.push(words);
             }
             ("--no-dbus", _) => parsed.no_dbus = true,
-            ("--private-bus", _) => parsed.private_bus = true,
+            ("--private-bus", _) => {
+                parsed.private_bus = true;
+                parsed.no_dbus = false;
+            }
             ("--isolate", _) => parsed.isolate = true,
             ("--no-isolate", _) => parsed.isolate = false,
             ("--strict", Runner::Check) => parsed.strict = true,

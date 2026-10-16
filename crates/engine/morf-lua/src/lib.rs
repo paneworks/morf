@@ -27,10 +27,15 @@ pub use self::runtime::resources::ResourceCounts;
 pub use self::runtime::session_lock::SessionLockState;
 pub use self::runtime::text_inputs::KeyModifiers;
 pub use self::runtime::wake::{ClockPrecision, DeadlineCause};
+pub use self::vm::config::PermissionMode;
 pub use self::vm::extensions::{Extension, NodesRemoved, register_extension};
 pub use self::vm::harness::HostFunction;
 pub use self::vm::loader::{project_library, runtimepath_roots};
-pub use self::vm::permissions::{Approvals, ModuleDeclaration, fingerprint as module_fingerprint};
+pub use self::vm::permissions::{
+    APPROVALS_FILE, Approval, Approvals, Declaration, GATED_GROUPS, Grant, ModuleDeclaration,
+    ModuleKind, ModuleTree, Origin, PERMISSION_GROUPS, canonical as canonical_path, engine_library,
+    fingerprint as module_fingerprint, manifest_path,
+};
 pub use self::vm::types::*;
 pub use self::vm::types_gen::generate_types;
 pub use morf_value::IpcValue;

@@ -316,3 +316,25 @@ every `Rect`; it reads them only on a node one of them has moved on
 CPU bench's draw list for the cards and for the glass cases stays within
 the noise: 124.0-128.1 against 126.9-127.3 µs, and 18.7-18.9 against
 19.5-19.8 µs (`DrawList (reused)`, three quiet rounds of four).
+
+# Imported-module bookkeeping (PLAN item 4)
+
+What the permission bookkeeping costs one load of caelestia
+(`examples/shells/caelestia/shell/init.lua`), measured by
+`cargo test --release -p morf-cli -- --ignored --nocapture permission_cost`
+on the 24-core desk under a load average of about 11:
+
+```
+modules loaded            232; 67 outside the configuration's folder; 5 imported
+before                    52.1 ms a load: each of the 67 hashed its whole folder
+                          on every require -- 3095 files, 43.8 MB read
+after                     3.05 ms a load: 232 modules resolved and classified,
+                          5 manifests read as data, store looked up, nothing hashed
+library elsewhere         3.35 ms: the engine's library installed at another path
+                          (a Nix store path on MORF_RUNTIME_PATH), each module
+                          compared byte for byte with the installed copy
+```
+
+The approval store is read once per load and an imported module is hashed
+only when the store holds an entry for it, over its own tree: a single
+file and its manifest, or a directory module's folder.

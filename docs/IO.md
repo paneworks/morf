@@ -641,3 +641,119 @@ geometry as exports without constructing or parsing SVG documents in Lua.
 x, y, tolerance)` returns the last hit's 1-based index or nil. Tolerance defaults
 to 6 pixels. These native queries also accept blur and pixelate rectangles for
 editing; rendering their effects uses the regional operations above.
+
+## Imported modules: declare, approve, hold
+
+Everything on this page runs with the user's privileges, and a
+configuration is trusted code: opening it is the user's decision, like
+running a script. Code it pulls from elsewhere is not. A module is
+
+- **config-local** when `require` finds it in the configuration's own
+  folder tree: the folder the configuration really is in, a symlink its
+  author keeps inside it included, with the most specific root winning --
+  a configuration at `~/shell.lua` does not own `~/.local/share/morf/site`;
+- **first-party** when it is the library installed with the running
+  `morf` (`../share/morf/library` beside the binary, or a checkout's
+  `library/`), or a byte-identical copy of one of its files;
+- **imported** otherwise: the site folder, `MORF_RUNTIME_PATH` roots, a
+  plugin script outside the configuration (`plugin/` and `after/plugin/`
+  under a runtime root), an edited copy of a library file -- and the
+  library's own `lib/integrations`, the code morf ships that talks to
+  third-party programs and services.
+
+### Manifests
+
+An imported module says what it will touch in a manifest beside its entry
+point: `name.permissions.lua` beside a single-file module or plugin
+`name.lua`, `permissions.lua` inside a directory module (`name/init.lua`).
+Siblings in one folder each have their own. The file returns a table of
+groups:
+
+```lua
+-- weather.permissions.lua
+return {
+  http = { "api.open-meteo.com", "wttr.in" },
+  fs = { "$XDG_CACHE_HOME/morf" },
+  run = false,
+}
+```
+
+A group is `true` (anything in it), a list of names (programs, hosts, bus
+names, paths, services; one name may be a plain string), or `false` /
+absent (nothing). The gated groups are `run` (also spelled `process`),
+`fs`, `dbus`, `http`, `socket`, `pam` and `greetd`; `services`, `system`,
+`desktop`, `media` and `io` are declared for the reader. A manifest is
+read as data, once per load: it runs in an empty environment -- no
+`morf`, no `require`, no globals -- with a small instruction budget, so
+reading one can only ever produce a value. One that does not return such a
+table is reported, and its module loads as undeclared.
+
+A grant of `run = true`, or a `run` list naming a program that runs
+whatever it is handed -- a shell (`sh`, `bash`, `zsh`, ...), an
+interpreter (`python3`, `node`, `lua`, `perl`, ...) or a launcher that
+execs its arguments (`env`, `xargs`, `sudo`, `systemd-run`, a terminal,
+...) -- is shown everywhere as "runs anything it is told: this asks for
+everything."
+
+### The gate
+
+While an unapproved imported module's top level runs, every gated API
+called -- by it, by a function or module it calls, a chunk it `load`s, a
+coroutine it resumes, a metamethod it triggers, a configuration module it
+`require`s first -- returns `nil, "permission: ..."` naming the module and
+the group, and logs that line once at `warn`. The shell keeps running. A
+directory module may still write inside its own folder; a single-file
+module or plugin has none. The gated APIs are `morf.run`, `morf.spawn`,
+`morf.kill`, `morf.process`, `morf.process_view` (and a view's `start`,
+`write`, `kill`, `signal`), `morf.exec_detached` (also on `morf.core`),
+`ui.Terminal`, a desktop entry's `launch`/`launch_action`, `morf.connect`,
+`morf.request_socket`, `morf.socket`, `morf.socket_server` (and a
+socket's `send`, `set_connected`, a server's `accept`, `set_active`),
+`morf.broadcast`, `morf.http.request`/`get`/`post`, all of `morf.dbus`
+(proxies and their methods, `call_async`, `serve` and a service's
+methods, the name queries), `morf.status_notifier.subscribe`,
+`morf.pam.*`, `morf.greetd.*`, the writing half of `morf.fs` (`write`,
+`append`, `mkdir`, `remove`, `rename`, `copy`, `symlink`), a `morf.file`
+handle's `write`, a `morf.file_view`'s `set_text`/`set_data`,
+`morf.json.write_file`, `morf.image.encode_png`/`process`/`compose` and
+`morf.screencopy.save`. The same callbacks answer on `require("morf.io")`
+and `require("morf.core")`.
+
+The gate holds a module only while its top level runs. What it leaves
+behind -- a timer, a handler, a binding, a closure, a native it hands out
+-- runs afterwards as freely as the configuration's own code: the engine
+cannot tell, when such a call is made, who arranged it. Approve a module
+only when you would run its code yourself.
+
+### Approving: `morf approve`
+
+```sh
+morf approve [--yes] <shell.lua>
+morf approve [--yes] -c <name>
+```
+
+reads the configuration with every gated API refused and no bus or display
+reachable, so nothing it asks about has run privileged first. It lists
+each imported module and plugin -- those that loaded, and those its
+sources `require` by a literal name, marked "found in a source" -- in
+plain words, asks about each one not already approved (`y` approves), and
+writes the answers to `permissions-approvals.json` in the shell's state
+folder (`$XDG_STATE_HOME/morf/<shell>/`, keyed by the configuration's
+canonical folder, so every spelling of its path shares one). An approval is
+pinned to an FNV-1a fingerprint of the module's files -- a directory
+module's whole folder, a single file and its manifest -- and its
+declaration: any edit to either lapses it, and the next `morf approve`
+asks again. A module required under a computed name is found only when it
+runs. `--yes` approves everything without asking, for scripts that have
+decided already. The exit status is 0 when every imported module stands
+approved, 1 when one was not, and 2 when the configuration could not be
+read or stopped loading before it named any imported module. A
+configuration that stops part way -- something it expected from a refused
+call was not there -- is walked as far as it got, and says so.
+
+`morf check` prints the same words for each imported module it loaded,
+with where it stands; it holds every imported module, approved or not, and
+reaches no bus unless given `--private-bus`. `--strict` fails an imported
+integration that ships no manifest, and an unreadable manifest is always an
+error. `morf test` keeps approvals in its scratch state, where
+`test.approve(name)` adds one.
