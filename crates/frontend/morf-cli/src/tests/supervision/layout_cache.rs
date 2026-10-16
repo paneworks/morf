@@ -14,6 +14,7 @@ fn cached_at(revision: u64, size: (u32, u32), scale_120: u32) -> CachedLayout {
         input_paint: u64::MAX,
         backdrop: Vec::new(),
         keyboard_focus: String::new(),
+        band: None,
     }
 }
 

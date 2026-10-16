@@ -149,10 +149,11 @@ impl Runtime {
         }
         // A source set outright, not animated, is followed at once too.
         crate::runtime::state::apply_follows(&mut self.reactive.borrow_mut());
+        let reported = self.offer_reload_failure();
         // Changes to nodes nothing shows are not painted: a hidden panel's
         // chart that follows a counter every second would otherwise draw
         // every output every second for a picture nobody sees.
-        service_changed || self.reactive.borrow().revisions().shown_since(before)
+        service_changed || reported || self.reactive.borrow().revisions().shown_since(before)
     }
 }
 

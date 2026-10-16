@@ -9,6 +9,7 @@ use morf_scene::NodeHandle;
 use morf_text::TextSystem;
 
 use crate::host::layers::window_layer_id;
+use crate::host::reload_band::{band_for, band_input};
 use crate::host::surfaces::{Window, keyboard_focus_of};
 
 use super::auxiliary::AuxiliaryKind;
@@ -49,6 +50,12 @@ pub fn lay_out_layer(
     // way there.
     runtime.sync_text_inputs(&layout, text);
     runtime.observe_stretch(&layout);
+    let band = (layer == morf_app::PRIMARY_LAYER)
+        .then(|| {
+            let previous = cache.as_deref().and_then(|cached| cached.band.as_ref());
+            band_for(runtime, previous, (width, height), text)
+        })
+        .flatten();
     let (input, input_paint) = {
         let scene = runtime.scene();
         let stamp = (!fresh).then(|| scene.input_stamp(root).ok()).flatten();
@@ -59,7 +66,7 @@ pub fn lay_out_layer(
             layer,
             config,
             cache.as_deref(),
-            stamp,
+            (stamp, band_input(band.as_ref())),
         )?
     };
     // The clock the animations run on is the frame callbacks, drawn or not.
@@ -75,6 +82,7 @@ pub fn lay_out_layer(
         input_paint,
         backdrop: Vec::new(),
         keyboard_focus: config.keyboard_focus.clone(),
+        band,
     })
 }
 
@@ -141,6 +149,7 @@ pub fn lay_out_auxiliary(
         input_paint: u64::MAX,
         backdrop: Vec::new(),
         keyboard_focus: String::new(),
+        band: None,
     });
     Ok(())
 }

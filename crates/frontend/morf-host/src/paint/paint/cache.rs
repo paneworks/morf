@@ -43,6 +43,8 @@ pub struct CachedLayout {
     pub backdrop: Vec<Region>,
     /// The keyboard focus policy last sent for this surface.
     pub keyboard_focus: String,
+    /// The engine's reload-error band, as the primary surface last drew it.
+    pub band: Option<morf_lua::BandLayout>,
 }
 
 impl CachedLayout {
@@ -58,6 +60,7 @@ impl CachedLayout {
             input_paint: u64::MAX,
             backdrop: Vec::new(),
             keyboard_focus: String::new(),
+            band: None,
         }
     }
 
@@ -69,6 +72,7 @@ impl CachedLayout {
         self.revision = u64::MAX;
         self.scale_120 = 0; // Force a full layout, never an incremental update.
         self.keyboard_focus.clear();
+        self.band = None;
     }
 
     /// Whether this layout still describes the scene.
