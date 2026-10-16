@@ -3,6 +3,7 @@
 use crate::process::native::{Endpoint, SocketPath, birth, peer, server};
 mod controls;
 pub(crate) mod handoff;
+mod rendered;
 use std::{
     io::{self, Write},
     os::{fd::BorrowedFd, unix::net::UnixStream},
@@ -22,6 +23,7 @@ pub struct Provider {
     controls: Arc<Mutex<controls::Controls>>,
     runtime_generation: Option<u64>,
     gate: Arc<handoff::Gate>,
+    rendered: Arc<Mutex<rendered::Rendered>>,
 }
 impl Provider {
     /// `output` must come from the actual LayerClient's own_output snapshot.
@@ -76,6 +78,8 @@ impl Provider {
         let persist_gate = gate.clone();
         let restore_gate = gate.clone();
         let native_work = controls.clone();
+        let rendered = Arc::new(Mutex::new(rendered::Rendered::default()));
+        let rendered_reader = rendered.clone();
         let work_waker = ui_waker.clone();
         let (wake, wait) = UnixStream::pair()?;
         wake.set_nonblocking(true)?;
@@ -94,7 +98,19 @@ impl Provider {
                             && request["version"] == 1
                             && request.as_object()?.len() == 2
                         {
-                            controller.lock().ok()?.capabilities()
+                            let mut capabilities = controller.lock().ok()?.capabilities();
+                            capabilities["rendered_context"] = serde_json::json!(true);
+                            capabilities
+                        } else if request["op"] == "rendered-context"
+                            && request["version"] == 1
+                            && request.as_object()?.len() == 2
+                        {
+                            ui_waker.wake();
+                            let capabilities = controller.lock().ok()?.capabilities();
+                            let generation =
+                                capabilities["ui_generation"].as_str()?.parse().ok()?;
+                            let now = u64::try_from(controls::now()?.as_nanos()).ok()?;
+                            rendered_reader.lock().ok()?.report(&epoch, generation, now)
                         } else if request["op"] == "handoff-state"
                             && request["version"] == 1
                             && request.as_object()?.len() == 2
@@ -162,12 +178,36 @@ impl Provider {
             controls,
             runtime_generation: None,
             gate,
+            rendered,
         })
     }
     /// Native host startup completed its first configured surface/frame.
     /// This is not compositor presentation acknowledgement or region evidence.
     pub fn configured(&self) {
         self.configured.store(true, Ordering::Release);
+    }
+
+    pub(crate) fn begin_turn(&self) {
+        if let Ok(mut rendered) = self.rendered.lock() {
+            rendered.busy();
+        }
+    }
+    pub(crate) fn observe_rendered(
+        &self,
+        host: &crate::host::turn::Host,
+        runtime: &morf_lua::Runtime,
+    ) {
+        let generation = self.controls.lock().ok().and_then(|controls| {
+            controls.capabilities()["ui_generation"]
+                .as_str()?
+                .parse()
+                .ok()
+        });
+        if let Some(generation) = generation
+            && let Ok(mut rendered) = self.rendered.lock()
+        {
+            rendered.observe(host, runtime, generation);
+        }
     }
 
     /// Runs at most one bounded request on the UI thread. A dispatched receipt
@@ -375,6 +415,20 @@ mod tests {
         assert_eq!(capabilities["ui_generation"], "1");
         assert_eq!(capabilities["root_only"], true);
         assert_eq!(capabilities["recognizer_ownership"], false);
+        assert_eq!(capabilities["rendered_context"], true);
+        client
+            .get_mut()
+            .write_all(b"{\"version\":1,\"op\":\"rendered-context\"}\n")
+            .unwrap();
+        let mut rendered = String::new();
+        client.read_line(&mut rendered).unwrap();
+        let rendered: serde_json::Value = serde_json::from_str(&rendered).unwrap();
+        assert_eq!(rendered["epoch"], ready["epoch"]);
+        assert_eq!(rendered["ui_generation"], "1");
+        assert!(
+            rendered["frame"].is_null(),
+            "a connection/configure alone is not a GPU frame"
+        );
         if unsafe { libc::geteuid() } != 0 {
             // The kernel supplies our actual unprivileged identity. A JSON
             // credential cannot grant authority or change the native state.

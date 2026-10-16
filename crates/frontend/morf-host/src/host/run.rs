@@ -129,6 +129,7 @@ fn drive_surface(
     let mut native_provider = pending_provider;
     if let Some(provider) = &native_provider {
         provider.configured();
+        provider.observe_rendered(&host, runtime);
     }
     let links = Links {
         policy,
@@ -143,6 +144,9 @@ fn drive_surface(
         }
         host.wait(runtime, Some(wake.as_fd()))?;
         wake.drain();
+        if let Some(provider) = &native_provider {
+            provider.begin_turn();
+        }
         let turn = host.turn(runtime, Some(&links))?;
         if host.primary_configured
             && let Some(provider) = &native_provider
@@ -160,6 +164,9 @@ fn drive_surface(
                     )
                 {
                     host.request_paint();
+                }
+                if let Some(provider) = &native_provider {
+                    provider.observe_rendered(&host, runtime);
                 }
             }
             Turn::Stop => return Ok(()),

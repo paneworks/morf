@@ -277,3 +277,9 @@ pub struct WgpuBackend {
     /// Raised by the driver when the device is lost; see `device_lost`.
     pub(crate) lost: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
+impl WgpuBackend {
+    /// Observes a skipped submission without consuming the host's repaint debt.
+    pub fn last_frame_skipped(&self) -> bool {
+        self.skipped
+    }
+}

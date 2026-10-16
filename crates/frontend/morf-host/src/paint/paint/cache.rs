@@ -16,6 +16,9 @@ use super::frame_log::frame_split_wanted;
 /// Keeping what the last one was built from lets those frames reuse it.
 #[derive(Clone)]
 pub struct CachedLayout {
+    /// Scene paint stamp actually submitted by the GPU path. Layout-only
+    /// checks and skipped frames never supply native rendered evidence.
+    pub painted: Option<u64>,
     pub layout: Layout,
     pub revision: u64,
     pub size: (u32, u32),
@@ -46,6 +49,7 @@ impl CachedLayout {
     /// A layout that was computed without the cache: nothing reuses it.
     pub fn uncached(layout: Layout) -> Self {
         Self {
+            painted: None,
             layout,
             revision: u64::MAX,
             size: (0, 0),
@@ -60,6 +64,7 @@ impl CachedLayout {
     /// A soft reload replaces the scene, while its Wayland surface survives.
     /// Neither handles nor revision numbers can identify the new layout.
     pub fn invalidate_scene(&mut self) {
+        self.painted = None;
         self.layout = Layout::default();
         self.revision = u64::MAX;
         self.scale_120 = 0; // Force a full layout, never an incremental update.

@@ -76,6 +76,7 @@ pub fn paint_layer(
     runtime.observe_stretch(&layout);
     split.mark("stretch");
     let scene = runtime.scene();
+    let painted = scene.paint_stamp(root).map_err(|error| error.to_string())?;
     let stamp = (!fresh).then(|| scene.input_stamp(root).ok()).flatten();
     let (input, input_paint) = send_input_region(
         &scene,
@@ -234,6 +235,7 @@ pub fn paint_layer(
     split.mark("observe layout");
     split.finish();
     Ok(CachedLayout {
+        painted: (!renderer.backend_mut().last_frame_skipped()).then_some(painted),
         layout,
         revision,
         size: (width, height),

@@ -66,6 +66,7 @@ pub fn lay_out_layer(
     client.request_frame(WindowId::Layer(layer));
     runtime.observe_layout_with(&layout, fresh);
     Ok(CachedLayout {
+        painted: None,
         layout,
         revision,
         size: (width, height),
@@ -131,6 +132,7 @@ pub fn lay_out_auxiliary(
         kind.request_frame(client, surface.id);
     }
     surface.layout = Some(CachedLayout {
+        painted: None,
         layout,
         revision,
         size,

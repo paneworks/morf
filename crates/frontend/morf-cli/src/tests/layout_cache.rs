@@ -28,6 +28,7 @@ fn cached(runtime: &Runtime, root: NodeHandle) -> CachedLayout {
         height: 300.0,
     };
     CachedLayout {
+        painted: None,
         layout: Layout::compute(&runtime.scene(), root, size, &mut NoText).unwrap(),
         revision: runtime.scene().layout_revision_of(root),
         size: (400, 300),

@@ -180,6 +180,7 @@ pub fn paint_auxiliary_surface(
         kind.request_frame(client, surface.id);
     }
     surface.layout = Some(CachedLayout {
+        painted: None,
         layout,
         revision,
         size,
