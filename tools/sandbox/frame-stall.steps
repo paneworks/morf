@@ -5,6 +5,11 @@
 #   MORF_CONFIG=examples/demos/motion/frame-stall.lua MORF_ENV=MORF_TEST_HOOKS=1 \
 #     tools/sandbox/nested.sh morf stall tools/sandbox/frame-stall.steps
 #
+# or, where the nested Hyprland cannot run (an NVIDIA-only machine), under a
+# headless sway, which runs the rehearsal and sets the hooks itself:
+#
+#   HOST_GL=1 VULKAN=nixVulkanNvidia tools/sandbox/headless.sh stall tools/sandbox/frame-stall.steps
+#
 # A budget is Lua instructions per firing (about 9 ns each in a release
 # build); STALL_PHASES replaces the list of budget:interval pairs, and
 # PHASE_SECONDS how long each is read over.
