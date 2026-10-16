@@ -218,8 +218,8 @@ pub enum DrawCommand {
         /// Layers in composition order; the first establishes the field.
         layers: Vec<SdfLayer>,
     },
-    /// Frosted glass: what this surface has already drawn beneath a rounded
-    /// rectangle, blurred and drawn back inside it.
+    /// Glass: what this surface has already drawn beneath a rounded
+    /// rectangle, bent by its lens, frosted, tinted and drawn back inside it.
     ///
     /// Emitted just before the rectangle's own fill, which then tints it. The
     /// backend blurs at reduced resolution and keeps the result until what is
@@ -241,6 +241,13 @@ pub enum DrawCommand {
         saturation: f64,
         /// A colour washed over the backdrop, strength in its alpha.
         tint: Color,
+        /// How far the lens moves the backdrop at the rim, in logical pixels:
+        /// positive draws it in from the middle, negative from outside.
+        refraction: f64,
+        /// How much of the blurred backdrop shows over the sharp one.
+        frost: morf_scene::Frost,
+        /// How brightly the rim catches the light, 0 to 1.
+        rim: f64,
     },
     /// A terminal's screen: a grid of cells, each drawn at its own column
     /// and row whatever the font would have advanced it by.
@@ -267,15 +274,20 @@ pub enum DrawCommand {
 /// every doubling of the radius is another pass over the region.
 pub const MAX_BACKDROP_BLUR: f64 = 96.0;
 
+/// The blur a frosted glass uses when it names no `backdrop_blur` of its own.
+pub const GLASS_BLUR: f64 = 16.0;
+
 impl DrawCommand {
     /// For a backdrop, the area it reads beneath itself: its shape widened by
     /// how far the blur reaches, so the edge of the glass pulls in what lies
-    /// just outside it rather than darkening towards nothing.
+    /// just outside it rather than darkening towards nothing, and by how far
+    /// a lens bending outward looks past its edge.
     pub fn backdrop_reach(&self) -> Option<Geometry> {
         let Self::Backdrop {
             bounds,
             transform,
             radius,
+            refraction,
             ..
         } = self
         else {
@@ -283,7 +295,7 @@ impl DrawCommand {
         };
         Some(crate::effects::expand_geometry(
             transform.bounds(*bounds),
-            radius * 2.0,
+            (radius * 2.0).max(-refraction),
         ))
     }
 }

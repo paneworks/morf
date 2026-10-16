@@ -783,7 +783,7 @@ ui.Rect {
 The whole table is one property: a binding may return it, and a behavior
 on it moves every stop's colour and position at once.
 
-### Frosted glass
+### Glass
 
 `backdrop_blur` on a `Rect` or `ClipRect` takes a radius, in logical
 pixels: whatever the same surface drew beneath the shape — a wallpaper
@@ -812,6 +812,41 @@ is done at half resolution and below, and kept: a panel blurs again only
 when something drawn beneath it within that reach changes, so a desk whose
 clocks tick on top of its panels blurs nothing after the first frame. A
 change under the glass repaints the whole panel.
+
+The rest of the glass is three more properties, each an ordinary property
+a behavior, a spring or a binding drives:
+
+- `glass_refraction` bends what is behind like a lens with a rounded rim,
+  in logical pixels: the backdrop at the very edge is drawn from that far
+  in, the bend fading to nothing a quarter of the way across. Negative
+  bends it the other way, drawing in what lies beyond the edge.
+- `glass_frost` is how much of the blur shows over the backdrop as drawn:
+  1 (the default) is frosted, 0 clear, anything between a mix. `"auto"`
+  judges by what is behind, point by point: where the backdrop differs
+  from its own blur by more than a quiet ground does -- text, stripes, a
+  busy wallpaper -- it frosts, and where it is calm it stays clear. With
+  no `backdrop_blur` of its own a frosted glass blurs at 16.
+- `glass_rim` lights the edge, 0 to 1, brightest along the top and left
+  where the light falls.
+
+`glass` sets the material in one table -- `refraction`, `frost`, `rim`,
+`tint`, `blur` and `saturation` are `glass_refraction`, `glass_frost`,
+`glass_rim`, `backdrop_tint`, `backdrop_blur` and `backdrop_saturation` --
+and what it leaves out keeps its value. A behavior on any of those moves
+it when the table changes.
+
+```lua
+local pane = ui.Rect {
+  radius = 22,
+  color = "#ffffff00",
+  glass = { refraction = 18, frost = 0, rim = 0.6 },   -- clear, a lens and a lit rim
+  behavior = { glass_frost = { duration = 250 } },
+}
+pane.glass = { frost = "auto" }   -- frosted where what is behind is busy
+```
+
+Refraction, frost and rim change nothing beneath the glass, so moving
+them never blurs again; `blur` does.
 
 It only sees this surface. Over a separate wallpaper layer, or over other
 windows, the shape has nothing beneath it to blur; for that, `backdrop_blur

@@ -69,6 +69,119 @@ fn close(pixel: [u8; 4], wanted: [u8; 3], slack: u8) -> bool {
     (0..3).all(|channel| pixel[channel].abs_diff(wanted[channel]) <= slack)
 }
 
+/// The luma variance of the 32-square in the middle of the glass, 0 to 1.
+fn variance(pixels: &[u8]) -> f64 {
+    let lumas: Vec<f64> = (16..48)
+        .flat_map(|y| (16..48).map(move |x| (x, y)))
+        .map(|(x, y)| f64::from(at(pixels, x, y)[0]) / 255.0)
+        .collect();
+    let mean = lumas.iter().sum::<f64>() / lumas.len() as f64;
+    lumas.iter().map(|luma| (luma - mean).powi(2)).sum::<f64>() / lumas.len() as f64
+}
+
+const STRIPES: [&str; 2] = ["#000000ff", "#ffffffff"];
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+fn clear_glass_bends_the_stripes_at_its_rim_and_leaves_its_middle_sharp() {
+    require_gpu!();
+    let clear = |refraction: f64| {
+        let (scene, root) = desk(
+            STRIPES,
+            &[
+                ("glass_refraction", Value::Number(refraction)),
+                ("glass_frost", Value::Number(0.0)),
+            ],
+        );
+        frame(&scene, root, BlendSpace::Linear)
+    };
+    let flat = clear(0.0);
+    let bent = clear(10.0);
+    // Just inside the left edge the white stripe under it is drawn from the
+    // black one beyond it.
+    assert!(at(&flat, 9, 32)[0] > 250, "{:?}", at(&flat, 9, 32));
+    assert!(at(&bent, 9, 32)[0] < 5, "{:?}", at(&bent, 9, 32));
+    // The middle is past the rim: the stripes are where they were, and sharp.
+    for x in 24..40 {
+        assert_eq!(at(&bent, x, 32), at(&flat, x, 32), "x = {x}");
+        assert!(at(&bent, x, 32)[0] < 3 || at(&bent, x, 32)[0] > 252);
+    }
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+fn frost_takes_the_detail_out_by_as_much_as_it_is_asked() {
+    require_gpu!();
+    let frosted = |frost: f64| {
+        let (scene, root) = desk(
+            STRIPES,
+            &[
+                ("backdrop_blur", Value::Number(6.0)),
+                ("glass_frost", Value::Number(frost)),
+            ],
+        );
+        variance(&frame(&scene, root, BlendSpace::Linear))
+    };
+    let (clear, half, full) = (frosted(0.0), frosted(0.5), frosted(1.0));
+    assert!(clear > 0.2, "clear glass keeps the stripes: {clear}");
+    assert!(full < clear * 0.05, "frosted: {full} against {clear}");
+    assert!(full < half && half < clear, "{clear} > {half} > {full}");
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+fn automatic_frost_blurs_a_busy_backdrop_and_leaves_a_quiet_one_clear() {
+    require_gpu!();
+    let auto = [
+        ("backdrop_blur", Value::Number(6.0)),
+        ("glass_frost", Value::from("auto")),
+    ];
+    let (scene, root) = desk(STRIPES, &auto);
+    let busy = variance(&frame(&scene, root, BlendSpace::Linear));
+    assert!(busy < 0.01, "black and white stripes are frosted: {busy}");
+    // Two greys a few steps apart: too little to frost, so they stay apart.
+    let (scene, root) = desk(["#808080ff", "#888888ff"], &auto);
+    let quiet = frame(&scene, root, BlendSpace::Linear);
+    let (dark, light) = (at(&quiet, 36, 32)[0], at(&quiet, 44, 32)[0]);
+    assert!(
+        light >= dark + 6,
+        "the quiet stripes stay sharp: {dark} and {light}"
+    );
+    let (scene, root) = desk(
+        ["#808080ff", "#888888ff"],
+        &[("backdrop_blur", Value::Number(6.0))],
+    );
+    let frosted = frame(&scene, root, BlendSpace::Linear);
+    assert!(at(&frosted, 44, 32)[0].abs_diff(at(&frosted, 36, 32)[0]) <= 3);
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+fn the_rim_catches_the_light_on_the_side_that_faces_it() {
+    require_gpu!();
+    let lit = |rim: f64| {
+        let (scene, root) = desk(
+            ["#202020ff", "#202020ff"],
+            &[
+                ("glass_rim", Value::Number(rim)),
+                ("glass_frost", Value::Number(0.0)),
+            ],
+        );
+        frame(&scene, root, BlendSpace::Linear)
+    };
+    let (dark, bright) = (lit(0.0), lit(1.0));
+    let (top, bottom) = (at(&bright, 32, 8)[0], at(&bright, 32, 55)[0]);
+    assert!(top > at(&dark, 32, 8)[0] + 60, "the top edge is lit: {top}");
+    assert!(
+        top > bottom + 20,
+        "more on the top than the bottom: {top}, {bottom}"
+    );
+    assert!(
+        at(&bright, 32, 32)[0] <= at(&dark, 32, 32)[0] + 2,
+        "not the middle"
+    );
+}
+
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn an_opaque_tint_is_the_colour_it_names_in_either_blend_space() {
