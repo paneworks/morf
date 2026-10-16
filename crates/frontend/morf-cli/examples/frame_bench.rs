@@ -114,7 +114,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let gpu_size = args
         .get(3)
-        .filter(|_| args.get(2).map(String::as_str) == Some("gpu"))
+        .filter(|_| matches!(args.get(2).map(String::as_str), Some("gpu" | "gpu-time")))
         .and_then(|value| value.split_once('x'))
         .and_then(|(w, h)| Some((w.parse::<f64>().ok()?, h.parse::<f64>().ok()?)));
     let argument = |index: usize, fallback: f64| {
@@ -263,6 +263,11 @@ fn main() {
     // `gpu` renders one frame on a real adapter instead of timing anything: a
     // shader the driver refuses looks fine from the CPU side, and the only way
     // to find out is to build the pipelines and draw, headless.
+    if std::env::args().nth(2).as_deref() == Some("gpu-time") {
+        let frames = args.get(4).and_then(|value| value.parse().ok());
+        gpu::time(&mut runtime, root, size, &config, frames.unwrap_or(100));
+        return;
+    }
     if std::env::args().nth(2).as_deref() == Some("gpu") {
         let picture = args.get(if gpu_size.is_some() { 4 } else { 3 });
         gpu::run(&mut runtime, root, size, &config, picture);

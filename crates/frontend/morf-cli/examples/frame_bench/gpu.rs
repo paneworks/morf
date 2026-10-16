@@ -12,13 +12,14 @@ use morf_scene::NodeHandle;
 
 use super::settled;
 
-pub fn run(
+/// A renderer for the configuration's primary surface, its shaders built,
+/// and the layout settled against its own faces.
+fn renderer(
     runtime: &mut Runtime,
     root: NodeHandle,
     size: Size,
     config: &str,
-    picture: Option<&String>,
-) {
+) -> (RenderEngine<WgpuBackend>, morf_layout::Layout, usize) {
     let (width, height) = (size.width, size.height);
     let backend =
         pollster::block_on(WgpuBackend::new(width as u32, height as u32)).expect("a GPU adapter");
@@ -30,7 +31,7 @@ pub fn run(
     // shaped by the renderer's text system, and a binding placing
     // something beside a label must read that label's real width, not
     // the ruled estimate the timings use.
-    let mut computed = settled(runtime, root, size, engine.backend_mut(), config);
+    let computed = settled(runtime, root, size, engine.backend_mut(), config);
     let mut shaders = 0usize;
     for shader in runtime.shaders() {
         engine
@@ -49,6 +50,66 @@ pub fn run(
             .unwrap_or_else(|error| panic!("{config}: shader pipeline: {error}"));
         shaders += 1;
     }
+    (engine, computed, shaders)
+}
+
+/// `frame_bench config.lua gpu-time [WxH] [frames]`: the whole frame drawn
+/// from nothing again and again, timed to the end of its submission and to
+/// the GPU finishing it, the fastest and the median of each.
+pub fn time(runtime: &mut Runtime, root: NodeHandle, size: Size, config: &str, frames: usize) {
+    let (mut engine, computed, _) = renderer(runtime, root, size, config);
+    let draw = |engine: &mut RenderEngine<WgpuBackend>| {
+        engine.forget();
+        let started = std::time::Instant::now();
+        engine
+            .render(&runtime.scene(), &computed, 120, |_| {})
+            .unwrap_or_else(|error| panic!("{config}: render: {error}"));
+        let submitted = started.elapsed();
+        engine.backend_mut().wait_idle();
+        (submitted, started.elapsed())
+    };
+    for _ in 0..5 {
+        draw(&mut engine);
+    }
+    let (mut submitted, mut finished): (Vec<Duration>, Vec<Duration>) =
+        (0..frames.max(1)).map(|_| draw(&mut engine)).unzip();
+    submitted.sort();
+    finished.sort();
+    let ms = |times: &[Duration], at: usize| times[at].as_secs_f64() * 1e3;
+    let info = engine.backend_mut().info().clone();
+    let list = engine.last_list();
+    println!("{config}");
+    println!("  adapter            {} ({:?})", info.name, info.backend);
+    println!(
+        "  frame              {} commands, {} layers, {}x{}",
+        list.commands.len(),
+        list.layers.len(),
+        size.width,
+        size.height
+    );
+    let middle = submitted.len() / 2;
+    println!(
+        "  submitted          {:.2} ms fastest, {:.2} ms median",
+        ms(&submitted, 0),
+        ms(&submitted, middle)
+    );
+    println!(
+        "  finished           {:.2} ms fastest, {:.2} ms median  ({} frames)",
+        ms(&finished, 0),
+        ms(&finished, middle),
+        finished.len()
+    );
+}
+
+pub fn run(
+    runtime: &mut Runtime,
+    root: NodeHandle,
+    size: Size,
+    config: &str,
+    picture: Option<&String>,
+) {
+    let (width, height) = (size.width, size.height);
+    let (mut engine, mut computed, shaders) = renderer(runtime, root, size, config);
     // Twice: the second frame is incremental and reuses an effect layer's
     // target; `FRAME_BENCH_GPU_FRAMES` draws more, for `MORF_GPU_WAIT=1`.
     let frames: usize =
