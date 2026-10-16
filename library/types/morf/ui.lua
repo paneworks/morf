@@ -55,6 +55,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -146,6 +147,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -243,6 +245,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -351,6 +354,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -463,6 +467,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -583,6 +588,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -711,6 +717,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -819,6 +826,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -920,6 +928,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -1025,6 +1034,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -1139,6 +1149,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -1247,6 +1258,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -1341,6 +1353,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -1432,6 +1445,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -1525,6 +1539,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -1618,6 +1633,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -1716,6 +1732,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -1808,6 +1825,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -1903,6 +1921,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -1995,6 +2014,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -2092,6 +2112,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")
@@ -2182,6 +2203,7 @@
 ---@field visual_focus (boolean|fun(): boolean)? default Bool(false)
 ---@field layout (any|fun(): any)? default Map({})
 ---@field id (string|fun(): string)? default String("")
+---@field input_context (any|fun(): any)? default Nil
 ---@field layout_direction (string|fun(): string)? default String("")
 ---@field accessible_role (string|fun(): string)? default String("")
 ---@field accessible_name (string|fun(): string)? default String("")

@@ -173,7 +173,34 @@ function M.edge_pan(edge,phase,dx,dy,vx,vy,start_x,start_y)
   end
 end
 
+local context_attached={}
+local function attach_context(root)
+  if context_attached[root] then return end
+  context_attached[root]=true
+  -- Semantic geometry remains laid out while duplicated native recognizers
+  -- are inhibited. These Items take no input and cannot grant ownership.
+  local function height() return root.layout_height or 0 end
+  local function inset() return require("themes.keyboard").inset:get() end
+  local function side_height() return math.max(0,height()-inset()-2*EDGE) end
+  local function half_width() return (root.layout_width or 0)/2 end
+  local function context(role,props)
+    props.id="phone-context-"..role
+    props.input_context={role=role}
+    return ui.Item(props)
+  end
+  ui.reparent(ui.Item {id="phone-context",anchors={fill=true},z=-2,
+    context("top_left",{height=EDGE,width=half_width,anchors={top=true,left=true}}),
+    context("top_right",{height=EDGE,width=half_width,anchors={top=true,right=true}}),
+    context("side_left",{width=EDGE,y=EDGE,height=side_height,anchors={left=true}}),
+    context("side_right",{width=EDGE,y=EDGE,height=side_height,anchors={right=true}}),
+    context("content_bottom",{height=EDGE,anchors={left=true,right=true},
+      y=function() return height()-inset()-EDGE end}),
+    context("physical_bottom",{height=EDGE,anchors={bottom=true,left=true,right=true}}),
+  },root)
+end
+
 function M.attach(root)
+  attach_context(root)
   if attached[root] or not phone() then return end
   attached[root] = true
   if morf.env("CAELESTIA_GESTURE_DRIVER")=="lisgd" then

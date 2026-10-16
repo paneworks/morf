@@ -26,9 +26,13 @@ local SOURCE=[[
       settings=require("sidebar").showing("settings"),
       launcher=require("launcher").drawer.open:get(),menu=require("menus").source:get(),
       keyboard=require("keyboard").active(),mode=require("keyboard").keys.mode:get(),
+      keyboard_context=require("keyboard").drawer.panel.input_context,
       preview=gestures.workspace_preview and {active=gestures.workspace_preview.active,
         offset=gestures.workspace_preview.offset,target=gestures.workspace_preview.target},
       switches=switches}
+  end
+  morf.ipc.prek_handoff_context_model=function(enabled)
+    return require("phone_gestures").handoff(enabled)
   end
 ]]
 local next_id=0
@@ -136,6 +140,34 @@ test.it("native token replacement cancels the previous gesture and preserves ord
 end)
 
 for _,style in ipairs {"material","tsugumori"} do
+  test.it(style.." semantic regions exist independently of portrait recognizers",function()
+    load(style,1200,600)
+    for _,role in ipairs {"top_left","top_right","side_left","side_right","content_bottom","physical_bottom"} do
+      local node=test.find {id="phone-context-"..role}
+      test.truthy(node and node.visible and node.width>0 and node.height>0)
+    end
+    test.falsy(test.find {id="phone-gesture-bottom"})
+  end)
+  test.it(style.." semantic shell geometry survives modeled native inhibition",function()
+    load(style)
+    local roles={"top_left","top_right","side_left","side_right","content_bottom","physical_bottom"}
+    local function visible()
+      for _,role in ipairs(roles) do
+        local node=test.find {id="phone-context-"..role}
+        test.truthy(node and node.visible and node.width>0 and node.height>0)
+      end
+    end
+    visible()
+    -- Explicit policy model only; actual root/native handoff stays separate.
+    test.truthy(test.ipc("prek_handoff_context_model",false))
+    test.advance(100)
+    visible()
+    test.falsy(test.find {id="phone-gesture-bottom"}.visible)
+    accepted(request("keyboard_show")) test.advance(600)
+    test.eq(state().keyboard_context,{role="keyboard",layout="full"})
+    accepted(request("keyboard_toggle_layout")) test.advance(600)
+    test.eq(state().keyboard_context,{role="keyboard",layout="dev"})
+  end)
   test.it(style.." typed Prek controls reuse real drawers, menus and keyboard",function()
     load(style)
     local status=test.ipc("prek-status",state().output)

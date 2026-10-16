@@ -58,6 +58,10 @@ function M.new(spec)
 
   local props = spec.props or {}
   props.id = "drawer-" .. spec.name
+  if spec.name ~= "keyboard" then
+    props.input_context = { role = (authentication or spec.name == "session")
+      and "secure_overlay" or "local_control" }
+  end
   -- A landmark a screen reader walks: what the drawer is, by name.
   local landmark = LANDMARKS[spec.name] or { "region", spec.name:sub(1, 1):upper() .. spec.name:sub(2) }
   props.accessible_role = props.accessible_role or spec.role or landmark[1]

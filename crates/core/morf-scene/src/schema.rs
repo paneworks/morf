@@ -78,6 +78,10 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
         // whoever has to find the node again from outside -- `morf test`'s
         // `test.find { id = ... }`, a log line.
         string("id", ""),
+        // Declarative input meaning on this actual scene node. Native frame
+        // export supplies its geometry; this table supplies no coordinates,
+        // authentication state or input ownership.
+        any("input_context", Value::Nil),
         // "ltr" or "rtl" for this subtree; "" takes the parent's
         // (`direction.rs`).
         string("layout_direction", ""),

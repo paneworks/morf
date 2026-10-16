@@ -43,3 +43,22 @@ ownership/controller protocol remains separate.
 Prek verifies the native process/session/compositor binding around its bounded
 read and exposes copied fresh reports through `prek.morf.regions()`. This does
 not enable production Morf action negotiation or physical input takeover.
+
+When `control-capabilities.semantic_regions` is true, each exported region can
+also contain `semantic={role,layout?}`. A configuration declares this using
+`input_context` on the actual named scene node. Allowed roles are `keyboard`,
+`secure_overlay`, `clock_background`, `content_bottom`, `physical_bottom`,
+`top_left`, `top_right`, `side_left`, `side_right` and `local_control`. Keyboard
+requires a nonempty layout name of at most 128 bytes; other roles cannot set it.
+Unknown fields, caller coordinates and authentication/ownership claims are
+rejected. Annotation changes affect the scene paint stamp and must pass through
+the same GPU witness before they become observable.
+
+Caelestia annotates its real keyboard panel with its current layout, its ordinary
+and authentication drawers, and six separate noninteractive Items for shell
+geometry. These Items remain laid out when native global recognizers are
+inhibited. They do not take input or affect the existing controller behavior.
+Only visible primary-frame nodes are described; missing keyboard annotations
+cannot establish hidden state or complete output coverage. The broker retains
+unknown keyboard knowledge until a complete verified mapping/coverage provider
+can supply it. No semantic annotation changes native lock or handoff authority.

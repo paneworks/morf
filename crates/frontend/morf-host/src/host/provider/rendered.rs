@@ -8,6 +8,8 @@ use serde_json::{Value as Json, json};
 
 const LIMIT: usize = 256;
 const FRESH_NS: u64 = 250_000_000;
+// Leave room for the fixed envelope and maximum-width decimal identities.
+const MAX_FRAME_BYTES: usize = 128 * 1024 - 512;
 
 #[derive(Clone, Debug, PartialEq)]
 struct Region {
@@ -15,6 +17,7 @@ struct Region {
     id: String,
     bounds: Geometry,
     interactive: bool,
+    semantic: Option<Json>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -104,20 +107,27 @@ impl Rendered {
             && self.generation == generation
             && self.sampled <= now
             && now - self.sampled < FRESH_NS;
-        let frame = self.frame.as_ref().filter(|_| fresh).map(|frame| {
+        let frame = self.frame.as_ref().filter(|_| fresh).and_then(|frame| {
             let regions: Vec<_> = frame
                 .regions
                 .iter()
                 .map(|region| {
-                    json!({
+                    let mut value = json!({
                         "node":region.node.to_string(),"id":region.id,"interactive":region.interactive,
                         "bounds":{"x":region.bounds.x,"y":region.bounds.y,
                             "width":region.bounds.width,"height":region.bounds.height},
-                    })
+                    });
+                    if let Some(semantic) = &region.semantic {
+                        value["semantic"] = semantic.clone();
+                    }
+                    value
                 })
                 .collect();
-            json!({"width":frame.size.0,"height":frame.size.1,
-                "scale_120":frame.scale_120,"regions":regions})
+            let frame = json!({"width":frame.size.0,"height":frame.size.1,
+                "scale_120":frame.scale_120,"regions":regions});
+            // Escaping names/layouts can exceed the wire budget even when
+            // every individual field and the region count are valid.
+            (serde_json::to_vec(&frame).ok()?.len() <= MAX_FRAME_BYTES).then_some(frame)
         });
         json!({"version":1,"epoch":epoch,"ui_generation":generation.to_string(),
             "revision":self.revision.to_string(),"sampled_ns":self.sampled.to_string(),
@@ -201,7 +211,16 @@ fn walk(
     if clip.width <= 0.0 || clip.height <= 0.0 {
         return Ok(());
     }
-    if let Value::String(id) = scene.current(node, "id").map_err(|e| e.to_string())?
+    let semantic = semantic(
+        scene
+            .current(node, "input_context")
+            .map_err(|e| e.to_string())?,
+    )?;
+    let id = scene.current(node, "id").map_err(|e| e.to_string())?;
+    if semantic.is_some() && !matches!(id,Value::String(id) if !id.is_empty()) {
+        return Err("input_context requires a named scene node".into());
+    }
+    if let Value::String(id) = id
         && !id.is_empty()
         && bounds.width > 0.0
         && bounds.height > 0.0
@@ -219,6 +238,7 @@ fn walk(
                     element,
                     Element::MouseArea | Element::DropArea | Element::TextInput | Element::Terminal
                 ),
+            semantic,
         });
     }
     for &child in scene.children(node).map_err(|e| e.to_string())? {
@@ -229,6 +249,59 @@ fn walk(
         }
     }
     Ok(())
+}
+fn semantic(value: &Value) -> Result<Option<Json>, String> {
+    if matches!(value, Value::Nil) {
+        return Ok(None);
+    }
+    let Value::Map(fields) = value else {
+        return Err("input_context must be a role table".into());
+    };
+    if fields
+        .keys()
+        .any(|key| !matches!(key.as_str(), "role" | "layout"))
+    {
+        return Err("input_context contains unknown fields".into());
+    }
+    let Some(Value::String(role)) = fields.get("role") else {
+        return Err("input_context lacks a role".into());
+    };
+    if !matches!(
+        role.as_str(),
+        "keyboard"
+            | "secure_overlay"
+            | "clock_background"
+            | "content_bottom"
+            | "physical_bottom"
+            | "top_left"
+            | "top_right"
+            | "side_left"
+            | "side_right"
+            | "local_control"
+    ) {
+        return Err("unknown input_context role".into());
+    }
+    let layout = match fields.get("layout") {
+        Some(Value::String(layout))
+            if role == "keyboard"
+                && !layout.is_empty()
+                && layout.len() <= 128
+                && !layout.chars().any(char::is_control) =>
+        {
+            Some(layout)
+        }
+        None if role != "keyboard" => None,
+        _ => {
+            return Err(
+                "keyboard context requires a bounded layout; other roles cannot set it".into(),
+            );
+        }
+    };
+    let mut value = json!({"role":role});
+    if let Some(layout) = layout {
+        value["layout"] = json!(layout);
+    }
+    Ok(Some(value))
 }
 fn intersect(a: Geometry, b: Geometry) -> Geometry {
     let x = a.x.max(b.x);
@@ -249,6 +322,72 @@ mod tests {
     impl TextMeasurer for NoText {
         fn measure(&mut self, _: NodeHandle, _: &str, _: &str, _: f64, _: TextOptions) -> Size {
             Size::default()
+        }
+    }
+    #[test]
+    fn escaped_semantics_obey_the_total_reply_budget_without_truncation() {
+        let regions = (1..=LIMIT)
+            .map(|node| Region {
+                node: node as u64,
+                id: "\"".repeat(128),
+                interactive: false,
+                bounds: Geometry {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 100.0,
+                    height: 100.0,
+                },
+                semantic: Some(json!({"role":"keyboard","layout":"\"".repeat(128)})),
+            })
+            .collect();
+        let mut state = Rendered {
+            generation: 2,
+            revision: 1,
+            sampled: 1_000,
+            frame: Some(Frame {
+                size: (100, 100),
+                scale_120: 120,
+                regions,
+            }),
+            ..Default::default()
+        };
+        let report = state.report(&"a".repeat(32), 2, 1_001);
+        assert!(report["frame"].is_null());
+        assert!(serde_json::to_vec(&report).unwrap().len() < 128 * 1024);
+        state.frame.as_mut().unwrap().regions.truncate(1);
+        let report = state.report(&"a".repeat(32), 2, 1_001);
+        assert_eq!(report["frame"]["regions"].as_array().unwrap().len(), 1);
+        assert_eq!(report["frame"]["regions"][0]["id"], "\"".repeat(128));
+    }
+    #[test]
+    fn semantic_annotations_are_typed_and_cannot_supply_geometry_or_authentication() {
+        let value = |json: Json| -> Value {
+            let mut fields = std::collections::BTreeMap::new();
+            for (key, value) in json.as_object().unwrap() {
+                fields.insert(
+                    key.clone(),
+                    match value {
+                        Json::String(value) => Value::String(value.clone()),
+                        _ => Value::Bool(true),
+                    },
+                );
+            }
+            Value::Map(fields)
+        };
+        assert!(semantic(&Value::Nil).unwrap().is_none());
+        assert_eq!(
+            semantic(&value(json!({"role":"keyboard","layout":"dev"}))).unwrap(),
+            Some(json!({"role":"keyboard","layout":"dev"}))
+        );
+        for invalid in [
+            json!({"role":"keyboard"}),
+            json!({"role":"keyboard","layout":""}),
+            json!({"role":"top_left","layout":"dev"}),
+            json!({"role":"unlocked"}),
+            json!({"role":"keyboard","layout":"full","x":0}),
+            json!({"role":"keyboard","layout":"full","authenticated":true}),
+        ] {
+            assert!(semantic(&value(invalid)).is_err());
         }
     }
     #[test]
@@ -276,6 +415,19 @@ mod tests {
         scene.assign(child, "y", 5.0).unwrap();
         scene.assign(child, "width", 30.0).unwrap();
         scene.assign(child, "height", 20.0).unwrap();
+        scene
+            .assign(
+                child,
+                "input_context",
+                Value::Map(
+                    [
+                        ("role".into(), Value::String("keyboard".into())),
+                        ("layout".into(), Value::String("dev".into())),
+                    ]
+                    .into(),
+                ),
+            )
+            .unwrap();
         let compute = |scene: &Scene| {
             Layout::compute(
                 scene,
@@ -300,6 +452,10 @@ mod tests {
             }
         );
         assert!(frame.regions[0].interactive);
+        assert_eq!(
+            frame.regions[0].semantic,
+            Some(json!({"role":"keyboard","layout":"dev"}))
+        );
         scene.assign(parent, "enabled", false).unwrap();
         assert!(
             !capture(&scene, &compute(&scene), root, (100, 100), 120)
