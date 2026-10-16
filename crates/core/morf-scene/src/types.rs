@@ -175,6 +175,9 @@ pub struct Scene {
     /// What each `Terminal` node's screen shows, by node: a side table for
     /// the same reason `shaders` is one. See [`crate::TerminalScreen`].
     pub(crate) terminal_screens: FastMap<NodeId, std::sync::Arc<crate::TerminalScreen>>,
+    /// Every node one of whose `glass` properties has ever moved: the only
+    /// nodes paint asks for the material (see [`Scene::may_have_glass`]).
+    pub(crate) glass_nodes: FastSet<NodeId>,
     pub(crate) properties: crate::property_store::PropertyStore,
     pub(crate) behaviors: FastMap<PropertyKey, Behavior>,
     pub(crate) animations: FastMap<PropertyKey, Animation>,

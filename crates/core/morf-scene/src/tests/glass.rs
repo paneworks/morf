@@ -83,6 +83,29 @@ fn the_glass_table_sets_the_properties_it_names() {
 }
 
 #[test]
+fn only_a_node_whose_glass_moved_is_asked_for_it() {
+    let (mut scene, pane) = pane();
+    let other = scene.create(Element::Rect);
+    assert!(!scene.may_have_glass(pane) && !scene.may_have_glass(other));
+    // A write of the default moves nothing.
+    scene.assign(pane, "glass_rim", 0.0).unwrap();
+    assert!(!scene.may_have_glass(pane));
+    scene
+        .assign(pane, "glass", table(&[("frost", Value::from("auto"))]))
+        .unwrap();
+    assert!(scene.may_have_glass(pane));
+    assert!(!scene.may_have_glass(other), "only the node written");
+    scene.assign(other, "glass_refraction", 4.0).unwrap();
+    assert!(scene.may_have_glass(other));
+    scene.remove(other).unwrap();
+    let fresh = scene.create(Element::Rect);
+    assert!(
+        !scene.may_have_glass(fresh),
+        "a node made after one went is new"
+    );
+}
+
+#[test]
 fn glass_refuses_what_it_does_not_take() {
     let (mut scene, pane) = pane();
     let error = scene

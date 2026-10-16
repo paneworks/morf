@@ -63,6 +63,12 @@ pub(crate) fn canonical(property: &str, value: Value) -> Result<Value, String> {
 }
 
 impl Scene {
+    /// Whether any of `node`'s glass properties has ever moved: false is a
+    /// promise they all hold their defaults, so paint need not read them.
+    pub fn may_have_glass(&self, node: NodeHandle) -> bool {
+        !self.glass_nodes.is_empty() && self.glass_nodes.contains(&node.0)
+    }
+
     /// Assigns each property the node's `glass` table names, each through
     /// [`Scene::assign`], so its behaviors and springs carry the change.
     pub(crate) fn expand_glass(&mut self, node: NodeHandle) -> Result<(), SceneError> {

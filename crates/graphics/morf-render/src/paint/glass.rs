@@ -20,6 +20,9 @@ pub(super) fn backdrop_command(
         }
         _ => 0.0,
     };
+    if blur <= 0.0 && !scene.may_have_glass(node) {
+        return Ok(None);
+    }
     let finite = |value: f64| if value.is_finite() { value } else { 0.0 };
     let refraction = finite(scene.number(node, "glass_refraction")?);
     let rim = finite(scene.number(node, "glass_rim")?).clamp(0.0, 1.0);
