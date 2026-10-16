@@ -136,6 +136,50 @@ fn a_claimed_property_and_a_presence_refuse_writes() {
     assert_eq!(number(&mut runtime, "presence"), 0.0);
 }
 
+/// The `ui.claims` example in `docs/UI.md`, as it is written there.
+fn docs_example() -> String {
+    let guide = include_str!("../../../../../docs/UI.md");
+    let start = guide
+        .find("```lua\nlocal morf = require(\"morf\")\nlocal ui = require(\"morf.ui\")\nmorf.surface.namespace = \"claims\"")
+        .expect("the guide shows ui.claims");
+    let body = &guide[start + "```lua\n".len()..];
+    body[..body.find("```").expect("the block ends")].to_owned()
+}
+
+#[test]
+fn the_guide_example_peeks_releases_and_opens() {
+    let probes = r#"
+        morf.ipc.x = function() return panel.x end
+        morf.ipc.opacity = function() return panel.opacity end
+        morf.ipc.scrim = function() return scrim.opacity end
+        morf.ipc.ask_open = function() return try(function() claims.open.ask() end) end
+    "#;
+    let mut runtime = runtime(&format!("{}\n{probes}", docs_example()));
+    assert_eq!(number(&mut runtime, "x"), -288.0);
+    call(&mut runtime, "peek");
+    settle(&mut runtime);
+    assert_eq!(number(&mut runtime, "x"), -248.0);
+    assert_eq!(number(&mut runtime, "opacity"), 1.0);
+    call(&mut runtime, "unpeek");
+    settle(&mut runtime);
+    assert_eq!(number(&mut runtime, "x"), -288.0, "released back to rest");
+    assert_eq!(number(&mut runtime, "opacity"), 0.0);
+    call(&mut runtime, "toggle");
+    tick(&mut runtime, 4);
+    let scrim = number(&mut runtime, "scrim");
+    assert!(
+        scrim > 0.0 && scrim < 0.4,
+        "the scrim follows open in: {scrim}"
+    );
+    settle(&mut runtime);
+    assert_eq!(number(&mut runtime, "x"), 0.0);
+    assert!((number(&mut runtime, "scrim") - 0.4).abs() < 1e-9);
+    assert!(
+        !attempt(&mut runtime, "ask_open").0,
+        "a state claim has no ask"
+    );
+}
+
 #[test]
 fn conditions_are_read_by_lua_truth() {
     let mut runtime = runtime(

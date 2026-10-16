@@ -112,10 +112,13 @@ ui.Inset	public but not yet documented in docs/UI.md or docs/IO.md; tracked by t
 +morf.capabilities.idle_inhibit	compositor capability filled by the host, not a types field
 +morf.capabilities.outputless	compositor capability filled by the host, not a types field
 +morf.surface.blend	surface property served through __index in api/window/layer.rs
++morf.surface.height	surface property served through __index in api/window/layer.rs
 +morf.surface.keyboard_focus	surface property served through __index in api/window/layer.rs
++morf.surface.namespace	surface property served through __index in api/window/layer.rs
 +morf.surface.on_focus_changed	surface callback served through __index in api/window/layer.rs
 +morf.surface.on_pointer_changed	surface callback served through __index in api/window/layer.rs
 +morf.surface.opaque	surface property served through __index in api/window/layer.rs
 +morf.surface.outputless	surface property served through __index in api/window/layer.rs
 +morf.surface.subpixel_text	surface property served through __index in api/window/layer.rs
++morf.surface.width	surface property served through __index in api/window/layer.rs
 +morf.toplevels.model	list model served through __index in api/desktop/toplevels.rs
