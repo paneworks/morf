@@ -31,7 +31,7 @@ impl FrameDraw<'_> {
     ) {
         for stage in stages {
             let layers: &[usize] = match stage {
-                Stage::Atlas(layers) => layers,
+                Stage::Atlas(layers) | Stage::Shared(layers) => layers,
                 Stage::Solo(layer) => std::slice::from_ref(layer),
                 Stage::Backdrop(command_index) => {
                     self.encode_backdrop(encoder, *command_index, backdrop_scratch);

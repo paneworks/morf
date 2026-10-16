@@ -23,8 +23,7 @@ fn physical_quad(
     )
 }
 
-/// A layer's texture, its view, and where in it the layer's region starts.
-type Placement = (wgpu::Texture, wgpu::TextureView, (u32, u32));
+use super::layer_share::Placement;
 
 impl WgpuBackend {
     /// Takes a target for every layer something reads this frame and prepares
@@ -52,22 +51,40 @@ impl WgpuBackend {
         let largest = self.device.limits().max_texture_dimension_2d;
         // Where each layer's region lives: which texture, and where in it.
         let mut placements: Vec<Option<Placement>> = vec![None; list.layers.len()];
+        // A layer in a shared blurred target: the group sampling the blur,
+        // and for one layer per target the chain.
+        let mut shared_blurs: Vec<Option<(wgpu::BindGroup, Option<BlurChain>)>> =
+            (0..list.layers.len()).map(|_| None).collect();
         for stage in stages {
-            match stage {
-                Stage::Backdrop(_) => {}
-                Stage::Solo(layer) => {
-                    let Some(region) = regions[*layer].as_ref().map(|region| region.bounds) else {
-                        continue;
-                    };
-                    let (texture, view) = self.layer_pool.take(
-                        &self.device,
-                        format,
-                        (region.width, region.height),
-                        true,
-                        limit,
-                    );
-                    placements[*layer] = Some((texture, view, (0, 0)));
+            let alone: &[usize] = match stage {
+                Stage::Backdrop(_) | Stage::Atlas(_) => &[],
+                Stage::Solo(layer) => std::slice::from_ref(layer),
+                Stage::Shared(layers) => {
+                    for (layer, shared) in self.share_blurred(list, layers, regions, scale) {
+                        placements[layer] = Some(shared.placement);
+                        shared_blurs[layer] = Some((shared.bind_group, shared.chain));
+                    }
+                    layers
                 }
+            };
+            for &layer in alone {
+                let Some(region) = regions[layer].as_ref().map(|region| region.bounds) else {
+                    continue;
+                };
+                if placements[layer].is_some() {
+                    continue;
+                }
+                let (texture, view) = self.layer_pool.take(
+                    &self.device,
+                    format,
+                    (region.width, region.height),
+                    true,
+                    limit,
+                );
+                placements[layer] = Some((texture, view, (0, 0)));
+            }
+            match stage {
+                Stage::Backdrop(_) | Stage::Solo(_) | Stage::Shared(_) => {}
                 Stage::Atlas(layers) => {
                     let sizes: Vec<(u32, u32)> = layers
                         .iter()
@@ -99,7 +116,13 @@ impl WgpuBackend {
         let mut layer_targets = Vec::with_capacity(list.layers.len());
         // Layers sharing a texture share the bind group that samples it.
         let mut bind_groups: Vec<(wgpu::Texture, wgpu::BindGroup)> = Vec::new();
-        for ((layer, region), placement) in list.layers.iter().zip(regions).zip(placements) {
+        for (((layer, region), placement), shared_blur) in list
+            .layers
+            .iter()
+            .zip(regions)
+            .zip(placements)
+            .zip(shared_blurs)
+        {
             let (
                 Some(LayerRegion {
                     bounds: region,
@@ -123,19 +146,23 @@ impl WgpuBackend {
                     |size| pool.take(device, format, size, true, limit),
                 )
             };
-            let blur = (layer.blur > 0.0).then(|| chain(layer.blur));
+            let (blur, shared_group) = match shared_blur {
+                Some((group, chain)) => (chain, Some(group)),
+                None => ((layer.blur > 0.0).then(|| chain(layer.blur)), None),
+            };
             let shadow = (layer.shadow_color.alpha > 0.0 && layer.shadow_blur > 0.0)
                 .then(|| chain(layer.shadow_blur));
             let composite_view = blur.as_ref().map_or(&view, |chain| &chain.views[3]);
-            let shared = blur
-                .is_none()
-                .then(|| {
-                    bind_groups
-                        .iter()
-                        .find(|(seen, _)| *seen == texture)
-                        .map(|(_, group)| group.clone())
-                })
-                .flatten();
+            let shared = shared_group.or_else(|| {
+                blur.is_none()
+                    .then(|| {
+                        bind_groups
+                            .iter()
+                            .find(|(seen, _)| *seen == texture)
+                            .map(|(_, group)| group.clone())
+                    })
+                    .flatten()
+            });
             let bind_group = shared.unwrap_or_else(|| {
                 let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("morf layer bind group"),
