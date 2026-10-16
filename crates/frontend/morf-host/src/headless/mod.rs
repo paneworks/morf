@@ -5,6 +5,7 @@ pub mod env;
 pub mod headless;
 pub mod input;
 pub mod lock;
+mod options;
 pub mod paced;
 mod reload;
 pub mod render;
