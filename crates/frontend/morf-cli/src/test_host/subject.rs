@@ -73,6 +73,7 @@ pub(super) fn load(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<Ip
     host.subject = None;
     host.handles.clear();
     host.numbers.clear();
+    host.frames.clear();
     host.logs_cleared = 0;
     host.test_logs = 0;
     host.test_effect_errors = 0;

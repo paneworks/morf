@@ -324,6 +324,7 @@ or an exact `text`), or a function of the node returning true.
 | `test.clear_stubs()` | |
 | `test.runs()` | the argv of every `morf.run` since load, stubbed or not |
 | `test.snapshot(name [, { surface }])` | renders to `name` under `--snapshots DIR` (default `snapshots/` beside the spec); returns `true, path`, or `false, reason` when there is no GPU -- the test goes on, with the reason noted in the output |
+| `test.frame([{ surface }])` | renders the surface now (`"screen"` for all of them) and keeps the picture to read back, or returns `nil, reason` when there is no GPU: `frame.width`, `frame.height` in pixels at the runner's scale, `frame.pixel(x, y)` the straight colour there as `"#rrggbbaa"`, and `frame.region { x, y, width, height }` the region summed up -- its `mean` colour and its luma's `luma` (mean), `variance`, `min` and `max`, from 0 to 1 |
 | `test.note(text)`, `test.log(...)` | a line printed under the test's result |
 
 ## Examples
