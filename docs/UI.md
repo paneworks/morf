@@ -1854,6 +1854,8 @@ A kit popup (`lib.kit.popup`) closes at once -- focus back, what is under
 it live again -- and then plays its theme's exit: it stays in the layer
 for the theme's `linger` (`popup_motion`'s) as a ghost that takes no input
 and gives no focus back, and is taken back if it opens again meanwhile.
+The pose its theme gives, shut and open, is held by two `ui.claims` on its
+node, so the properties that pose sets are not written by hand.
 
 ### Right to left
 

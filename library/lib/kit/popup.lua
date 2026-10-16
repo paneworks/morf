@@ -196,7 +196,7 @@ function M.make(widget, spec)
   spec = merged(widget, spec)
   local handle = {}
   local root, t, ctl
-  -- Whether it is showing, for the theme's motion (`popup_motion`).
+  -- Whether it is showing: what the theme's open pose is claimed by.
   local shown = morf.signal("kit.popup.shown." .. tostring(handle), false)
   -- "shut", "open", or "leaving": closed, but still in the layer while
   -- the theme's exit plays (`motion.linger` ms), taking no input.
@@ -232,17 +232,23 @@ function M.make(widget, spec)
       height = spec.height or function() return (content.layout_height or 0) + 2 * pad end,
       focus_policy = "none",
     }
-    -- How the theme brings it in (`popup_motion`): its node's pose while
-    -- shut and open, and the behaviours that carry it between them.
+    -- How the theme brings it in (`popup_motion`), asked once shut and once
+    -- open: its node's pose in each, which two claims hold, and the
+    -- behaviours that carry it between them.
     local has_kit, theme_kit = pcall(require, "kit")
-    motion = has_kit and type(theme_kit) == "table" and theme_kit.popup_motion
-      and theme_kit.popup_motion(widget, spec, {
-        open = function() return shown:get() end,
-        size = function(axis) return root and root["layout_" .. axis] or 0 end,
-      }) or nil
-    if motion and spec.behavior ~= nil then motion = nil end
-    if motion then for k, v in pairs(motion) do if k ~= "linger" then props[k] = v end end end
+    local themed = spec.behavior == nil and has_kit and type(theme_kit) == "table" and theme_kit.popup_motion
+    local function pose(open)
+      return themed(widget, spec, { open = function() return open end,
+        size = function(axis) return root and root["layout_" .. axis] or 0 end })
+    end
+    motion = themed and pose(false) or nil
+    local opened, poses = motion and pose(true), { open = { when = shown, set = {} }, shut = { set = {} } }
+    for k, v in pairs(motion or {}) do
+      if k == "behavior" then props.behavior = v
+      elseif k ~= "linger" and spec[k] == nil then poses.shut.set[k], poses.open.set[k] = v, opened[k] end
+    end
     root, t, ctl = control.make("Popup", widget, spec, { children = { content }, props = props })
+    if motion then ui.claims(root, poses) end
     if pad > 0 then content.x, content.y = pad, pad end
     handle.node, handle.t = root, t
   end
