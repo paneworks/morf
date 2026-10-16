@@ -51,18 +51,18 @@ machine:
 | `--private-bus` | starts a `dbus-daemon` of the run's own, with no services, as the session bus (the system bus points nowhere); stopped when the run ends. For a configuration that owns a name -- a notification server, a tray watcher -- without taking it from the real one |
 | `--isolate`     | points `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME` and `XDG_CACHE_HOME` at a scratch folder under `$TMPDIR`, removed afterwards. **On by default for `morf test`** (`--no-isolate` turns it off) |
 
-Without `--no-dbus` or `--private-bus` a configuration that asks for the
-bus gets the real one, which is what a check of "does it load on this
-machine" usually wants and what a test never should. Programs started with
-`morf.run` and `morf.spawn` are real; `morf test` can stub `morf.run` (see
-below).
+`morf check` reaches no bus unless it is given one of its own: `--no-dbus`
+is its default and `--private-bus` replaces it. `morf render` and `morf
+test` without either get the real bus, which a test never should. Programs
+started with `morf.run` and `morf.spawn` are real; `morf test` can stub
+`morf.run` (see below).
 
 ## `morf check`
 
 ```sh
 morf check shell.lua [--size WxH] [--screens N] [--ipc 'VERB ARGS']...
                      [--after MS] [--wait MS] [--strict] [--kit [default]] [--a11y]
-                     [--no-dbus | --private-bus] [--isolate] [-- args...]
+                     [--private-bus] [--isolate] [-- args...]
 ```
 
 Loads the configuration once per screen, makes any `--ipc` calls (each
@@ -73,6 +73,11 @@ followed by a settle), advances `--after` milliseconds of virtual time
   many nodes it holds -- hidden surfaces are laid out too, so a panel's
   problems are found before anyone opens it;
 - the IPC verbs the configuration registered;
+- each imported module and plugin it loaded, with where it stands
+  (`approved`, `not approved`, `changed since it was approved`) and what it
+  declares, in the words `morf approve` uses. A check holds every imported
+  module while it loads, approved or not (see "Imported modules" in
+  `docs/IO.md`), and each call it refuses is a warning;
 - **errors**: the load failing (with `file:line`, including the line of a
   `require` that found nothing), a Lua error in any callback, binding or
   handler that ran, a line the configuration logged at `error` level, a
@@ -93,6 +98,10 @@ It prints `kit stage N: D due, M missing` and each problem as an error.
 surface and fails each control it could land on -- one that takes focus,
 or plays a role read by name (a button, switch, slider, tab, field, ...)
 -- that has no name. It prints `a11y N accessible nodes, M unnamed`.
+
+An imported module whose manifest cannot be read is an error, and under
+`--strict` so is an imported integration (`lib.integrations.*`) with no
+manifest.
 
 The exit status is 1 when there are errors, and with `--strict` when there
 are warnings too, or when any binding or effect raised an error. `--wait MS` spreads that much real time over the run, for
@@ -235,7 +244,13 @@ shown; `message` is put in front.
 configuration's own arguments, what follows `--`: `morf.args`,
 `morf.options`, `morf.operands`), and `env = { NAME = "value" }` --
 what `morf.env` answers for those names (`false` for unset). `env` is seen
-by the configuration only, not by programs it starts.
+by the configuration only, not by programs it starts. `runtime_path = {
+"dir", ... }` adds module roots after the configuration's folder, as
+`MORF_RUNTIME_PATH` entries are: what `require` finds there is imported.
+
+`test.approve(name)` approves the imported module the configuration loaded
+as `name`, in the run's own approvals (a test's state folder is a scratch
+one); the next `test.load` runs it approved.
 
 ### Time
 

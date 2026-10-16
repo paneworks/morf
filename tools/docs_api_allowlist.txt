@@ -8,7 +8,6 @@ morf.animation.*	public but not yet documented in docs/UI.md or docs/IO.md; trac
 morf.app_id	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.args	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.audio.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.broadcast	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.cache_dir	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.cache_path	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.clipboard.subscribe	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
@@ -27,7 +26,6 @@ morf.easing_curve	public but not yet documented in docs/UI.md or docs/IO.md; tra
 morf.elapsed_timer	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.encoding.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
 morf.env	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.exec_detached	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.executable	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.fs.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
 morf.geometry.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
@@ -59,7 +57,6 @@ morf.output_power.set	public but not yet documented in docs/UI.md or docs/IO.md;
 morf.pam.*	PAM conversation API used by lock/greeter configs; covered in docs/LOCK_PROVIDER.md (subtree)
 morf.persistent	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.process_id	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.process_view	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.quit	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.retain_lock	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.retainable	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
@@ -74,12 +71,9 @@ morf.shell_dir	public but not yet documented in docs/UI.md or docs/IO.md; tracke
 morf.shell_id	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.shell_path	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.shortcuts.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
-morf.socket_server	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.split_parser	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.state_dir	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.state_path	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.status_notifier	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.status_notifier.subscribe	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.stream_collector	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.text_input.*	input-method protocol API for text fields; engine-internal surface (subtree)
 morf.time.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
