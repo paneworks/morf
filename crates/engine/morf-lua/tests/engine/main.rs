@@ -1,5 +1,6 @@
 mod arguments;
 mod backdrop;
+mod claims;
 mod colors;
 use morf_scene::NodeHandle;
 
@@ -52,6 +53,7 @@ mod exiting;
 mod flush_construction;
 mod flushing;
 mod focus;
+mod frame_stall;
 mod fs_time;
 mod fs_watch;
 mod gradients;

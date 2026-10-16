@@ -287,6 +287,7 @@ pub fn handle_worker_command(
                         .map(|_| ())
                         .map_err(|error| error.to_string())
                 });
+            let succeeded = result.is_ok();
             let repaint = match &result {
                 Ok(()) => {
                     candidate.dispatch_reload_completed();
@@ -294,17 +295,25 @@ pub fn handle_worker_command(
                     true
                 }
                 Err(error) => {
-                    runtime.dispatch_reload_failed(error.clone());
-                    false
+                    // A configuration that reports the failure itself
+                    // never sees the engine band as well; one that does
+                    // not is guaranteed the error is on screen.
+                    if runtime.dispatch_reload_failed(error.clone()) {
+                        runtime.clear_reload_error();
+                        false
+                    } else {
+                        runtime.show_reload_error(error, &path);
+                        runtime.reload_error_shown()
+                    }
                 }
             };
             let _ = reply.send(result);
             WorkerUpdate {
                 repaint,
-                reset_input: repaint,
-                refresh_idle: repaint,
-                recreate_surface: repaint && hard,
-                reloaded: repaint,
+                reset_input: succeeded,
+                refresh_idle: succeeded,
+                recreate_surface: succeeded && hard,
+                reloaded: succeeded,
             }
         }
     }

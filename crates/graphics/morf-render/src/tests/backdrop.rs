@@ -92,6 +92,34 @@ fn a_radius_puts_the_backdrop_just_under_the_fill() {
 }
 
 #[test]
+fn the_tint_rides_the_backdrop_command() {
+    let (mut scene, root, [_, glass, _]) = glass(Value::Number(16.0));
+    // Untinted by default.
+    let list = draw(&scene, root);
+    let DrawCommand::Backdrop { tint, .. } = list
+        .commands
+        .iter()
+        .find(|command| matches!(command, DrawCommand::Backdrop { .. }))
+        .expect("a backdrop")
+    else {
+        unreachable!()
+    };
+    assert_eq!(tint.alpha, 0.0);
+    scene.assign(glass, "backdrop_tint", "#3366cc80").unwrap();
+    let list = draw(&scene, root);
+    let DrawCommand::Backdrop { tint, .. } = list
+        .commands
+        .iter()
+        .find(|command| matches!(command, DrawCommand::Backdrop { .. }))
+        .expect("a backdrop")
+    else {
+        unreachable!()
+    };
+    assert!((tint.red - 0.2).abs() < 0.01, "{tint:?}");
+    assert!((tint.alpha - 0.5).abs() < 0.01, "{tint:?}");
+}
+
+#[test]
 fn true_is_still_the_compositors_and_the_radius_is_capped() {
     let (scene, root, _) = glass(Value::Bool(true));
     assert!(

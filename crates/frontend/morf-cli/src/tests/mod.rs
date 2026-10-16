@@ -1,5 +1,6 @@
 mod command_line;
 mod config_paths;
+mod docs;
 mod headless;
 mod input_region;
 mod layout_cache;

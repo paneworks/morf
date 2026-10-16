@@ -83,7 +83,13 @@ pub fn runtimepath_roots(config: &std::path::Path, external: bool) -> Vec<PathBu
     unique
 }
 
-pub(crate) fn load_runtime_module(roots: &[PathBuf], name: &str) -> Result<Vec<u8>, String> {
+/// Resolves a module name to the file it loads from and its source.
+/// The first root is the configuration's own; a module resolved under
+/// any other root is imported (see `vm::permissions`).
+pub(crate) fn resolve_runtime_module(
+    roots: &[PathBuf],
+    name: &str,
+) -> Result<(PathBuf, Vec<u8>), String> {
     if name.is_empty()
         || name.split('.').any(|part| {
             part.is_empty()
@@ -103,13 +109,18 @@ pub(crate) fn load_runtime_module(roots: &[PathBuf], name: &str) -> Result<Vec<u
             root.join("lua").join(&relative).join("init.lua"),
         ] {
             match fs::read(&path) {
-                Ok(source) => return Ok(source),
+                Ok(source) => return Ok((path, source)),
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                 Err(error) => return Err(format!("could not read {}: {error}", path.display())),
             }
         }
     }
     Err(format!("module `{name}` is not available"))
+}
+
+#[cfg(test)]
+pub(crate) fn load_runtime_module(roots: &[PathBuf], name: &str) -> Result<Vec<u8>, String> {
+    resolve_runtime_module(roots, name).map(|(_, source)| source)
 }
 
 pub(crate) fn lua_index(index: i64) -> Result<usize, HostError> {

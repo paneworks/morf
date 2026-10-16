@@ -250,6 +250,7 @@ pub(crate) fn node_metatable<'gc>(
                     HostError("nodes cannot be written to from inside a layout function".to_owned())
                 })?;
                 refuse_runtime_owned(&state, node.handle, &property).map_err(HostError)?;
+                refuse_claimed(&state, node.handle, &property).map_err(HostError)?;
                 if !state
                     .scene()
                     .has_property(node.handle, &property)
@@ -275,6 +276,7 @@ pub(crate) fn node_metatable<'gc>(
             HostError("nodes cannot be written to from inside a layout function".to_owned())
         })?;
         refuse_runtime_owned(&state, node.handle, &property).map_err(HostError)?;
+        refuse_claimed(&state, node.handle, &property).map_err(HostError)?;
         assign_scene_property(&mut state, node.handle, &property, value).map_err(HostError)?;
         // A text input takes a write in at once, so the caret a handler
         // reads back after setting `text` is already the one that text has.
@@ -290,6 +292,28 @@ pub(crate) fn node_metatable<'gc>(
     metatable.set_field(ctx, "__index", index);
     metatable.set_field(ctx, "__newindex", new_index);
     metatable
+}
+
+/// Refuses a write to a property `ui.claims` owns: the winning claim
+/// would retarget it at the next tick, so the write is refused now,
+/// the way a read-only write is.
+pub(crate) fn refuse_claimed(
+    state: &ReactiveState,
+    node: NodeHandle,
+    property: &str,
+) -> Result<(), String> {
+    if state
+        .animation()
+        .claims
+        .claims()
+        .iter()
+        .any(|claim| claim.node == node && claim.property == property)
+    {
+        return Err(format!(
+            "`{property}` is claimed: ui.claims owns it while its claims stand"
+        ));
+    }
+    Ok(())
 }
 
 /// Refuses a configuration's write to a property the runtime keeps: a

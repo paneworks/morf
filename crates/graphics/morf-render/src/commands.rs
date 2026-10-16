@@ -239,6 +239,8 @@ pub enum DrawCommand {
         radius: f64,
         /// Saturation of the blurred backdrop, 1 unchanged and 0 grey.
         saturation: f64,
+        /// A colour washed over the backdrop, strength in its alpha.
+        tint: Color,
     },
     /// A terminal's screen: a grid of cells, each drawn at its own column
     /// and row whatever the font would have advanced it by.

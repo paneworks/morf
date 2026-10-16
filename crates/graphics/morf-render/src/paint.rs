@@ -221,6 +221,7 @@ pub(crate) fn paint_node(
             radii,
             radius: radius.min(MAX_BACKDROP_BLUR),
             saturation: scene.number(node, "backdrop_saturation")?.max(0.0),
+            tint: scene.color_value(node, "backdrop_tint")?,
         });
     }
     match element {

@@ -28,6 +28,7 @@ pub use self::runtime::wake::{ClockPrecision, DeadlineCause};
 pub use self::vm::extensions::{Extension, NodesRemoved, register_extension};
 pub use self::vm::harness::HostFunction;
 pub use self::vm::loader::{project_library, runtimepath_roots};
+pub use self::vm::permissions::{Approvals, ModuleDeclaration, fingerprint as module_fingerprint};
 pub use self::vm::types::*;
 pub use self::vm::types_gen::generate_types;
 pub use morf_value::IpcValue;

@@ -128,6 +128,10 @@ pub(crate) struct ReactiveState {
     terminals: crate::runtime::terminals::TerminalHub,
     /// Every `ui.Image`: what became of its source, and its playback.
     images: crate::runtime::images::ImageNodes,
+    /// Unapproved imported modules whose top level is running now
+    /// (PLAN item 4 step 3, load-time enforcement): gated APIs refuse
+    /// while this is non-empty.
+    loading_unapproved: Vec<String>,
 }
 
 impl std::ops::Deref for ReactiveState {

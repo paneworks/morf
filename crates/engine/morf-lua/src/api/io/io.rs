@@ -157,6 +157,10 @@ pub(crate) fn install_io_api<'gc>(
 
     let spawn_starter = Rc::clone(&starter);
     let spawn = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        if let Some(refusal) = spawn_starter.state.borrow().permission_refusal("run") {
+            stack.replace(ctx, (LuaValue::Nil, refusal.as_str()));
+            return Ok(CallbackReturn::Return);
+        }
         let options: Table = stack.consume(ctx)?;
         let command = match options.get_value(ctx, "command") {
             LuaValue::Table(command) => command,
@@ -190,6 +194,10 @@ pub(crate) fn install_io_api<'gc>(
 
     let run_starter = Rc::clone(&starter);
     let run = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        if let Some(refusal) = run_starter.state.borrow().permission_refusal("run") {
+            stack.replace(ctx, (LuaValue::Nil, refusal.as_str()));
+            return Ok(CallbackReturn::Return);
+        }
         let (command, options, callback): (Table, LuaValue, LuaValue) = stack.consume(ctx)?;
         let (options, callback) = match (options, callback) {
             (LuaValue::Function(Function::Closure(callback)), LuaValue::Nil) => {
@@ -244,6 +252,10 @@ pub(crate) fn install_io_api<'gc>(
 
     let connect_starter = Rc::clone(&starter);
     let connect = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        if let Some(refusal) = connect_starter.state.borrow().permission_refusal("socket") {
+            stack.replace(ctx, (LuaValue::Nil, refusal.as_str()));
+            return Ok(CallbackReturn::Return);
+        }
         let options: Table = stack.consume(ctx)?;
         let endpoint = endpoint_of(ctx, options)?;
         let on_line = optional_closure(ctx, options, "on_line").map_err(HostError::from)?;

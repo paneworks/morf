@@ -71,6 +71,10 @@ pub(crate) fn install_signal_api<'gc>(
     let signal_metatable = Table::new(&ctx);
     signal_metatable.set_field(ctx, "__index", methods);
     let signal_metatable = ctx.stash(signal_metatable);
+    state
+        .borrow_mut()
+        .metatables_mut()
+        .set_signal(signal_metatable.clone());
 
     let signal = Callback::from_fn(&ctx, {
         let state = Rc::clone(&state);

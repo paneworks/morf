@@ -321,6 +321,34 @@ fn check(args: &RunnerArgs) -> Result<bool, String> {
         if !verbs.is_empty() {
             println!("  ipc     {}", verbs.join(" "));
         }
+        for declaration in headless.runtime.module_declarations() {
+            if declaration.imported {
+                if declaration.declared {
+                    println!(
+                        "  permissions {}: {}",
+                        declaration.name,
+                        declaration.groups.join(" ")
+                    );
+                } else {
+                    println!("  permissions {}: (none declared)", declaration.name);
+                    // The shipped integrations are the most
+                    // third-party-shaped code morf carries: under
+                    // --strict they must carry a manifest (item 4 step 5).
+                    if args.strict
+                        && declaration
+                            .path
+                            .components()
+                            .any(|part| part.as_os_str() == "integrations")
+                    {
+                        println!(
+                            "  error: imported integration {} declares no permissions",
+                            declaration.name
+                        );
+                        errors += 1;
+                    }
+                }
+            }
+        }
         let found = findings(&headless);
         for error in &found.errors {
             println!("  error: {error}");

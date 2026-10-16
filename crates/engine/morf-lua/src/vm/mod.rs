@@ -10,6 +10,7 @@ pub(crate) mod handlers;
 pub(crate) mod harness;
 pub(crate) mod jit;
 pub(crate) mod loader;
+pub mod permissions;
 pub mod profile;
 pub(crate) mod state_cell;
 pub(crate) mod types;

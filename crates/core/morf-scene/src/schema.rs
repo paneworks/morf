@@ -169,6 +169,8 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 boolean("shadow_inner", false),
                 // How saturated a frosted backdrop is: 1 leaves it as it was.
                 number("backdrop_saturation", 1.0),
+                // A colour washed over the frosted backdrop, by its alpha.
+                color("backdrop_tint", Color::rgba8(0, 0, 0, 0)),
             ]);
             if element == Element::ClipRect {
                 properties.extend([

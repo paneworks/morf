@@ -266,6 +266,7 @@
 ---@field shadow_offset_y (number|fun(): number)? default Number(0.0)
 ---@field shadow_inner (boolean|fun(): boolean)? default Bool(false)
 ---@field backdrop_saturation (number|fun(): number)? default Number(1.0)
+---@field backdrop_tint (string|morf.Color|fun(): string|morf.Color)? default Color(Color { red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0 })
 ---@field on_entered (fun(...): any)?
 ---@field on_exited (fun(...): any)?
 ---@field on_position_changed (fun(...): any)?
@@ -373,6 +374,7 @@
 ---@field shadow_offset_y (number|fun(): number)? default Number(0.0)
 ---@field shadow_inner (boolean|fun(): boolean)? default Bool(false)
 ---@field backdrop_saturation (number|fun(): number)? default Number(1.0)
+---@field backdrop_tint (string|morf.Color|fun(): string|morf.Color)? default Color(Color { red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0 })
 ---@field content_inside_border (boolean|fun(): boolean)? default Bool(true)
 ---@field content_under_border (boolean|fun(): boolean)? default Bool(false)
 ---@field antialiasing (boolean|fun(): boolean)? default Bool(true)

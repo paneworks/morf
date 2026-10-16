@@ -230,6 +230,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             // the clamp keeps a boosted channel within its alpha.
             let grey = dot(rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
             rgb = clamp(mix(vec3<f32>(grey), rgb, input.field.x), vec3<f32>(0.0), vec3<f32>(sampled.a));
+            // Then the tint: a straight colour washed over by its alpha.
+            rgb = mix(rgb, input.color_overlay.rgb * sampled.a, input.color_overlay.a);
         }
         return vec4<f32>(rgb * input.color.a, alpha);
     }

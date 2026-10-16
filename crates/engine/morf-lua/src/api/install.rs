@@ -25,7 +25,9 @@ pub(crate) struct ApiModules<'gc> {
 pub(crate) fn finish_reactive_api<'gc>(
     ctx: Context<'gc>,
     modules: ApiModules<'gc>,
+    state: Rc<StateCell<ReactiveState>>,
     module_roots: Rc<RefCell<Vec<PathBuf>>>,
+    module_records: Rc<RefCell<Vec<crate::vm::permissions::ModuleDeclaration>>>,
     limits: Limits,
 ) {
     let ApiModules {
@@ -81,21 +83,94 @@ pub(crate) fn finish_reactive_api<'gc>(
                         return Ok(CallbackReturn::Return);
                     }
                     loaded.set(ctx, key, true)?;
-                    let source = match load_runtime_module(&module_roots.borrow(), &name) {
-                        Ok(source) => source,
+                    let roots = module_roots.borrow();
+                    let (path, source) = match resolve_runtime_module(&roots, &name) {
+                        Ok(resolved) => resolved,
                         Err(error) => {
                             loaded.set(ctx, key, LuaValue::Nil)?;
                             return Err(HostError(located(error)).into());
                         }
                     };
+                    // Declare, do not enforce (PLAN item 4 step 1): the
+                    // module's origin and the groups its permissions.lua
+                    // names are recorded for `morf check` to print.
+                    let imported = roots.first().is_some_and(|local| !path.starts_with(local));
+                    let mut declaration = crate::vm::permissions::ModuleDeclaration {
+                        name: name.clone(),
+                        path: path.clone(),
+                        imported,
+                        declared: false,
+                        groups: Vec::new(),
+                    };
+                    if let Some(directory) = path.parent() {
+                        let manifest = directory.join("permissions.lua");
+                        if let Ok(manifest_source) = std::fs::read(&manifest) {
+                            declaration.declared = true;
+                            match execute_module(
+                                ctx,
+                                &format!("{name} permissions"),
+                                &manifest_source,
+                                limits,
+                            ) {
+                                Ok(LuaValue::Table(table)) => {
+                                    let mut groups = Vec::new();
+                                    for (key, _) in table.iter(ctx) {
+                                        if let LuaValue::String(key) = key {
+                                            groups.push(key.display_lossy().to_string());
+                                        }
+                                    }
+                                    groups.sort();
+                                    groups.dedup();
+                                    declaration.groups = groups;
+                                }
+                                Ok(_) => {
+                                    loaded.set(ctx, key, LuaValue::Nil)?;
+                                    return Err(HostError(located(format!(
+                                        "{}: permissions.lua must return a table",
+                                        manifest.display()
+                                    )))
+                                    .into());
+                                }
+                                Err(error) => {
+                                    loaded.set(ctx, key, LuaValue::Nil)?;
+                                    return Err(HostError(located(error)).into());
+                                }
+                            }
+                        }
+                    }
+                    drop(roots);
+                    // Load-time enforcement (PLAN item 4 step 3, the
+                    // stop condition's fallback): an imported module
+                    // with no current approval runs its top level
+                    // gated -- gated APIs refuse with nil and a reason
+                    // while it loads. Handlers it registers carry no
+                    // origin yet, so nothing is promised past load.
+                    let gated = imported && !{
+                        let root = state.borrow().shell_root().to_path_buf();
+                        shell_storage_dir(&root, StorageKind::State)
+                            .map(|dir| dir.join("permissions-approvals.json"))
+                            .and_then(|path| crate::vm::permissions::Approvals::load(&path))
+                            .map(|approvals| approvals.is_approved(&declaration))
+                            .unwrap_or(false)
+                    };
+                    if gated {
+                        state.borrow_mut().begin_loading_unapproved(name.clone());
+                    }
                     let module = match execute_module(ctx, &name, &source, limits) {
                         Ok(LuaValue::Nil) => LuaValue::Boolean(true),
                         Ok(module) => module,
                         Err(error) => {
+                            if gated {
+                                state.borrow_mut().end_loading_unapproved();
+                            }
                             loaded.set(ctx, key, LuaValue::Nil)?;
                             return Err(HostError(error).into());
                         }
                     };
+                    if gated {
+                        state.borrow_mut().end_loading_unapproved();
+                    }
+                    module_records.borrow_mut().push(declaration);
                     loaded.set(ctx, key, module)?;
                     stack.replace(ctx, module);
                 }
@@ -108,6 +183,7 @@ pub(crate) fn install_reactive_api(
     lua: &mut Lua,
     state: Rc<StateCell<ReactiveState>>,
     module_roots: Rc<RefCell<Vec<PathBuf>>>,
+    module_records: Rc<RefCell<Vec<crate::vm::permissions::ModuleDeclaration>>>,
     limits: Limits,
     screen: Option<&Screen>,
 ) {
@@ -151,10 +227,11 @@ pub(crate) fn install_reactive_api(
         install_socket_api(ctx, morf);
         install_system_service_api(ctx, Rc::clone(&state), morf);
         let (ui, json, json_kinds) = install_ui_json_api(ctx, Rc::clone(&state), morf, limits);
+        crate::api::motion::claims::install_claims_api(ctx, Rc::clone(&state), ui);
         crate::api::io::http::install_http_api(ctx, Rc::clone(&state), morf, json_kinds);
         crate::api::io::io::install_io_api(ctx, Rc::clone(&state), morf);
         install_menu_desktop_api(ctx, morf, limits);
-        let (core, io, window) = install_module_api(ctx, state, morf, limits);
+        let (core, io, window) = install_module_api(ctx, Rc::clone(&state), morf, limits);
         finish_reactive_api(
             ctx,
             ApiModules {
@@ -165,7 +242,9 @@ pub(crate) fn install_reactive_api(
                 json,
                 window,
             },
+            state,
             module_roots,
+            module_records,
             limits,
         );
     });

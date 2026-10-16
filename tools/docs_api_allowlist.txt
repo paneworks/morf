@@ -1,0 +1,121 @@
+# API names the docs gate knows about but docs/UI.md and docs/IO.md do not
+# (yet) spell out. One entry per line: <name>[.*]<TAB><reason>.
+# `+name` entries are the reverse: documented names the generated types
+# cannot see because the engine serves them through __index (dynamic).
+# Entries nothing needs any more fail the gate; this list only shrinks.
+
+morf.animation.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.app_id	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.args	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.audio.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.broadcast	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.cache_dir	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.cache_path	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.clipboard.subscribe	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.color.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.color_quantizer	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.config_path	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.core.*	internal mirror of the top-level morf table; not a public spelling (subtree)
+morf.data_dir	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.data_path	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.dbus.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.density	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.desktop_entries	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.drag.supported	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.easing.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.easing_curve	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.elapsed_timer	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.encoding.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.env	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.exec_detached	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.executable	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.fs.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.geometry.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.greetd.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.has_icon	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.has_version	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.http.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.icon_path	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.image.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.input_method.*	input-method protocol API; engine-internal surface (subtree)
+morf.instance_id	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.io.*	mirror of the top-level I/O functions, documented under their morf.* spellings in IO.md (subtree)
+morf.json.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.keys.*	keysym name constants; morf.keys is documented as a whole, key names are data (subtree)
+morf.launch_time_ms	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.lock_surface	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.log.*	logging levels and sinks are covered by `morf log` CLI docs, not the Lua guide (subtree)
+morf.menu	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.on_backdrop_click	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.on_keyboard_focus	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.on_reload_completed	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.on_reload_failed	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.on_session_lock_state	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.on_session_locked	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.operands	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.options	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.output_power	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.output_power.set	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.pam.*	PAM conversation API used by lock/greeter configs; covered in docs/LOCK_PROVIDER.md (subtree)
+morf.persistent	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.process_id	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.process_view	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.quit	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.retain_lock	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.retainable	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.scope	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.screencopy.*	screen capture API used by capture tooling; not part of the UI guide (subtree)
+morf.session_lock	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.session_lock_state	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.session_paths	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.shader	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.shader_data	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.shell_dir	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.shell_id	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.shell_path	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.shortcuts.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.socket_server	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.split_parser	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.state_dir	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.state_path	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.status_notifier	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.status_notifier.subscribe	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.stream_collector	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.text_input.*	input-method protocol API for text fields; engine-internal surface (subtree)
+morf.time.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.toplevel.*	window object methods are reached through morf.toplevels rows in the guide (subtree)
+morf.toplevels.get	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.toplevels.revision	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.transition_parent	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.udev	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.udev.subscribe	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.ui.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.variants	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.version	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.view_extent	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.view_item_start	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.virtual_keyboard.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.virtual_list	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.watch_files	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.window.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+morf.working_directory	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.workspace.*	workspace object methods are reached through morf.workspaces rows in the guide (subtree)
+morf.workspaces	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+morf.xkb.*	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report (subtree)
+ui.Icon	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
+ui.Inset	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
++morf.audio.sinks	device list models served through __index in api/media/audio.rs
++morf.capabilities.backdrop_blur	compositor capability filled by the host (turn/start.rs), not a types field
++morf.capabilities.gamma_control	compositor capability filled by the host, not a types field
++morf.capabilities.hdr	compositor capability filled by the host, not a types field
++morf.capabilities.hdr_transfer	compositor capability filled by the host, not a types field
++morf.capabilities.idle_inhibit	compositor capability filled by the host, not a types field
++morf.capabilities.outputless	compositor capability filled by the host, not a types field
++morf.surface.blend	surface property served through __index in api/window/layer.rs
++morf.surface.keyboard_focus	surface property served through __index in api/window/layer.rs
++morf.surface.on_focus_changed	surface callback served through __index in api/window/layer.rs
++morf.surface.on_pointer_changed	surface callback served through __index in api/window/layer.rs
++morf.surface.opaque	surface property served through __index in api/window/layer.rs
++morf.surface.outputless	surface property served through __index in api/window/layer.rs
++morf.surface.subpixel_text	surface property served through __index in api/window/layer.rs
++morf.toplevels.model	list model served through __index in api/desktop/toplevels.rs

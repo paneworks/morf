@@ -681,6 +681,7 @@
 ---@field Text fun(...): any
 ---@field TextInput fun(...): any
 ---@field Timer fun(...): any
+---@field claims fun(...): any
 ---@field destroy fun(...): any
 ---@field each fun(...): any
 ---@field follow fun(...): any

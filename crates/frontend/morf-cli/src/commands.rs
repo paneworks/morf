@@ -133,6 +133,195 @@ pub(crate) fn list_instances(json: bool, show_dead: bool) -> Result<(), String> 
     Ok(())
 }
 
+/// What a permission group means, in the words an approval prompt uses.
+fn group_words(group: &str) -> String {
+    match group {
+        "run" | "process" => "run programs".to_owned(),
+        "fs" => "read and write files".to_owned(),
+        "dbus" => "talk to the message bus".to_owned(),
+        "http" => "make HTTP requests".to_owned(),
+        "socket" => "open sockets".to_owned(),
+        "services" => "use system services".to_owned(),
+        "pam" => "check passwords (PAM)".to_owned(),
+        "system" => "talk to the operating system".to_owned(),
+        "desktop" => "talk to the compositor and desktop".to_owned(),
+        "media" => "control media and audio".to_owned(),
+        "io" => "do input/output".to_owned(),
+        other => format!("`{other}` (an unknown group)"),
+    }
+}
+
+/// One imported module as an approver reads it: what it asks for, in
+/// plain words, and what approving it would cover.
+pub(crate) fn describe_module(record: &morf_lua::ModuleDeclaration) -> String {
+    let mut lines = vec![format!("{} ({})", record.name, record.path.display())];
+    if !record.declared {
+        lines.push("  declares nothing; approving covers the module as it stands".to_owned());
+    } else if record.groups.is_empty() {
+        lines.push("  asks for nothing".to_owned());
+    } else {
+        for group in &record.groups {
+            lines.push(format!("  may {}", group_words(group)));
+        }
+    }
+    if record
+        .groups
+        .iter()
+        .any(|group| group == "run" || group == "process")
+    {
+        lines.push("  runs anything it is told: this asks for everything.".to_owned());
+    }
+    lines.join("\n")
+}
+
+/// `morf approve <config>`: walks the configuration's imported modules,
+/// shows each declaration, and records approvals keyed by fingerprint,
+/// so editing a module or its declaration asks again. True when every
+/// imported module stands approved.
+pub(crate) fn approve_modules(config: &std::path::Path, yes: bool) -> Result<bool, String> {
+    use std::io::BufRead as _;
+    let options = morf_host::headless::LoadOptions::new(config.to_path_buf());
+    let headless =
+        morf_host::headless::Headless::load(&options).map_err(|failure| failure.error)?;
+    let runtime = &headless.runtime;
+    let imported: Vec<_> = runtime
+        .module_declarations()
+        .into_iter()
+        .filter(|record| record.imported)
+        .collect();
+    if imported.is_empty() {
+        println!("no imported modules");
+        return Ok(true);
+    }
+    let store = runtime.approvals_path()?;
+    let mut approvals = morf_lua::Approvals::load(&store)?;
+    let stdin = std::io::stdin();
+    let mut lines = stdin.lock().lines();
+    let mut denied = 0;
+    let mut changed = false;
+    for record in &imported {
+        println!("{}", describe_module(record));
+        if approvals.is_approved(record) {
+            println!("  already approved");
+            continue;
+        }
+        let approved = yes || {
+            print!("  approve? [y/N] ");
+            use std::io::Write as _;
+            let _ = std::io::stdout().flush();
+            lines
+                .next()
+                .transpose()
+                .map_err(|error| error.to_string())?
+                .is_some_and(|answer| answer.trim() == "y" || answer.trim() == "yes")
+        };
+        if approved {
+            approvals.approve(record)?;
+            changed = true;
+            println!("  approved");
+        } else {
+            denied += 1;
+            println!("  not approved");
+        }
+    }
+    if changed {
+        approvals.save(&store)?;
+        println!("approvals written to {}", store.display());
+    }
+    Ok(denied == 0)
+}
+
+/// The API reference for this build, rendered from the same generated
+/// LuaLS definitions `morf types` emits, so what `morf docs` prints can
+/// never describe another version's engine.
+pub(crate) fn api_reference() -> String {
+    let mut out = format!("# morf {} API reference\n", env!("CARGO_PKG_VERSION"));
+    for (relative, contents) in morf_lua::generate_types() {
+        out.push_str(&format!("\n## {relative}\n"));
+        for line in contents.lines() {
+            if let Some(name) = line.strip_prefix("---@class ") {
+                out.push_str(&format!("\n### {name}\n"));
+            } else if let Some(field) = line.strip_prefix("---@field ") {
+                out.push_str(&format!("- `{field}`\n"));
+            } else if let Some(function) = line
+                .strip_prefix("function ")
+                .and_then(|rest| rest.strip_suffix(" end"))
+            {
+                out.push_str(&format!("- `{function}`\n"));
+            } else if line.starts_with("---@") {
+                continue;
+            }
+        }
+    }
+    out
+}
+
+/// Where the bundled UI guide lives, in order: the installed library's
+/// `docs/`, beside the executable's share, or this checkout's `docs/`.
+fn guide_candidates() -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(data) = env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))
+    {
+        candidates.push(data.join("morf/library/docs/UI.md"));
+    }
+    let dirs = env::var_os("XDG_DATA_DIRS")
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+    candidates.extend(env::split_paths(&dirs).map(|dir| dir.join("morf/library/docs/UI.md")));
+    if let Ok(exe) = env::current_exe() {
+        candidates.push(exe.join("../../../share/morf/library/docs/UI.md"));
+        candidates.push(exe.join("../../../docs/UI.md"));
+    }
+    candidates.push(PathBuf::from("docs/UI.md"));
+    candidates
+}
+
+/// The bundled UI guide's text, or what was searched for it.
+pub(crate) fn ui_guide() -> Result<String, String> {
+    ui_guide_from(&guide_candidates())
+}
+
+pub(crate) fn ui_guide_from(candidates: &[PathBuf]) -> Result<String, String> {
+    for candidate in candidates {
+        if let Ok(text) = fs::read_to_string(candidate) {
+            return Ok(text);
+        }
+    }
+    Err(format!(
+        "the UI guide is not bundled here; looked for {} (the library bundle's docs/UI.md)",
+        candidates
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
+}
+
+const SKILL: &str = include_str!("../../../../skill/SKILL.md");
+
+/// Writes the generated agent skill into the per-user skill locations
+/// of the common coding agents under `home`. Returns one line per
+/// location: what was written, or that it was already there. Nothing
+/// else is written, and re-running is a no-op.
+pub(crate) fn install_skill(home: &std::path::Path) -> Result<Vec<String>, String> {
+    let mut wrote = Vec::new();
+    for agent in [".claude", ".codex"] {
+        let path = home.join(agent).join("skills/morf/SKILL.md");
+        if fs::read_to_string(&path).is_ok_and(|text| text == SKILL) {
+            wrote.push(format!("{} (already current)", path.display()));
+            continue;
+        }
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|error| format!("{}: {error}", parent.display()))?;
+        }
+        fs::write(&path, SKILL).map_err(|error| format!("{}: {error}", path.display()))?;
+        wrote.push(format!("{} (written)", path.display()));
+    }
+    Ok(wrote)
+}
+
 /// Prints what a bug report needs: the machine, the display, the instance.
 ///
 /// The half about this process is always printable; the half about the

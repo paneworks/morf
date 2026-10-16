@@ -17,7 +17,7 @@ use crate::{
     paint::*, process::services::refresh_idle_timeouts,
 };
 
-use super::{Host, slow};
+use super::{FrameAccounting, Host, slow};
 
 /// How a host starts.
 pub struct StartOptions {
@@ -177,6 +177,7 @@ impl Host {
             started,
             a11y: crate::a11y::surface::A11ySurfaces::default(),
             layout_complaint: None,
+            frame_accounting: FrameAccounting::default(),
             motion_reported: None,
             jit_logged: None,
             follow_up: true,

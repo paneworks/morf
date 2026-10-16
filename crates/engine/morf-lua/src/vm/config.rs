@@ -11,6 +11,7 @@ use crate::{
 };
 
 mod lint;
+mod reload_band;
 
 pub(crate) use lint::lint_path;
 
@@ -32,10 +33,12 @@ impl Runtime {
         let reactive = Rc::new(StateCell::new(ReactiveState::new()));
         *reactive.borrow_mut().limits_mut() = limits;
         let module_roots = Rc::new(RefCell::new(default_module_roots()));
+        let module_records = Rc::new(RefCell::new(Vec::new()));
         install_reactive_api(
             &mut lua,
             Rc::clone(&reactive),
             Rc::clone(&module_roots),
+            Rc::clone(&module_records),
             limits,
             screen.as_ref(),
         );
@@ -48,7 +51,9 @@ impl Runtime {
             handoff_authorizer: None,
             policy_retirement: None,
             module_roots,
+            module_records,
             lint_queue: RefCell::new(Vec::new()),
+            reload_error_band: RefCell::new(None),
         };
         crate::vm::extensions::apply_extensions(&mut runtime);
         runtime
@@ -114,6 +119,26 @@ impl Runtime {
         self.lua
             .enter(|ctx| run_destroyed_hooks(&self.reactive, ctx, self.limits));
         result
+    }
+
+    /// Every module this runtime has loaded, with its origin and its
+    /// permission declaration (PLAN item 4, step 1: declare only).
+    pub fn module_declarations(&self) -> Vec<crate::vm::permissions::ModuleDeclaration> {
+        let mut records = self.module_records.borrow().clone();
+        records.sort_by(|a, b| a.name.cmp(&b.name));
+        records
+    }
+
+    /// Where this shell's module approvals live: JSON under its XDG
+    /// state directory (PLAN item 4, step 2).
+    pub fn approvals_path(&self) -> Result<PathBuf, String> {
+        let root = self
+            .reactive
+            .borrow()
+            .lifecycle()
+            .shell_root()
+            .to_path_buf();
+        Ok(shell_storage_dir(&root, StorageKind::State)?.join("permissions-approvals.json"))
     }
 
     /// Replaces the ordered filesystem roots used for user Lua modules.

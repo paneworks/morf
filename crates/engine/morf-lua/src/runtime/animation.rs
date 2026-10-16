@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use morf_scene::AnimationFrame;
 
+use crate::runtime::host_types::IpcValue;
 use crate::vm::types::*;
 
 // The animation frame tick and the Lua handlers it reports completions to.
@@ -53,6 +54,47 @@ impl Runtime {
         moved
     }
 
+    /// Choreography claims, one frame: sync each claim's condition
+    /// from its signal, let the evaluator retarget whoever won, and
+    /// mirror presences back into their signals so bindings read them.
+    fn evaluate_claims(&mut self, delta: Duration) -> Result<(), Error> {
+        let mut state = self.reactive.borrow_mut();
+        if state.animation_mut().claims.is_empty() {
+            return Ok(());
+        }
+        let mut claims = std::mem::take(&mut state.animation_mut().claims);
+        for claim in claims.claims_mut() {
+            if let Some(condition) = claim.condition {
+                let holds = matches!(
+                    state.reactive().value(condition),
+                    Some(IpcValue::Boolean(true) | IpcValue::Number(_))
+                );
+                claim.active = claim.manual || holds;
+            }
+        }
+        let evaluated = claims.evaluate(state.scene_mut(), delta);
+        // One signal per claim name, however many properties it
+        // claims: the strongest presence is the claim's.
+        let mut mirrors: Vec<(morf_scene::reactive::SignalId, f64)> = Vec::new();
+        for (id, claim) in claims.claims().iter().enumerate() {
+            if let Some(signal) = claim.presence_signal {
+                let presence = claims.presence(id);
+                match mirrors.iter_mut().find(|(held, _)| *held == signal) {
+                    Some((_, held)) => *held = held.max(presence),
+                    None => mirrors.push((signal, presence)),
+                }
+            }
+        }
+        state.animation_mut().claims = claims;
+        evaluated.map_err(|error| Error::Runtime(error.to_string()))?;
+        for (signal, presence) in mirrors {
+            let _ = state
+                .reactive_mut()
+                .write(signal, IpcValue::Number(presence));
+        }
+        Ok(())
+    }
+
     /// [`Self::tick_animations`] for a loop driven by a display's frames:
     /// an animation asked for since the last frame starts on this one, its
     /// first frame drawn at its start however long the gap before it was
@@ -67,6 +109,7 @@ impl Runtime {
 
     pub fn tick_animations(&mut self, delta: Duration) -> Result<AnimationFrame, Error> {
         self.reactive.borrow_mut().animation_mut().ticked = true;
+        self.evaluate_claims(delta)?;
         let fading = self.advance_theme_fades(delta);
         {
             let mut state = self.reactive.borrow_mut();

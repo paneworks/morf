@@ -46,6 +46,7 @@ impl WgpuBackend {
                 radii,
                 radius,
                 saturation,
+                tint,
                 ..
             } = command
             else {
@@ -123,7 +124,9 @@ impl WgpuBackend {
                 axes,
                 uv: [0.0, 0.0, 1.0, 1.0],
                 color: [1.0, 1.0, 1.0, 1.0],
-                color_overlay: [0.0; 4],
+                // The glass tint, straight colour and strength; the
+                // shader washes it over the saturated backdrop.
+                color_overlay: [tint.red, tint.green, tint.blue, tint.alpha],
                 // A layer's composite, marked as a backdrop so the shader
                 // applies the saturation carried in `field`.
                 mode: [2.0, mask_enabled, 0.0, 0.0],

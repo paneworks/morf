@@ -180,12 +180,73 @@ fn failed_reload_keeps_the_previous_runtime() {
     assert!(result.recv().unwrap().is_err());
     assert!(!update.repaint);
     assert!(!update.recreate_surface);
+    // The configuration handled the failure itself: no engine band.
+    assert!(!runtime.reload_error_shown());
     assert_eq!(
         runtime.call_ipc("value", &[]).unwrap(),
         [IpcValue::Integer(7)]
     );
     let failure = runtime.call_ipc("reload.failure", &[]).unwrap();
     assert!(matches!(&failure[..], [IpcValue::String(error)] if !error.is_empty()));
+}
+
+#[test]
+fn failed_reload_without_a_handler_shows_the_engine_band() {
+    let screen = Screen {
+        name: "test".into(),
+        width: None,
+        height: None,
+        scale: 1,
+        ..Screen::default()
+    };
+    let mut runtime = Runtime::for_screen(Limits::default(), screen.clone());
+    runtime
+        .execute(
+            "shell.lua",
+            br#"
+                    morf.ipc.value = function() return 7 end
+                    morf.ui.Item { morf.ui.Rect { width = 10, height = 10 } }
+                "#,
+        )
+        .unwrap();
+    let reload = |runtime: &mut Runtime, source: &[u8]| {
+        let (reply, result) = mpsc::sync_channel(1);
+        let update = handle_worker_command(
+            runtime,
+            Some(&screen),
+            LoadPolicy::default(),
+            WorkerCommand::Reload {
+                path: Arc::new(PathBuf::from("shell.lua")),
+                source: Arc::from(source),
+                hard: false,
+                reply,
+            },
+        );
+        (update, result.recv().unwrap())
+    };
+
+    let (update, result) = reload(&mut runtime, b"local =");
+    assert!(result.is_err());
+    // The old configuration still runs, and the band is on its root.
+    assert_eq!(
+        runtime.call_ipc("value", &[]).unwrap(),
+        [IpcValue::Integer(7)]
+    );
+    assert!(update.repaint);
+    assert!(!update.reloaded);
+    assert!(runtime.reload_error_shown());
+    let text = runtime.reload_error_text().unwrap();
+    assert!(text.contains("shell.lua"), "{text}");
+    assert!(text.contains("reload failed"), "{text}");
+
+    // A fixed reload replaces the runtime, which dismisses the band.
+    let (update, result) = reload(
+        &mut runtime,
+        br#"morf.ui.Item { morf.ui.Rect { width = 20, height = 20 } }"#,
+    );
+    assert!(result.is_ok());
+    assert!(update.reloaded);
+    assert!(!runtime.reload_error_shown());
 }
 
 #[test]

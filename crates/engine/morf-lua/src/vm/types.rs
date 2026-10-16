@@ -170,12 +170,18 @@ pub struct Runtime {
     pub(crate) handoff_authorizer: Option<HandoffAuthorizer>,
     pub(crate) policy_retirement: Option<PolicyRetirement>,
     pub(crate) module_roots: Rc<RefCell<Vec<PathBuf>>>,
+    /// Loaded modules and their permission declarations, in load order.
+    pub(crate) module_records: Rc<RefCell<Vec<crate::vm::permissions::ModuleDeclaration>>>,
     /// Lint findings waiting to be logged.
     ///
     /// Its own cell rather than a push straight into the log, because the
     /// lint runs while whoever laid the scene out still holds it borrowed --
     /// and the log lives behind the same borrow. Drained on the next poll.
     pub(crate) lint_queue: RefCell<Vec<(morf_scene::NodeHandle, String, usize)>>,
+    /// The engine-owned reload-error band node, while one is shown. The
+    /// band is the host's guarantee that a failed reload is visible even
+    /// when the configuration never registered `on_reload_failed`.
+    pub(crate) reload_error_band: RefCell<Option<morf_scene::NodeHandle>>,
 }
 
 pub use morf_runtime::requests::{ToplevelRequest, WorkspaceRequest};

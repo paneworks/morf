@@ -18,6 +18,9 @@ pub(crate) struct Metatables {
     node: Option<StashedTable>,
     /// The one every state proxy shares, so a theme can be one.
     state: Option<StashedTable>,
+    /// The one every signal shares, kept so native code (claims'
+    /// presence) can hand a signal to Lua with its methods on it.
+    signal: Option<StashedTable>,
 }
 
 impl Metatables {
@@ -43,5 +46,13 @@ impl Metatables {
 
     pub(crate) fn set_state(&mut self, metatable: StashedTable) {
         self.state = Some(metatable);
+    }
+
+    pub(crate) fn signal(&self) -> Option<StashedTable> {
+        self.signal.clone()
+    }
+
+    pub(crate) fn set_signal(&mut self, metatable: StashedTable) {
+        self.signal = Some(metatable);
     }
 }

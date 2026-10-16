@@ -121,12 +121,16 @@ function dbus_client.new(options)
   --- Forgets the cached proxies for a path whose object has gone (only
   --- those to `destination`, if given), so their connections can close.
   function client.forget(path, destination)
+    -- Collect first: clearing entries while `pairs` walks the table
+    -- can make the walk revisit entries forever.
+    local gone = {}
     for key in pairs(client.proxies) do
       local _, _, d, p = key:find("^(%S+) (%S+) ")
       if p == path and (destination == nil or d == destination) then
-        client.proxies[key] = nil
+        gone[#gone + 1] = key
       end
     end
+    for _, key in ipairs(gone) do client.proxies[key] = nil end
   end
 
   --- Calls a method. `arguments` is a list of positional arguments (typed

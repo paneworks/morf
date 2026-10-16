@@ -162,3 +162,38 @@ instances and glyph quads saves what its bench said, ~0.1 ms a frame, inside
 the noise here. The text caches (4.3) never reach their caps in a short
 script; the caps bound a long session's memory, which their unit tests
 cover.
+
+# Frame stalls (PLAN item 2, steps 1-2)
+
+The rehearsal (`frame_stall` in `crates/engine/morf-lua/tests/engine/`): a
+spring (`stiffness = 120, damping = 14`, `x` to 300) ticked at 16ms steps,
+with an IPC handler that burns a fixed Lua loop fired once per frame before
+the tick, as a host turn runs handlers before it paints. Release build:
+
+```
+spring settled            frame 114 of 150, stalled and unstalled alike
+busy handler              3.60 ms/frame (120k-iteration loop, release)
+                          66 ms/frame in a debug build, same loop
+frame budget at 60Hz      16.7 ms; the accounting overrun line is 2.4x that
+```
+
+So a slow-but-legal handler is additive turn latency -- the spring keeps
+its virtual-time schedule, but every frame's paint waits behind the
+handler in the same turn. The cost lands in the `handlers` stage of the
+new frame-time accounting (`host/turn/stats.rs`, surfaced with the motion
+report, counters reset on report), not in paint.
+
+# Motion-only fast path (PLAN item 2, steps 3-4)
+
+Landed in `host/turn.rs`: backend events are drained up front, and a turn
+whose events are only `Event::Frame`, with no supervisor commands and no
+repaint debt, handles frame callbacks before `poll_services()`; every
+other turn keeps the original ordering. Cage-sandbox rehearsal
+(`tools/sandbox/nested.sh`, release build): a spring box (`x` 100 -> 1500)
+beside a 16 ms timer burning a 900k-iteration Lua loop filmed 90 frames
+in 5.31 s (about 59 ms a frame, handler-bound), the spring completed its
+travel, an IPC `ping` during the film answered `pong`, and a separate
+run clicking the counter demo incremented it. No wakeup was lost; frame
+rate under this handler remains bounded by the handler itself, which the
+accounting attributes to the handlers stage, not paint. Splitting Lua
+off the host thread stays future work, informed by these numbers.

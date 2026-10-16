@@ -27,6 +27,7 @@
 
 local morf = require("morf")
 local dbus_client = require("lib.services.dbus_client")
+local registry = require("lib.services.registry")
 
 local upower = {}
 
@@ -106,169 +107,10 @@ end
 function upower.connect(options)
   options = options or {}
   local name = options.name or NAME
-  local client = dbus_client.new({ dbus = options.dbus, bus = options.bus or "system" })
   local profile_services = options.profile_services or PROFILE_SERVICES
-
-  local state = morf.state({
-    available = false,
-    on_battery = false,
-    lid_is_closed = false,
-    lid_is_present = false,
-    display = empty_display(),
-    devices = {},
-    -- Batteries that are not the machine's own: a mouse, a headset.
-    peripherals = {},
-    profiles = {
-      available = false,
-      active = "",
-      degraded = "",
-      service = "",
-      list = {},
-    },
-  })
-
-  local power = { state = state }
-  local watched = {}
-  local rows = {}
   local profile_service -- the entry of `profile_services` that answered
 
-  local function assign(target, values)
-    for key, value in pairs(values) do target[key] = value end
-  end
-
-  local function watch(path, handler)
-    if watched[path] then return end
-    watched[path] = client.on_properties(name, path, handler) or nil
-  end
-
-  --- Closes the subscriptions of devices no longer enumerated. The display
-  --- device is UPower's own and never goes.
-  local function unwatch_missing(present)
-    for path, handle in pairs(watched) do
-      if path ~= DISPLAY and not present[path] then
-        handle.close()
-        watched[path] = nil
-      end
-    end
-  end
-
-  local refresh_devices
-
-  local function read_root()
-    -- Only a running service is read. A read of an absent but activatable
-    -- name starts it, and starting a system daemon is not a watcher's call.
-    local root = client.has_owner(name) and client.get_all(name, ROOT, NAME)
-    if not root then
-      state.available = false
-      state.on_battery = false
-      state.lid_is_closed = false
-      state.lid_is_present = false
-      return false
-    end
-    state.available = true
-    state.on_battery = root.OnBattery == true
-    state.lid_is_closed = root.LidIsClosed == true
-    state.lid_is_present = root.LidIsPresent == true
-    return true
-  end
-
-  -- Each device's properties as last read, so a change signal -- which
-  -- carries the new values -- is merged in without asking the bus again.
-  local props = {}
-
-  local function merged(path, changed)
-    local p = props[path]
-    if not p then return nil end
-    for key, value in pairs(changed or {}) do p[key] = value end
-    return p
-  end
-
-  local function show_display(p)
-    local row = upower.device_row(DISPLAY, p)
-    assign(state.display, {
-      present = row.present, percentage = row.percentage, state = row.state,
-      charging = row.charging, time_to_empty = row.time_to_empty,
-      time_to_full = row.time_to_full, icon_name = row.icon_name,
-      energy_rate = row.energy_rate, kind = row.kind, warning_level = row.warning_level,
-    })
-  end
-
-  local function read_display()
-    local p = client.get_all(name, DISPLAY, DEVICE)
-    props[DISPLAY] = p or nil
-    if not p then
-      assign(state.display, empty_display())
-      return
-    end
-    show_display(p)
-  end
-
-  local schedule = dbus_client.debounce(options.debounce_ms or 60, function() refresh_devices() end)
-
-  local function publish_devices(list)
-    local peripherals = {}
-    for _, row in ipairs(list) do
-      if not row.power_supply and row.kind ~= "line_power" and row.present then
-        peripherals[#peripherals + 1] = row
-      end
-    end
-    table.sort(list, function(a, b) return a.path < b.path end)
-    table.sort(peripherals, function(a, b) return a.path < b.path end)
-    rows = list
-    state.devices:replace(list, "path")
-    state.peripherals:replace(peripherals, "path")
-  end
-
-  -- One device changed: its row alone is rebuilt, from what the signal said.
-  local function device_changed(path, changed)
-    local p = merged(path, changed)
-    if not p then return schedule() end
-    local list = {}
-    for _, row in ipairs(rows) do
-      list[#list + 1] = row.path == path and upower.device_row(path, p) or row
-    end
-    publish_devices(list)
-  end
-
-  function refresh_devices()
-    local paths = client.call1(name, ROOT, NAME, "EnumerateDevices")
-    local list = {}
-    local present = {}
-    for _, path in ipairs(type(paths) == "table" and paths or {}) do
-      local p = client.get_all(name, path, DEVICE)
-      if p then
-        present[path] = true
-        props[path] = p
-        watch(path, function(_, changed, invalidated)
-          if next(invalidated or {}) then schedule() else device_changed(path, changed) end
-        end)
-        list[#list + 1] = upower.device_row(path, p)
-      end
-    end
-    for path in pairs(props) do
-      if path ~= DISPLAY and not present[path] then props[path] = nil end
-    end
-    unwatch_missing(present)
-    publish_devices(list)
-  end
-
-  local function clear_devices()
-    rows = {}
-    state.devices:replace({}, "path")
-    state.peripherals:replace({}, "path")
-    assign(state.display, empty_display())
-  end
-
-  local function refresh()
-    if read_root() then
-      read_display()
-      refresh_devices()
-    else
-      clear_devices()
-    end
-  end
-
-  local function read_profiles()
+  local function read_profiles(client, state)
     for _, service in ipairs(profile_services) do
       -- Never by activation: power-profiles-daemon applies its default
       -- profile when it starts, so reading it into existence would change
@@ -299,51 +141,106 @@ function upower.connect(options)
     state.profiles.list:replace({}, "name")
   end
 
-  --- Whether UPower is on the bus.
-  function power.available() return state.available end
-
-  --- The device rows as plain tables.
-  function power.devices() return rows end
-
-  function power.refresh()
-    refresh()
-    read_profiles()
+  local function bool_field(prop)
+    return { prop = prop, default = false, map = function(v) return v == true end }
   end
 
-  --- Switches the power profile: "power-saver", "balanced" or
-  --- "performance" (whichever `state.profiles.list` offers).
-  function power.set_profile(profile)
-    if not profile_service then return nil, "no power profile service" end
-    local ok, err = client.set(profile_service.name, profile_service.path,
-      profile_service.interface, "ActiveProfile", tostring(profile))
-    read_profiles()
-    return ok, err
-  end
-
-  client.watch_name(name, function() refresh() end)
-  client.on_properties(name, ROOT, function(_, changed)
-    if changed.OnBattery ~= nil then state.on_battery = changed.OnBattery == true end
-    if changed.LidIsClosed ~= nil then state.lid_is_closed = changed.LidIsClosed == true end
-    if changed.LidIsPresent ~= nil then state.lid_is_present = changed.LidIsPresent == true end
-  end)
-  watch(DISPLAY, function(_, changed, invalidated)
-    local p = not next(invalidated or {}) and merged(DISPLAY, changed)
-    if p then show_display(p) else read_display() end
-  end)
-  client.on_signal(name, ROOT, NAME, "DeviceAdded", function() schedule() end)
-  client.on_signal(name, ROOT, NAME, "DeviceRemoved", function(body)
-    local path = dbus_client.first(body)
-    if type(path) == "string" then client.forget(path) end
-    schedule()
-  end)
-  for _, service in ipairs(profile_services) do
-    client.watch_name(service.name, function() read_profiles() end)
-    client.on_properties(service.name, service.path, function() read_profiles() end)
-  end
-
-  refresh()
-  read_profiles()
-  return power
+  local service = registry.define {
+    name = "upower",
+    bus = options.bus or "system",
+    service = name,
+    path = ROOT,
+    interface = NAME,
+    debounce_ms = options.debounce_ms,
+    properties = {
+      on_battery = bool_field("OnBattery"),
+      lid_is_closed = bool_field("LidIsClosed"),
+      lid_is_present = bool_field("LidIsPresent"),
+    },
+    groups = {
+      display = {
+        path = DISPLAY,
+        interface = DEVICE,
+        properties = {
+          present = bool_field("IsPresent"),
+          percentage = { prop = "Percentage", default = 0 },
+          state = { prop = "State", default = "unknown",
+                    map = function(v) return STATES[v] or "unknown" end },
+          charging = { prop = "State", default = false, map = function(v)
+            local s = STATES[v]
+            return s == "charging" or s == "pending_charge"
+          end },
+          time_to_empty = { prop = "TimeToEmpty", default = 0 },
+          time_to_full = { prop = "TimeToFull", default = 0 },
+          icon_name = { prop = "IconName", default = "" },
+          energy_rate = { prop = "EnergyRate", default = 0 },
+          kind = { prop = "Type", default = "unknown",
+                   map = function(v) return KINDS[v] or "unknown" end },
+          warning_level = { prop = "WarningLevel", default = "unknown",
+                            map = function(v) return WARNING_LEVELS[v] or "unknown" end },
+        },
+      },
+    },
+    objects = {
+      field = "devices",
+      key = "path",
+      interface = DEVICE,
+      list = function(client)
+        if not client.has_owner(name) then return {} end
+        local paths = client.call1(name, ROOT, NAME, "EnumerateDevices")
+        return type(paths) == "table" and paths or {}
+      end,
+      map = function(props, path) return upower.device_row(path, props) end,
+    },
+    state = {
+      -- Batteries that are not the machine's own: a mouse, a headset.
+      peripherals = {},
+      profiles = { available = false, active = "", degraded = "", service = "", list = {} },
+    },
+    signals = {
+      { member = "DeviceAdded", fn = function(bound) bound.refresh() end },
+      { member = "DeviceRemoved", fn = function(bound, body)
+        local path = dbus_client.first(body)
+        if type(path) == "string" then bound.client.forget(path) end
+        bound.refresh()
+      end },
+    },
+    on_refresh = function(bound, client, state)
+      if not state.available then
+        state.devices:replace({}, "path")
+        state.peripherals:replace({}, "path")
+        for key, value in pairs(empty_display()) do state.display[key] = value end
+      else
+        local peripherals = {}
+        for _, row in ipairs(bound.rows or {}) do
+          if not row.power_supply and row.kind ~= "line_power" and row.present then
+            peripherals[#peripherals + 1] = row
+          end
+        end
+        state.peripherals:replace(peripherals, "path")
+      end
+      read_profiles(client, state)
+    end,
+    methods = function(client, bound, state)
+      return {
+        --- Whether UPower is on the bus.
+        available = function() return state.available end,
+        --- The device rows as plain tables.
+        devices = function() return bound.rows or {} end,
+        refresh = function() bound.refresh() end,
+        --- Switches the power profile: "power-saver", "balanced" or
+        --- "performance" (whichever `state.profiles.list` offers).
+        set_profile = function(profile)
+          if not profile_service then return nil, "no power profile service" end
+          local ok, err = client.set(profile_service.name, profile_service.path,
+            profile_service.interface, "ActiveProfile", tostring(profile))
+          read_profiles(client, state)
+          return ok, err
+        end,
+      }
+    end,
+  }
+  return service.connect({ dbus = options.dbus, bus = options.bus })
 end
 
 return upower

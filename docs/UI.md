@@ -528,6 +528,31 @@ panel -- is not charged to it, so its first frame is its first value
 rather than a jump part of the way.
 `morf.animation.fling` coasts a property.
 
+When several states want the same property -- a panel open, peeked at,
+or at rest -- `ui.claims(node, { ... })` says who owns it instead of
+chaining conditionals in a binding:
+
+```lua
+local claims = ui.claims(panel, {
+  open = { when = opened, class = "state", spring = { stiffness = 260 },
+           set = { x = 0, opacity = 1 } },
+  peek = { class = "asked", duration = 200, set = { x = -40 } },
+  rest = { class = "ambient", duration = 200, set = { x = -288, opacity = 0 } },
+})
+```
+
+Each claim names a priority class (`state` over `asked` over `reflex`
+over `posture` over `ambient`; ties break by claim name), the
+properties it sets, and its own motion (`spring = { ... }` or
+`duration = <ms>` with an `easing`). `when` is a signal; without one
+the claim holds from the start and `claims.peek.ask()` /
+`claims.peek.release()` move it from a handler. The winning claim's
+target retargets the property's motion -- value and velocity carry
+over, nothing integrates twice. `claims.open.presence` is an ordinary
+signal, 0 while the claim yields and 1 while it owns, for painting
+according to who is in charge. Writing a claimed property directly is
+refused while its claims stand.
+
 An `easing` is a name (`"out_cubic"`), a cubic Bézier `{ x1, y1, x2, y2 }` (four numbers in order, or those named fields),
 or a spline of several: `{ spline = { x1, y1, x2, y2, x, y, ... } }`, each
 six numbers a segment's two control points and its end, from `(0, 0)` to a
@@ -650,6 +675,7 @@ in the middle of a flush), with a handler's fuel; its writes flush when it
 returns, and an error in it is logged. Groups, loops, bindings and handlers
 that belong to a destroyed node end with it.
 
+<!-- morf-check: skip: elided with ...; shows the on_destroyed shape only -->
 ```lua
 local function clock_face()
   local unsubscribe = services.time.subscribe(function(t) ... end)
@@ -765,7 +791,9 @@ drawn inline, the panels under a popover — is blurred and drawn back
 inside it, corners and all, with the rect's own `color` over it as the
 tint. It needs nothing from the compositor, so it looks the same under
 cage, GNOME or a compositor with no blur at all. `backdrop_saturation`
-(1 by default) greys the backdrop towards 0 or deepens it above 1.
+(1 by default) greys the backdrop towards 0 or deepens it above 1, and
+`backdrop_tint` washes a colour over the result by the colour's alpha,
+for glass that should carry the theme's hue rather than only its fill.
 
 ```lua
 ui.Rect {
@@ -773,6 +801,7 @@ ui.Rect {
   color = morf.color("#1a1a1e"):alpha(0.55),  -- the tint over the blur
   backdrop_blur = 24,
   backdrop_saturation = 1.4,
+  backdrop_tint = "#3366cc33",
 }
 ```
 
@@ -1766,6 +1795,7 @@ every node with an `accessible_role`, every `Text` with text (a
 Tab reaches (a `"button"` unless it says otherwise). The boxes between
 them are left out, and so is a subtree under `accessible_hidden = true`.
 
+<!-- morf-check: skip: elided with ...; shows the accessible property shape only -->
 ```lua
 ui.MouseArea { accessible_role = "switch", accessible_name = "Wi-Fi",
   accessible_description = "Off while flying",
@@ -2957,6 +2987,7 @@ resizes from its edges and corners, and turns -- a floating panel, an
 image cropper's frame, the handles round a canvas item, a
 picture-in-picture window, a calendar's event.
 
+<!-- morf-check: skip: needs a kit transform spec and its content node from the surrounding configuration -->
 ```lua
 local node, box = lib.kit.transform.make("floating_panel", {
   title = "Inspector", x = 40, y = 40, width = 320, height = 240,
@@ -3645,7 +3676,7 @@ Collection: the arrows walk it, typing jumps, Return or a press picks)
 whose rows set each family's name in the theme's face and a line in
 the family itself, and under them the family the list is on in a
 larger sample (`sample = false` leaves it out). The families are
-`fonts`, or `morf.text.families()` where the engine lists them. The
+`fonts`, or `morf.font_families()` where the engine lists them. The
 search ranks them fuzzily (`filter = false` leaves the list as given
 and only calls `on_search(query)` -- a configuration that pages its own
 list); Return in the search picks the first. An empty name keeps a
