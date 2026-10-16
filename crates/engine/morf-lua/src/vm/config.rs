@@ -11,7 +11,7 @@ use crate::{
 };
 
 mod lint;
-mod reload_band;
+pub(crate) mod reload_band;
 
 pub(crate) use lint::lint_path;
 
@@ -53,7 +53,7 @@ impl Runtime {
             module_roots,
             module_records,
             lint_queue: RefCell::new(Vec::new()),
-            reload_error_band: RefCell::new(None),
+            reload_error: RefCell::new(None),
         };
         crate::vm::extensions::apply_extensions(&mut runtime);
         runtime
@@ -337,35 +337,44 @@ impl Runtime {
         self.reactive.borrow().lifecycle().quit_requested()
     }
 
+    /// Tells every `on_reload_completed` handler; whether one returned
+    /// without an error.
     pub fn dispatch_reload_completed(&mut self) -> bool {
-        self.dispatch_reload_callbacks(true, None)
+        self.dispatch_reload_callbacks(true, None, 0).1 > 0
     }
 
+    /// Tells every `on_reload_failed` handler; whether one returned
+    /// without an error.
     pub fn dispatch_reload_failed(&mut self, error: String) -> bool {
-        self.dispatch_reload_callbacks(false, Some(error))
+        self.dispatch_reload_callbacks(false, Some(error), 0).1 > 0
     }
 
+    /// Runs the reload handlers from the `skip`th on. Returns how many are
+    /// registered, and how many of those run returned without an error.
     pub(crate) fn dispatch_reload_callbacks(
         &mut self,
         completed: bool,
         error: Option<String>,
-    ) -> bool {
+        skip: usize,
+    ) -> (usize, usize) {
         let callbacks = self
             .reactive
             .borrow()
             .lifecycle()
             .reload_callbacks(completed);
         let args = error.map(IpcValue::String).into_iter().collect::<Vec<_>>();
-        for callback in &callbacks {
-            if let Err(message) =
-                self.run_handler(|ctx, limits| execute_handler_args(ctx, callback, &args, limits))
+        let mut succeeded = 0;
+        for callback in callbacks.iter().skip(skip) {
+            match self.run_handler(|ctx, limits| execute_handler_args(ctx, callback, &args, limits))
             {
-                self.reactive
+                Ok(_) => succeeded += 1,
+                Err(message) => self
+                    .reactive
                     .borrow_mut()
-                    .log(LogLevel::Warn, format!("reload callback: {message}"));
+                    .log(LogLevel::Warn, format!("reload callback: {message}")),
             }
         }
-        !callbacks.is_empty()
+        (callbacks.len(), succeeded)
     }
 }
 

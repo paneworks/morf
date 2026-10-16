@@ -171,6 +171,10 @@ pub struct Headless {
     /// The seat and pointer of a run with no host.
     pub(crate) idle_seat: VirtualSeat,
     pub(crate) idle_input: PointerInput,
+    /// What a reload reads and runs as: the file, its policy, its screen.
+    pub(crate) path: PathBuf,
+    pub(crate) policy: LoadPolicy,
+    pub(crate) screen_model: Option<morf_lua::Screen>,
 }
 
 impl Headless {
@@ -314,6 +318,9 @@ impl Headless {
             linted: std::collections::HashMap::new(),
             idle_seat: VirtualSeat::default(),
             idle_input: PointerInput::default(),
+            path: options.path.clone(),
+            policy: options.policy,
+            screen_model: own.as_ref().map(lua_screen),
         };
         // The first frame, at time zero: what the shell draws before any
         // time has passed.

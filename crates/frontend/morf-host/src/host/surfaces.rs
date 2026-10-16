@@ -230,7 +230,9 @@ pub fn surface_root(surface: WindowId, layer: NodeHandle, windows: &Windows) -> 
 }
 
 pub fn primary_surface_root(runtime: &Runtime) -> Result<NodeHandle, String> {
-    let roots = runtime.scene().roots();
+    let band = runtime.reload_band_root();
+    let mut roots = runtime.scene().roots();
+    roots.retain(|root| Some(*root) != band);
     let mut window_roots = HashSet::new();
     for surface in runtime.window_surface_configs() {
         if !window_roots.insert(surface.root) {

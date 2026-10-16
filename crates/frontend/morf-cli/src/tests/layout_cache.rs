@@ -37,6 +37,7 @@ fn cached(runtime: &Runtime, root: NodeHandle) -> CachedLayout {
         input_paint: u64::MAX,
         backdrop: Vec::new(),
         keyboard_focus: String::new(),
+        band: None,
     }
 }
 
@@ -129,7 +130,7 @@ fn the_input_region_is_kept_until_where_input_lands_moves() {
             0,
             &config,
             Some(cache),
-            stamp,
+            (stamp, None),
         )
         .unwrap()
     };

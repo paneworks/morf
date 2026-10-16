@@ -294,18 +294,9 @@ pub fn handle_worker_command(
                     *runtime = candidate;
                     true
                 }
-                Err(error) => {
-                    // A configuration that reports the failure itself
-                    // never sees the engine band as well; one that does
-                    // not is guaranteed the error is on screen.
-                    if runtime.dispatch_reload_failed(error.clone()) {
-                        runtime.clear_reload_error();
-                        false
-                    } else {
-                        runtime.show_reload_error(error, &path);
-                        runtime.reload_error_shown()
-                    }
-                }
+                // Reported by the configuration's own handlers, or shown on
+                // the engine's band: never both, and never neither.
+                Err(error) => runtime.report_reload_failure(error, &path),
             };
             let _ = reply.send(result);
             WorkerUpdate {

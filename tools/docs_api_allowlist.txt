@@ -48,8 +48,6 @@ morf.log.*	logging levels and sinks are covered by `morf log` CLI docs, not the 
 morf.menu	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.on_backdrop_click	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.on_keyboard_focus	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.on_reload_completed	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
-morf.on_reload_failed	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.on_session_lock_state	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.on_session_locked	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report
 morf.operands	public but not yet documented in docs/UI.md or docs/IO.md; tracked by the coverage report

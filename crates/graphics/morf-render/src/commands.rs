@@ -2,7 +2,7 @@ use morf_layout::{Geometry, Layout, TextAlignment, TextElide, TextStyle, Transfo
 use morf_scene::{Color, Gradient, NodeHandle, Scene, TextDecoration};
 use std::ops::Range;
 
-use crate::{effects::*, field::*, paint::*, sdf::*};
+use crate::{Overlay, effects::*, field::*, paint::*, sdf::*};
 
 mod command_bounds;
 mod partial_damage;
@@ -449,20 +449,28 @@ impl DrawList {
     /// keeps the capacity and the pages, which is most of the cost once a scene
     /// is large enough to leave the cache.
     pub fn rebuild(&mut self, scene: &Scene, layout: &Layout) -> Result<(), RenderError> {
-        self.rebuild_with(scene, layout, SpanBase::default(), None)
+        self.rebuild_with(scene, layout, None, SpanBase::default(), None)
     }
 
+    /// Refills the list from every root `layout` placed, then `overlay`
+    /// with its own layout, over all of them.
     pub(crate) fn rebuild_with(
         &mut self,
         scene: &Scene,
         layout: &Layout,
+        overlay: Option<Overlay<'_>>,
         span: SpanBase,
         mut reuse: Option<&mut Reuse<'_>>,
     ) -> Result<(), RenderError> {
         self.commands.clear();
         self.layers.clear();
         let list = self;
-        for root in scene.roots() {
+        let over = overlay.map(|overlay| overlay.root);
+        let roots = scene.roots().into_iter().filter(|root| Some(*root) != over);
+        let trees = roots
+            .map(|root| (root, layout))
+            .chain(overlay.map(|overlay| (overlay.root, overlay.layout)));
+        for (root, layout) in trees {
             append_node(
                 scene,
                 layout,

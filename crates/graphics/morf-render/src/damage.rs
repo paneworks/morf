@@ -7,7 +7,7 @@ mod engine;
 mod explain;
 mod keys;
 
-pub use engine::{RenderBackend, RenderEngine};
+pub use engine::{Overlay, RenderBackend, RenderEngine};
 use explain::damage_log_wanted;
 use keys::{
     Changes, Key, command_changes, command_keys, keyed_commands, layer_changes, moved_commands,

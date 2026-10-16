@@ -5,6 +5,7 @@ mod outputless;
 mod pacing;
 mod popups;
 mod primary;
+mod reload_band;
 mod screens;
 
 // The supervisor and its workers: screen sets, IPC dispatch, hot reload.
@@ -226,8 +227,8 @@ fn failed_reload_without_a_handler_shows_the_engine_band() {
     };
 
     let (update, result) = reload(&mut runtime, b"local =");
-    assert!(result.is_err());
-    // The old configuration still runs, and the band is on its root.
+    let error = result.unwrap_err();
+    // The old configuration still runs, and the band says what failed where.
     assert_eq!(
         runtime.call_ipc("value", &[]).unwrap(),
         [IpcValue::Integer(7)]
@@ -235,9 +236,15 @@ fn failed_reload_without_a_handler_shows_the_engine_band() {
     assert!(update.repaint);
     assert!(!update.reloaded);
     assert!(runtime.reload_error_shown());
+    let failure = runtime.reload_failure().unwrap();
+    assert_eq!(failure.error, error);
+    assert_eq!(failure.location, Some((PathBuf::from("shell.lua"), 1)));
     let text = runtime.reload_error_text().unwrap();
-    assert!(text.contains("shell.lua"), "{text}");
-    assert!(text.contains("reload failed"), "{text}");
+    assert!(text.contains("shell.lua failed at line 1"), "{text}");
+    assert!(text.contains(&error), "{text}");
+    // The band is a tree of the engine's own, never the primary root.
+    let primary = morf_host::host::surfaces::primary_surface_root(&runtime).unwrap();
+    assert_ne!(Some(primary), runtime.reload_band_root());
 
     // A fixed reload replaces the runtime, which dismisses the band.
     let (update, result) = reload(

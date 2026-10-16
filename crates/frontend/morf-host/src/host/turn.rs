@@ -314,12 +314,12 @@ impl Host {
         tx: Option<&mpsc::Sender<SupervisorMessage>>,
     ) -> Result<bool, String> {
         self.native_contacts.observe(&event);
-        // The engine reload-error band comes down on the next press, as
-        // a notification would; the press itself still reaches the shell.
-        let dismissed = matches!(&event, Event::PointerButton { pressed: true, .. })
-            && runtime.reload_error_shown();
-        if dismissed {
-            runtime.clear_reload_error();
+        // A press on the primary surface takes the reload-error band down;
+        // one on the band itself goes no further.
+        let band = self.state.layout.band.as_ref();
+        let dismissed = crate::host::reload_band::dismiss_reload_band(runtime, band, &event);
+        if dismissed == Some(true) {
+            return Ok(true);
         }
         let handling = Instant::now();
         let what = event_kind(&event);
@@ -334,7 +334,7 @@ impl Host {
         );
         slow(self.report_slow, &self.name, what, handling);
         match handled {
-            Ok(painted) => Ok(painted || dismissed),
+            Ok(painted) => Ok(painted || dismissed.is_some()),
             // A scene that is mid-change (a view that removed a node whose
             // parent still lists it) fails the layout for this event; the
             // event is dropped and the shell stays up, and the next paint

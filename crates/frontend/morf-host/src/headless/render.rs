@@ -10,6 +10,7 @@ use morf_layout::Size;
 use morf_render::{BlendSpace, RenderEngine, WgpuBackend};
 
 use crate::headless::Headless;
+use crate::host::reload_band::band_overlay;
 
 /// Layout passes a picture allows the bindings that read the layout.
 const SETTLE_PASSES: usize = 8;
@@ -51,7 +52,7 @@ fn renderer(width: u32, height: u32) -> Result<RenderEngine<WgpuBackend>, String
 
 /// Draws one surface at `scale`, premultiplied as the renderer leaves it.
 fn draw(headless: &mut Headless, index: usize, scale: u32) -> Result<Picture, String> {
-    let (root, size, blend, label) = {
+    let (root, size, blend, label, primary) = {
         let surface = headless
             .surfaces
             .get(index)
@@ -61,6 +62,7 @@ fn draw(headless: &mut Headless, index: usize, scale: u32) -> Result<Picture, St
             surface.size,
             surface.blend.clone(),
             surface.label(),
+            surface.kind == "primary",
         )
     };
     let (width, height) = (size.0 * scale, size.1 * scale);
@@ -84,11 +86,25 @@ fn draw(headless: &mut Headless, index: usize, scale: u32) -> Result<Picture, St
         .runtime
         .sync_text_inputs(&layout, engine.backend_mut().text_system());
     headless.runtime.observe_stretch(&layout);
+    let band = primary
+        .then(|| {
+            headless
+                .runtime
+                .lay_out_reload_band(size, engine.backend_mut())
+        })
+        .flatten();
+    let overlay = band_overlay(band.as_ref());
     // Twice: the second frame is the incremental one, which reuses an effect
     // layer's target the way every frame after the first does.
     for _ in 0..2 {
         engine
-            .render(&headless.runtime.scene(), &layout, scale * 120, |_| {})
+            .render_over(
+                &headless.runtime.scene(),
+                &layout,
+                overlay,
+                scale * 120,
+                |_| {},
+            )
             .map_err(|error| format!("{label}: render: {error}"))?;
     }
     Ok(Picture {

@@ -8,6 +8,7 @@ use morf_render::{RenderEngine, WgpuBackend};
 use morf_scene::NodeHandle;
 use morf_value::region::{Rect as RegionRect, Region};
 
+use crate::host::reload_band::{band_for, band_input, band_overlay, band_region};
 use crate::host::{layers::*, surfaces::*};
 
 use super::cache::{CachedLayout, layout_for};
@@ -75,6 +76,12 @@ pub fn paint_layer(
     split.mark("text inputs");
     runtime.observe_stretch(&layout);
     split.mark("stretch");
+    let band = (layer == morf_app::PRIMARY_LAYER)
+        .then(|| {
+            let previous = cache.as_deref().and_then(|cached| cached.band.as_ref());
+            band_for(runtime, previous, (width, height), renderer.backend_mut())
+        })
+        .flatten();
     let scene = runtime.scene();
     let painted = scene.paint_stamp(root).map_err(|error| error.to_string())?;
     let stamp = (!fresh).then(|| scene.input_stamp(root).ok()).flatten();
@@ -85,7 +92,7 @@ pub fn paint_layer(
         layer,
         config,
         cache.as_deref(),
-        stamp,
+        (stamp, band_input(band.as_ref())),
     )?;
     split.mark("input region");
     let mut backdrop = Vec::new();
@@ -159,7 +166,8 @@ pub fn paint_layer(
     // the buffer itself (`WgpuBackend::declares_damage`).
     let render = |renderer: &mut RenderEngine<WgpuBackend>| {
         let declare = !renderer.backend_mut().declares_damage();
-        renderer.render(&scene, &layout, scale_120, |damage| {
+        let overlay = band_overlay(band.as_ref());
+        renderer.render_over(&scene, &layout, overlay, scale_120, |damage| {
             if !declare {
                 return;
             }
@@ -244,6 +252,7 @@ pub fn paint_layer(
         input_paint,
         backdrop,
         keyboard_focus: config.keyboard_focus.clone(),
+        band,
     })
 }
 
@@ -320,8 +329,9 @@ pub const MASK_SENTINEL: InputRect = InputRect {
 };
 
 /// Hands the compositor where the layer takes the pointer: the configured
-/// mask, or the live geometry of its interactive items. Sent only when it
-/// differs from what `cache` says was sent last.
+/// mask, or the live geometry of its interactive items, and the engine's
+/// reload-error band (`band`) over either. Sent only when it differs from
+/// what `cache` says was sent last.
 pub fn send_input_region(
     scene: &morf_scene::Scene,
     layout: &morf_layout::Layout,
@@ -329,7 +339,7 @@ pub fn send_input_region(
     layer: u64,
     config: &LayerSurfaceConfig,
     cache: Option<&CachedLayout>,
-    stamp: Option<u64>,
+    (stamp, band): (Option<u64>, Option<InputRect>),
 ) -> Result<(Vec<InputRect>, u64), String> {
     // The same layout (`stamp` is only given when it was not redone) and a
     // tree whose input stamp has not moved: what takes input is where it
@@ -337,6 +347,7 @@ pub fn send_input_region(
     if let (Some(stamp), Some(cached)) = (stamp, cache)
         && config.input_regions.is_none()
         && cached.input_paint == stamp
+        && band_input(cached.band.as_ref()) == band
     {
         return Ok((cached.input.clone(), stamp));
     }
@@ -351,10 +362,14 @@ pub fn send_input_region(
         // The sentinel is what the cache compares: an empty vector would match
         // a surface that genuinely has no interactive area, so a shape that
         // stands for "the configured mask, unchanged" is stored instead.
-        let input = vec![MASK_SENTINEL];
+        let input = std::iter::once(MASK_SENTINEL)
+            .chain(band)
+            .collect::<Vec<_>>();
         if cache.is_none_or(|cached| cached.input != input) {
+            let mut regions = regions.clone();
+            regions.extend(band.map(band_region));
             client
-                .set_layer_composed_input_region(layer, regions)
+                .set_layer_composed_input_region(layer, &regions)
                 .map_err(|error| error.to_string())?;
         }
         input
@@ -375,6 +390,7 @@ pub fn send_input_region(
                     height: bottom - top,
                 }
             })
+            .chain(band)
             .collect::<Vec<_>>();
         if cache.is_none_or(|cached| cached.input != input) {
             client.set_input_region(WindowId::Layer(layer), Some(&input));

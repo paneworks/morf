@@ -189,6 +189,7 @@ pub fn paint_auxiliary_surface(
         input_paint: u64::MAX,
         backdrop: Vec::new(),
         keyboard_focus: String::new(),
+        band: None,
     });
     Ok(())
 }

@@ -92,6 +92,22 @@ pub(super) fn load(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<Ip
     surfaces(host)
 }
 
+/// Reloads the configuration under test in place, as the shell does when
+/// its file changes: `{ source = ... }`, or its file read again. `true`, or
+/// `false` and the reload's error.
+pub(super) fn reload(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
+    let source = optional_text(field(arguments.first(), "source")).map(String::into_bytes);
+    let result = host.subject()?.reload(source);
+    if result.is_ok() {
+        host.handles.clear();
+        host.numbers.clear();
+    }
+    Ok(match result {
+        Ok(()) => vec![IpcValue::Boolean(true)],
+        Err(error) => vec![IpcValue::Boolean(false), string(error)],
+    })
+}
+
 pub(super) fn surfaces(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
     let subject = host.subject()?;
     let rows = subject
