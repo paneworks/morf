@@ -4,9 +4,10 @@
 //! engine's generic D-Bus client, and every one of them can change the
 //! machine it runs on: turn the radio off, forget a network, suspend. So none
 //! of these tests goes near a real service. Most hand the library a stand-in
-//! for `morf.dbus` written in Lua (`library/tests/dbus_fake.lua`), which answers in the
-//! shapes the engine's decoder produces and records every argument as the
-//! library typed it — the thing a real service would reject if it were wrong.
+//! for `morf.dbus` written in Lua (`library/tests/dbus_fake.lua`, which the
+//! library's own specs share), which answers in the shapes the engine's
+//! decoder produces and records every argument as the library typed it —
+//! the thing a real service would reject if it were wrong.
 //! One goes over a real session bus, to a fake player this test owns under a
 //! name no real player uses, to pin the decoder's shapes to the fake's.
 
