@@ -199,9 +199,9 @@ numbers; writing to a node from inside one is refused.
 ui.Layout {
   anchors = { fill = true },
   measure = function(available, children)
-    local h = 0
-    for _, c in ipairs(children) do h = math.max(h, c.height) end
-    return available.width, h
+    local w, h = 0, 0
+    for _, c in ipairs(children) do w, h = w + c.width, math.max(h, c.height) end
+    return available.width < math.huge and available.width or w, h
   end,
   place = function(bounds, children)
     local out = {}
@@ -1008,11 +1008,12 @@ dropped and its content kept, so a notification body can be drawn as it
 came. `markup` wins over `spans`, which win over `text`.
 
 ```lua
+local function open(href) morf.spawn { command = { "xdg-open", href } } end
 ui.Text {
   font_size = 14, color = theme.ink, link_color = theme.accent, wrap = true,
   spans = { "Build ", { text = "failed", bold = true, color = "#e5484d" },
             " — ", { text = "see the log", link = "file:///tmp/build.log" } },
-  on_link = function(href) morf.spawn { command = { "xdg-open", href } } end,
+  on_link = open,
 }
 ui.Text { markup = notification.body, wrap = true, max_lines = 4, on_link = open }
 ```
@@ -2617,7 +2618,7 @@ local menu = popup.make("menu", { items = {
 } })
 menu.open(button)            -- beside its anchor; menu.close(), menu.toggle(button)
 
-popup.make("dialog", { title = "Discard?", body = "...", width = 360,
+popup.make("dialog", { title = "Discard?", body = "...", width = 360, root = surface_root,
   buttons = { { label = "Cancel" }, { label = "Discard", on_clicked = discard } } }).open()
 
 popup.toast { text = "Copied", timeout = 2500, root = node }
@@ -2987,7 +2988,6 @@ resizes from its edges and corners, and turns -- a floating panel, an
 image cropper's frame, the handles round a canvas item, a
 picture-in-picture window, a calendar's event.
 
-<!-- morf-check: skip: needs a kit transform spec and its content node from the surrounding configuration -->
 ```lua
 local node, box = lib.kit.transform.make("floating_panel", {
   title = "Inspector", x = 40, y = 40, width = 320, height = 240,
@@ -2996,7 +2996,8 @@ local node, box = lib.kit.transform.make("floating_panel", {
   on_committed = function(x, y, w, h, angle) save(x, y, w, h) end,
   on_close = function() end,
 })
-box.maximize()  box.minimize()  box.restore()  box.set(x, y, w, h)  box.t.box_width
+box.maximize()  box.minimize()  box.restore()  box.set(x, y, w, h)
+local live_width = box.t.box_width
 
 ```
 The node returned is the area the box floats in (filling its parent, or
@@ -3695,7 +3696,7 @@ maximise, close -- for a window that decorates itself.
 ```lua
 local node = composites.header_bar {
   id = "header", width = function() return win.width end, window = win,
-  title = "Settings", subtitle = function() return page:get() end,
+  title = "Settings", subtitle = function() return page_title:get() end,
   start = { toggle_button }, ["end"] = { menu_button },
 }
 
@@ -3992,7 +3993,7 @@ local node, side = composites.sidebar {
   collapsed = false,                     -- icon-only; a binding, or the toggle's
   on_collapsed = function(collapsed) end,
 }
-side.select("sent") ; side.collapse(true) ; side.current() ; side.toggle_section(2)
+side.select("sent") ; side.collapse(true) ; side.current() ; side.expanded(2)
 
 ```
 Each section is a kit `collapsible_section` (a Disclosure: a press,
@@ -4214,7 +4215,7 @@ A wizard, or stepper (composite: Navigation wizard + Selection header).
 local node, wiz = composites.wizard {
   id = "setup", width = 520, height = 340,
   steps = {
-    { title = "Account", content = function(w, h) return form end,
+    { title = "Account", content = function(w, h) return account_form end,
       validate = function() if name == "" then return false, "Enter a name" end return true end },
     { title = "Theme", content = ... },
     { title = "Done", content = ... },
