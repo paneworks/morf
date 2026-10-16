@@ -197,6 +197,25 @@ mod tests {
     }
 
     #[test]
+    fn what_a_node_owns_goes_with_it_unless_let_go_first() {
+        let mut engine = Engine::new();
+        let node = engine.scene.create(Element::Item);
+        let hook = |id| crate::Handler::new(HandlerId(id), std::rc::Rc::new(Nowhere));
+        engine.destroy_hooks.set(node, hook(1));
+        let kept = engine.destroy_hooks.own(node, hook(2));
+        let dropped = engine.destroy_hooks.own(node, hook(3));
+        assert_eq!(engine.destroy_hooks.owned_count(), 2);
+        assert!(engine.destroy_hooks.disown(dropped));
+        assert!(!engine.destroy_hooks.disown(dropped), "once");
+        engine.remove_subtree(node).expect("it was there");
+        let pending = engine.destroy_hooks.take_pending();
+        let ids = pending.iter().map(|hook| hook.id().0).collect::<Vec<_>>();
+        assert_eq!(ids, vec![1, 2], "on_destroyed, then what it owned");
+        assert_eq!(engine.destroy_hooks.owned_count(), 0);
+        assert!(!engine.destroy_hooks.disown(kept), "already run");
+    }
+
+    #[test]
     fn a_reloadable_value_comes_back_only_as_the_same_kind() {
         let mut engine = Engine::new();
         engine
