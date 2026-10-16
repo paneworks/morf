@@ -183,6 +183,8 @@ impl Host {
             follow_up: true,
             runtime_generation: 1,
             pending_streak: 0,
+            services_rang: false,
+            alarm_rings: 0,
             containment_repaint: false,
             report_slow: options_report,
         })

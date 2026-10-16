@@ -133,6 +133,10 @@ impl FrameAccounting {
         }
     }
 
+    pub fn motion_turn(&mut self) {
+        self.report.motion_turns += 1;
+    }
+
     /// The shell's own surface was painted at the scene's paint revision
     /// `shown`: the frame under way ends, unless the paint showed what the
     /// last frame did (`changing` says it cannot have: a shader moves).

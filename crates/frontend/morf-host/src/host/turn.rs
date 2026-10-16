@@ -7,6 +7,7 @@
 //! supervisor is on the other end of [`Links`].
 
 mod frame;
+mod motion;
 mod stall;
 mod start;
 mod stats;
@@ -89,6 +90,10 @@ pub struct Host {
     /// pick up (a popup to open, a reload asked for). One more turn, at once.
     follow_up: bool,
     pending_streak: u32,
+    /// Whether a service thread rang the loop since the last turn, and how
+    /// often the alarm had rung when last told.
+    services_rang: bool,
+    alarm_rings: u64,
     /// A node first asked for its `contains_pointer` last turn, whose answer
     /// changed what bindings drew: this turn paints it.
     containment_repaint: bool,
@@ -135,8 +140,10 @@ impl Host {
 
     /// One turn: the desktop's news, the clock, services and timers, the
     /// supervisor's commands, the configuration's window and surface changes,
-    /// the backend's events, and the paint of whatever changed. Charged to
-    /// the frame accounting however it ends.
+    /// the backend's events, and the paint of whatever changed -- or, owed
+    /// only for frame callbacks, the paint first and the rest after
+    /// ([`Host::motion_turn`]). Charged to the frame accounting however it
+    /// ends.
     pub fn turn(
         &mut self,
         runtime: &mut Runtime,
@@ -144,9 +151,13 @@ impl Host {
     ) -> Result<Turn, String> {
         self.frame_accounting.begin_turn();
         let base = morf_lua::profile::stage(Stage::Services);
-        let events = std::iter::from_fn(|| self.backend.next_event()).collect();
-        let commands = links.map_or_else(Vec::new, |links| links.commands.try_iter().collect());
-        let turned = self.ordered_turn(runtime, links, events, commands);
+        let events: Vec<Event> = std::iter::from_fn(|| self.backend.next_event()).collect();
+        let commands: Vec<WorkerCommand> =
+            links.map_or_else(Vec::new, |links| links.commands.try_iter().collect());
+        let turned = match self.motion_only(&events, &commands) {
+            true => self.motion_turn(runtime, links, events),
+            false => self.ordered_turn(runtime, links, events, commands),
+        };
         drop(base);
         let moving =
             runtime.has_motion() || self.state.animating_shaders || self.state.primary_deferred;
