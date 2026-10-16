@@ -255,6 +255,7 @@ pub(crate) fn execute_handler_args(
     let function = ctx.fetch(&stashed(closure)?);
     let _span =
         crate::profile::span(|| format!("handler {}", crate::profile::closure_origin(function)));
+    let _stage = crate::profile::stage(crate::profile::Stage::Handlers);
     let executor = Executor::start(ctx, function.into(), args);
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
     match executor.take_result::<()>(ctx) {
@@ -291,6 +292,7 @@ pub(crate) fn execute_screencopy_handler(
     let function = ctx.fetch(&stashed(closure)?);
     let _span =
         crate::profile::span(|| format!("handler {}", crate::profile::closure_origin(function)));
+    let _stage = crate::profile::stage(crate::profile::Stage::Handlers);
     let executor = Executor::start(ctx, function.into(), args);
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
     match executor.take_result::<()>(ctx) {
