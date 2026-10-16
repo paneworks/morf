@@ -2188,6 +2188,14 @@ grain a binding reads. Motion runs on the compositor's frame callbacks;
 only when a surface gets none (a hidden window in a nested compositor)
 does the wall clock tick it instead.
 
+A turn woken only by frame callbacks -- no input, no command over IPC, no
+service thread ringing -- ticks the motion and paints first, and runs the
+desktop's news, the clock, due timers and service results, and the effect
+flush after them, once the frame is out; whatever they change is drawn on
+the next frame. Any other turn runs them before it paints. A handler that
+takes longer than a refresh still holds the frame after it: Lua runs on the
+output's own thread.
+
 Three environment variables look inside a running output's loop, each
 printed on stderr:
 
