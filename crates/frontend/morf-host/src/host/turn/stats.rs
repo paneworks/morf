@@ -7,9 +7,11 @@
 //!
 //! A frame runs from the paint before it while motion carries on between
 //! the two, and from the start of its own turn otherwise, so a shell that
-//! sat still for a minute does not count the minute. Always on; read and
-//! reset by the motion report (`MORF_WAKE_LOG`), the `@frames` test hook
-//! and `morf test`.
+//! sat still for a minute does not count the minute. The refresh interval
+//! is the median of the last frames' callback intervals, which the one
+//! long interval after a stall does not move. Always on; read and reset by
+//! the motion report (`MORF_WAKE_LOG`), the `@frames` test hook and
+//! `morf test`.
 
 use std::fmt;
 use std::time::{Duration, Instant};
@@ -29,6 +31,8 @@ pub const OWNERS: [&str; 7] = [
     "services", "handlers", "flush", "motion", "layout", "paint", "waiting",
 ];
 const WAITING: usize = OWNERS.len() - 1;
+/// How many frames' callback intervals the refresh interval is the median of.
+const REFRESHES: usize = 15;
 /// The hidden verb (with `MORF_TEST_HOOKS`) that answers this output's
 /// report and starts a new window.
 const FRAMES_HOOK: &str = "@frames";
@@ -44,7 +48,7 @@ pub struct FrameReport {
     pub overruns: u64,
     pub worst: Duration,
     pub total: Duration,
-    /// The refresh interval of the last frame.
+    /// The refresh interval at the last frame.
     pub refresh: Duration,
     /// Time charged to each of [`OWNERS`] over the window's frames.
     pub stages: [Duration; OWNERS.len()],
@@ -119,6 +123,8 @@ pub(crate) struct FrameAccounting {
     pending: StageTimes,
     /// The scene's paint revision at the last frame.
     shown: Option<u64>,
+    /// The last frames' callback intervals.
+    intervals: std::collections::VecDeque<Duration>,
 }
 
 impl FrameAccounting {
@@ -137,14 +143,28 @@ impl FrameAccounting {
         self.report.motion_turns += 1;
     }
 
+    /// The median of the last frames' callback intervals, `interval` the
+    /// latest of them.
+    fn refresh(&mut self, interval: Duration) -> Duration {
+        if self.intervals.len() == REFRESHES {
+            self.intervals.pop_front();
+        }
+        self.intervals.push_back(interval);
+        let mut sorted = self.intervals.iter().copied().collect::<Vec<_>>();
+        sorted.sort_unstable();
+        sorted[sorted.len() / 2]
+    }
+
     /// The shell's own surface was painted at the scene's paint revision
-    /// `shown`: the frame under way ends, unless the paint showed what the
-    /// last frame did (`changing` says it cannot have: a shader moves).
-    pub fn painted(&mut self, refresh: Duration, shown: u64, changing: bool) {
+    /// `shown`, `interval` after the callback before: the frame under way
+    /// ends, unless the paint showed what the last frame did (`changing`
+    /// says it cannot have: a shader moves).
+    pub fn painted(&mut self, interval: Duration, shown: u64, changing: bool) {
         if !changing && self.shown == Some(shown) {
             return;
         }
         self.shown = Some(shown);
+        let refresh = self.refresh(interval);
         let now = Instant::now();
         let mut charged = [Duration::ZERO; OWNERS.len()];
         for ((owner, held), took) in charged.iter_mut().zip(self.pending).zip(take_stages()) {
@@ -281,6 +301,23 @@ mod tests {
         let report = accounting.take();
         assert_eq!((report.frames, report.overruns), (2, 0), "{report}");
         assert!(report.worst < Duration::from_millis(20), "{report}");
+    }
+
+    #[test]
+    fn the_long_callback_after_a_stall_leaves_the_refresh_where_it_was() {
+        let mut accounting = FrameAccounting::default();
+        accounting.begin_turn();
+        for shown in 1..=5 {
+            accounting.painted(REFRESH, shown, false);
+        }
+        accounting.end_turn(true);
+        spend(40);
+        accounting.begin_turn();
+        accounting.painted(REFRESH * 4, 6, false);
+        accounting.end_turn(true);
+        let report = accounting.take();
+        assert_eq!(report.overruns, 1, "{report}");
+        assert_eq!(report.refresh, REFRESH, "{report}");
     }
 
     #[test]
