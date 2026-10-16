@@ -818,8 +818,9 @@ a behavior, a spring or a binding drives:
 
 - `glass_refraction` bends what is behind like a lens with a rounded rim,
   in logical pixels: the backdrop at the very edge is drawn from that far
-  in, the bend fading to nothing a quarter of the way across. Negative
-  bends it the other way, drawing in what lies beyond the edge.
+  in, the bend fading to nothing a quarter of the shorter side in from
+  the edge. Negative bends it the other way, drawing in what lies beyond
+  the edge.
 - `glass_frost` is how much of the blur shows over the backdrop as drawn:
   1 (the default) is frosted, 0 clear, anything between a mix. `"auto"`
   judges by what is behind, point by point: where the backdrop differs

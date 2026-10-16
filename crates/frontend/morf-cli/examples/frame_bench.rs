@@ -11,7 +11,8 @@
 //!
 //! Numbers are the fastest of several batches. Background load only ever adds
 //! time, so the minimum is the closest estimate of the work itself; an average
-//! would mostly measure whatever else the machine was doing.
+//! would mostly measure whatever else the machine was doing. `gpu-time [WxH]
+//! [frames]` after the configuration times whole frames on the GPU instead.
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};

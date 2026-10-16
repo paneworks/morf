@@ -197,3 +197,47 @@ run clicking the counter demo incremented it. No wakeup was lost; frame
 rate under this handler remains bounded by the handler itself, which the
 accounting attributes to the handlers stage, not paint. Splitting Lua
 off the host thread stays future work, informed by these numbers.
+
+# Shared blur layers (PLAN item 6, step 3)
+
+The scene: `examples/demos/render/blurred-cards.lua`, sixty cards on a
+1920x1080 desk, each card a layer blurred by 4 holding two texts and a
+bar. The bench draws the whole frame from nothing again and again
+(`RenderEngine::forget` before each) and times it to the end of its
+submission and to the GPU finishing it (`wait_idle`):
+
+```
+cargo run --release -p morf-cli --example frame_bench -- \
+    examples/demos/render/blurred-cards.lua gpu-time 1920x1080 60
+```
+
+Adapter: llvmpipe (LLVM 21.1.8, 256 bits) through `nixVulkan`, the only
+Vulkan driver the dev shell sees on this machine. Release builds of
+8bbac48f (one target per blurred layer) and cfb8a785 (siblings blurred by
+the same radius share one), five rounds alternating the two, 60 frames
+each, while other builds kept the 24-core machine at a load average of
+20-31: the fastest frame is the closest to the work itself, and the
+medians carry the load.
+
+```
+                     one target per layer    one shared target
+submitted, fastest   3.29-3.70 ms            1.10-1.23 ms
+finished, fastest    74.9-87.0 ms            25.7-31.8 ms
+finished, median     90.9-208.5 ms           32.8-133.2 ms
+```
+
+Per layer the frame took a target, a blur chain of four more, a content
+pass and four blur passes, four uniform buffers and five bind groups:
+300 offscreen passes for the sixty cards. Shared, the sixty are packed
+apart in one target, drawn in one pass and blurred by one chain -- five
+passes -- and composited back by sixty blits. The two pictures agree to
+within 2 of 255 on every channel of every pixel (34,607 of 2,073,600
+pixels differ at all), and `gpu/layer_share_tests.rs` holds a shared
+target to what each layer's own target draws.
+
+The glass material (step 2) adds three properties paint could read on
+every `Rect`; it reads them only on a node one of them has moved on
+(`Scene::may_have_glass`). Against a build that never reads them, the
+CPU bench's draw list for the cards and for the glass cases stays within
+the noise: 124.0-128.1 against 126.9-127.3 µs, and 18.7-18.9 against
+19.5-19.8 µs (`DrawList (reused)`, three quiet rounds of four).
