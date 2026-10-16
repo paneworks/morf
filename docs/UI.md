@@ -490,6 +490,40 @@ once, when the handler returns. A bare `node.text = "x"` in a handler
 reaches its readers before the next frame. Top-level configuration code
 flushes on each write, as it always did.
 
+### System services
+
+`morf.service(name, options)` binds a system service by its capability name
+-- `power` (batteries, power profiles) or `media` (players) -- and returns
+reactive state: a binding reading `binding.state` follows the service, and
+`owner = node` closes the binding when the node goes. What each service
+holds, and how a service is described, is in [IO.md](IO.md), *System
+services*.
+
+```lua
+local ui = require("morf.ui")
+morf.surface.namespace = "docs-services"
+morf.surface.width = 320
+morf.surface.height = 32
+
+local bar = ui.Rect { width = 320, height = 32, color = "#1b2128" }
+-- Both close when `bar` is destroyed.
+local power = assert(morf.service("power", { owner = bar }))
+local media = assert(morf.service("media", { owner = bar }))
+
+ui.reparent(ui.Text {
+  x = 10, y = 8, color = "#ffffff",
+  text = function()
+    local battery = "no battery"
+    if power.state.available then
+      battery = ("%d%%"):format(power.state.display.percentage)
+    end
+    local title = media.state.active.title
+    if title == "" then return battery end
+    return battery .. "  " .. title
+  end,
+}, bar)
+```
+
 ### Components
 
 `library/lib/util/component.lua` gives Elm's shape on these pieces: `init(args)`
@@ -726,7 +760,8 @@ runs once then, deepest node first, so what the node's Lua made for it —
 a `morf.clipboard.watch`, a service subscription, a timer outside the tree
 — can be let go of. It runs as a handler once nothing else is running (never
 in the middle of a flush), with a handler's fuel; its writes flush when it
-returns, and an error in it is logged. Groups, loops, bindings and handlers
+returns, and an error in it is logged. A `morf.service` binding made with
+`owner = node` closes the same way, after the node's `on_destroyed`. Groups, loops, bindings and handlers
 that belong to a destroyed node end with it.
 
 <!-- morf-check: skip: elided with ...; shows the on_destroyed shape only -->

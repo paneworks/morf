@@ -5,4 +5,5 @@ pub(crate) mod log;
 pub(crate) mod menu;
 pub(crate) mod pam;
 pub(crate) mod prefers;
+pub(crate) mod service;
 pub(crate) mod system;

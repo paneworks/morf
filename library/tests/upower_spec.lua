@@ -80,3 +80,119 @@ test.describe("upower (characterization)", function()
     test.truthy(test.ipc("set_profile"))
   end)
 end)
+
+-- What the module did before it was a descriptor and must keep doing, over
+-- the shared stand-in for `morf.dbus`.
+local BUS_HOST = [[
+  local fake = require("tests.dbus_fake")
+  local U, ROOT = "org.freedesktop.UPower", "/org/freedesktop/UPower"
+  local DEV, PROPS = "org.freedesktop.UPower.Device", "org.freedesktop.DBus.Properties"
+  local DISPLAY, BAT = ROOT .. "/devices/DisplayDevice", ROOT .. "/devices/battery_BAT0"
+  local PP, PP_PATH = "net.hadess.PowerProfiles", "/net/hadess/PowerProfiles"
+  local root = fake.object("system", U, ROOT, U, { OnBattery = true, LidIsClosed = true, LidIsPresent = true },
+    { EnumerateDevices = function() return { { BAT } } end })
+  local display = fake.object("system", U, DISPLAY, DEV, { Percentage = 40, State = 2, IsPresent = true, Type = 2 })
+  local battery = fake.object("system", U, BAT, DEV,
+    { Percentage = 40, State = 2, IsPresent = true, Type = 2, PowerSupply = true })
+  local profiles = fake.object("system", PP, PP_PATH, PP, { ActiveProfile = "balanced",
+    Profiles = { { Profile = "balanced" }, { Profile = "performance" } } })
+  local function owner(dest, present)
+    fake.own("system", dest, present)
+    fake.emit("system", "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+      "NameOwnerChanged", { dest, present and "" or ":1.4", present and ":1.5" or "" })
+  end
+  local function changed(dest, path, interface, props)
+    fake.emit("system", dest, path, PROPS, "PropertiesChanged", { interface, props, {} })
+  end
+
+  local power = require("lib.services.upower").connect({ dbus = fake.dbus, debounce_ms = 5 })
+  local s = power.state
+  morf.ipc.read = function()
+    local row = power.devices()[1]
+    return { available = s.available, on_battery = s.on_battery, lid_closed = s.lid_is_closed,
+             lid_present = s.lid_is_present, percentage = s.display.percentage,
+             battery = row and row.percentage or -1, profile = s.profiles.active,
+             profiles = s.profiles.available, calls = #fake.calls }
+  end
+  morf.ipc.profile_elsewhere = function()
+    profiles.ActiveProfile = "performance"
+    changed(PP, PP_PATH, PP, { ActiveProfile = "performance" })
+  end
+  morf.ipc.profiles_present = function(present) owner(PP, present) end
+  morf.ipc.vanish = function() owner(U, false) end
+  morf.ipc.refresh = function()
+    root.OnBattery = false
+    power.refresh()
+    return s.on_battery
+  end
+  morf.ipc.discharge = function(percent)
+    battery.Percentage = percent
+    changed(U, BAT, DEV, { Percentage = percent })
+  end
+  morf.ipc.heard = function(percent) changed(U, DISPLAY, DEV, { Percentage = percent }) end
+  morf.ipc.restart = function(percent)
+    owner(U, false)
+    display.Percentage = percent
+    owner(U, true)
+  end
+]]
+
+test.describe("upower (over the bus stand-in)", function()
+  test.before_each(function()
+    test.load("upower-bus-fixture.lua", { source = BUS_HOST, size = { 20, 20 } })
+    test.settle()
+  end)
+
+  test.it("follows the power profile when something else changes it", function()
+    test.eq(test.ipc("read").profile, "balanced")
+    test.ipc("profile_elsewhere")
+    test.settle()
+    test.eq(test.ipc("read").profile, "performance")
+    test.ipc("profiles_present", false)
+    test.settle()
+    test.eq(test.ipc("read").profiles, false, "the daemon left")
+    test.ipc("profiles_present", true)
+    test.settle()
+    local back = test.ipc("read")
+    test.eq(back.profiles, true, "and came back")
+    test.eq(back.profile, "performance")
+  end)
+
+  test.it("lets go of the battery and the lid when UPower goes", function()
+    local read = test.ipc("read")
+    test.eq(read.on_battery, true)
+    test.eq(read.lid_closed, true)
+    test.ipc("vanish")
+    test.settle()
+    local gone = test.ipc("read")
+    test.eq(gone.available, false)
+    test.eq(gone.on_battery, false)
+    test.eq(gone.lid_closed, false)
+    test.eq(gone.lid_present, false)
+    test.eq(gone.percentage, 0)
+    test.eq(gone.battery, -1, "no devices")
+  end)
+
+  test.it("refreshes at once when asked", function()
+    test.eq(test.ipc("refresh"), false, "read before refresh returns")
+  end)
+
+  test.it("merges a device's change without reading the bus again", function()
+    local before = test.ipc("read")
+    test.eq(before.battery, 40)
+    test.ipc("discharge", 35)
+    test.settle()
+    local after = test.ipc("read")
+    test.eq(after.battery, 35)
+    test.eq(after.calls, before.calls, "no re-read, no re-enumeration")
+  end)
+
+  test.it("reads a restarted UPower afresh, not what the old one said", function()
+    test.ipc("heard", 50)
+    test.settle()
+    test.eq(test.ipc("read").percentage, 50)
+    test.ipc("restart", 80)
+    test.settle()
+    test.eq(test.ipc("read").percentage, 80)
+  end)
+end)

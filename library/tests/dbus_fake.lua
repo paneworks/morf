@@ -224,22 +224,43 @@ function proxy_methods:call_async(method, ...)
     positional(table.unpack(all, 1, all.n - 1)), callback)
 end
 
+-- A subscription's token, closed as a method: called without itself, it
+-- fails the way the engine's userdata does.
+local token_methods = {}
+token_methods.__index = token_methods
+
+local function token_of(self, method)
+  if getmetatable(self) ~= token_methods then
+    error(("bad argument #1 to '%s' (expected userdata, found %s)"):format(method, type(self)), 3)
+  end
+  return self
+end
+
+function token_methods:close()
+  local entry, k = token_of(self, "close").entry, self.key
+  if entry.closed then return false end
+  entry.closed = true
+  for index, each in ipairs(fake.subscriptions[k]) do
+    if each == entry then table.remove(fake.subscriptions[k], index) break end
+  end
+  return true
+end
+token_methods.unsubscribe = token_methods.close
+
+function token_methods:active() return not token_of(self, "active").entry.closed end
+
 local function subscribe(k, callback)
   fake.subscriptions[k] = fake.subscriptions[k] or {}
   local entry = { callback = callback }
   table.insert(fake.subscriptions[k], entry)
-  local handle = {}
-  function handle:close()
-    if entry.closed then return false end
-    entry.closed = true
-    for index, each in ipairs(fake.subscriptions[k]) do
-      if each == entry then table.remove(fake.subscriptions[k], index) break end
-    end
-    return true
-  end
-  handle.unsubscribe = handle.close
-  function handle:active() return not entry.closed end
-  return handle
+  return setmetatable({ entry = entry, key = k }, token_methods)
+end
+
+--- Every live subscription, whatever its address.
+function fake.subscription_total()
+  local total = 0
+  for _, list in pairs(fake.subscriptions) do total = total + #list end
+  return total
 end
 
 function proxy_methods:subscribe(member, callback)

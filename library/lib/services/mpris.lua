@@ -6,38 +6,41 @@
 -- interfaces. This lists those players, picks the one a "now playing" widget
 -- should show, and carries the buttons back.
 --
---   local mpris = require("lib.services.mpris")
---   local media = mpris.connect()
+--   local media = morf.service("media")          -- or require(...).connect()
 --   ui.Text { text = function() return media.state.active.title end }
 --   ui.Button { on_clicked = function() media.play_pause() end }
 --
--- Which player is "active": one that is playing — the one that started most
--- recently, if several are — else the one that changed most recently, else
--- the first by name. `set_active(name)` overrides that until the player
--- leaves.
+-- This module is a registry descriptor (lib/services/registry.lua). The data
+-- part says what the generic binder does: every bus name under the prefix
+-- is a member, found by `ListNames` and followed by `NameOwnerChanged`; each
+-- member gets its own `PropertiesChanged` and `Seeked` subscriptions, made
+-- when it appears and closed when it leaves (so a browser that invents a new
+-- name per launch leaves nothing behind), and any of them re-reads only that
+-- player, debounced. Every player emits on the same path, so the engine
+-- routes a signal only to the subscriptions that named its sender.
 --
--- Position is not a property anyone announces: a player says where it was
--- and at what rate, and says again only when it jumps (`Seeked`). So the
--- library keeps the last reading and its time, and `state.active.position`
--- is advanced by a timer (once a second by default) while the player plays.
--- `position(name)` computes it exactly, for a caller that wants it now.
+-- `bind`, the descriptor's escape hatch, is what no descriptor field says:
 --
--- Every player emits on the same path, so a `PropertiesChanged` is told
--- apart by its sender. The engine routes a signal only to the subscriptions
--- that named whoever sent it, so each player's handler hears that player and
--- re-reads only it (debounced). A player's subscriptions are made when it
--- appears and closed when it leaves, so a browser that invents a new name per
--- launch leaves nothing behind.
---
--- The buttons do not wait for the player: a hung player cannot freeze the
--- shell. Each returns true once sent (or nil and why not), and the player's
--- own `PropertiesChanged` moves the state.
+-- * Which player is "active": one that is playing — the one that started
+--   most recently, if several are — else the one that changed most
+--   recently, else the first by name. `set_active(name)` overrides that
+--   until the player leaves.
+-- * Position is not a property anyone announces: a player says where it was
+--   and at what rate, and says again only when it jumps (`Seeked`). So the
+--   last reading keeps its time, and `state.active.position` is advanced by
+--   a timer (once a second by default) only while the player plays.
+--   `position(name)` computes it exactly; the list's positions are as of
+--   the last reading.
+-- * The buttons do not wait for the player: a hung player cannot freeze the
+--   shell. Each returns true once sent (or nil and why not), and the
+--   player's own `PropertiesChanged` moves the state.
 --
 -- `playerctld` is skipped by default: it is a proxy that re-publishes
 -- another player, and listing it would show every track twice.
 
 local morf = require("morf")
 local dbus_client = require("lib.services.dbus_client")
+local registry = require("lib.services.registry")
 
 local mpris = {}
 
@@ -48,25 +51,17 @@ local PLAYER = "org.mpris.MediaPlayer2.Player"
 
 local typed, x, o = dbus_client.typed, dbus_client.x, dbus_client.o
 
-local function list_text(value)
-  if type(value) == "table" then
-    local parts = {}
-    for _, each in ipairs(value) do parts[#parts + 1] = tostring(each) end
-    return table.concat(parts, ", ")
-  end
-  return value and tostring(value) or ""
-end
-
 --- A metadata dictionary as plain fields. Lengths are microseconds on the
 --- wire and seconds here; the raw value is kept as `length_us`.
 function mpris.metadata(meta)
   meta = type(meta) == "table" and meta or {}
   local length = tonumber(meta["mpris:length"]) or 0
+  local text = registry.coerce.list_text
   return {
     track_id = meta["mpris:trackid"] and tostring(meta["mpris:trackid"]) or "",
     title = meta["xesam:title"] and tostring(meta["xesam:title"]) or "",
-    artist = list_text(meta["xesam:artist"]),
-    album_artist = list_text(meta["xesam:albumArtist"]),
+    artist = text(meta["xesam:artist"], {}),
+    album_artist = text(meta["xesam:albumArtist"], {}),
     album = meta["xesam:album"] and tostring(meta["xesam:album"]) or "",
     art_url = meta["mpris:artUrl"] and tostring(meta["mpris:artUrl"]) or "",
     url = meta["xesam:url"] and tostring(meta["xesam:url"]) or "",
@@ -88,44 +83,85 @@ local function empty_active()
   }
 end
 
---- Starts watching. Call it while the configuration loads.
----
---- Options: `bus` ("session"), `prefix` (the MPRIS name prefix; a test uses
---- its own so it never sees, or presses, a real player), `ignore` (names
---- after the prefix to skip; `{ "playerctld" }`), `tick_ms` (1000),
---- `debounce_ms` (50), `clock` (a function returning milliseconds; for
---- tests), `timeout_ms` (how long a button waits for the player; 5000),
---- `dbus` (test seam).
-function mpris.connect(options)
-  options = options or {}
-  local prefix = options.prefix or PREFIX
-  local ignore = {}
-  for _, each in ipairs(options.ignore or { "playerctld" }) do ignore[prefix .. each] = true end
-  local client = dbus_client.new({ dbus = options.dbus, bus = options.bus or "session" })
+local function meta(key, as, extra)
+  local spec = { prop = { "Metadata", key }, as = as }
+  for name, value in pairs(extra or {}) do spec[name] = value end
+  return spec
+end
+
+-- One player, read whole. `identity` stays raw: the escape hatch falls back
+-- to the name's tail when the root interface does not say.
+local READING = {
+  name = { meta = "key" },
+  identity = { from = "identity", prop = "Identity" },
+  desktop_entry = { from = "identity", prop = "DesktopEntry", as = "string" },
+  can_raise = { from = "identity", prop = "CanRaise", as = "bool" },
+  status = { prop = "PlaybackStatus", as = "lower", default = "stopped" },
+  loop = { prop = "LoopStatus", as = "lower", default = "none" },
+  shuffle = { prop = "Shuffle", as = "bool" },
+  rate = { prop = "Rate", as = "number", default = 1 },
+  volume = { prop = "Volume", as = "number" },
+  position_us = { prop = "Position", as = "number" },
+  position = { prop = "Position", as = "divide", by = 1e6 },
+  can_play = { prop = "CanPlay", as = "bool" },
+  can_pause = { prop = "CanPause", as = "bool" },
+  can_go_next = { prop = "CanGoNext", as = "bool" },
+  can_go_previous = { prop = "CanGoPrevious", as = "bool" },
+  can_seek = { prop = "CanSeek", as = "bool" },
+  can_control = { prop = "CanControl", as = "bool" },
+  track_id = meta("mpris:trackid", "string"),
+  title = meta("xesam:title", "string"),
+  artist = meta("xesam:artist", "list_text"),
+  album_artist = meta("xesam:albumArtist", "list_text"),
+  album = meta("xesam:album", "string"),
+  art_url = meta("mpris:artUrl", "string"),
+  url = meta("xesam:url", "string"),
+  length_us = meta("mpris:length", "number"),
+  length = meta("mpris:length", "divide", { by = 1e6 }),
+}
+
+local ROW = {
+  "name", "identity", "desktop_entry", "status", "playing", "title", "artist", "album",
+  "art_url", "length", "position", "volume", "can_play", "can_pause", "can_go_next",
+  "can_go_previous", "can_seek",
+}
+
+local function assign(target, values)
+  for key, value in pairs(values) do target[key] = value end
+end
+
+-- The escape hatch: the active player, its moving position, and the buttons.
+local function bind(media)
+  local options = media.options
+  local prefix = media.descriptor.sets.players.names.prefix
   local timeout = options.timeout_ms or 5000
   local clock = options.clock
   if not clock then
     local elapsed = morf.elapsed_timer()
     clock = function() return elapsed:elapsed_ms() end
   end
-
-  local state = morf.state({
-    available = false,
-    count = 0,
-    players = {},
-    active = empty_active(),
-  })
-
-  local media = { state = state }
-  local players = {} -- bus name -> reading
+  local state = media.state
   local ignored = {} -- "busname|Property" -> true: a write it took and ignored
-  local subscribed = {} -- bus name -> its subscription handles
   local pinned
   local sequence = 0 -- orders "most recently changed" without trusting clocks
 
-  local function assign(target, values)
-    for key, value in pairs(values) do target[key] = value end
-  end
+  media.on_read("players", function(name, reading, previous)
+    if reading.identity == nil then
+      reading.identity = name:sub(#prefix + 1)
+    else
+      reading.identity = tostring(reading.identity)
+    end
+    reading.playing = reading.status == "playing"
+    reading.stamp_ms = clock()
+    -- "Changed" is a new status or a new track, not a volume nudge.
+    if not previous or previous.status ~= reading.status
+      or previous.track_id ~= reading.track_id or previous.title ~= reading.title then
+      sequence = sequence + 1
+      reading.last_active = sequence
+    else
+      reading.last_active = previous.last_active
+    end
+  end)
 
   local function position_of(player)
     local position = player.position_us
@@ -137,53 +173,8 @@ function mpris.connect(options)
     return position
   end
 
-  local schedule
-
-  local function subscribe(name)
-    if subscribed[name] then return end
-    local changed = function() schedule(name) end
-    subscribed[name] = {
-      client.on_properties(name, PATH, changed),
-      client.on_signal(name, PATH, PLAYER, "Seeked", changed),
-    }
-  end
-
-  local function unsubscribe(name)
-    for _, handle in pairs(subscribed[name] or {}) do handle.close() end
-    subscribed[name] = nil
-  end
-
-  --- Reads one player whole. Returns nil if it does not answer as a player.
-  local function read(name)
-    local player = client.get_all(name, PATH, PLAYER)
-    if not player then return nil end
-    local root = client.get_all(name, PATH, ROOT_IFACE) or {}
-    local meta = mpris.metadata(player.Metadata)
-    local reading = {
-      name = name,
-      identity = root.Identity or name:sub(#prefix + 1),
-      desktop_entry = root.DesktopEntry or "",
-      can_raise = root.CanRaise == true,
-      status = string.lower(player.PlaybackStatus or "stopped"),
-      loop = string.lower(player.LoopStatus or "none"),
-      shuffle = player.Shuffle == true,
-      rate = tonumber(player.Rate) or 1,
-      volume = tonumber(player.Volume) or 0,
-      position_us = tonumber(player.Position) or 0,
-      stamp_ms = clock(),
-      can_play = player.CanPlay == true,
-      can_pause = player.CanPause == true,
-      can_go_next = player.CanGoNext == true,
-      can_go_previous = player.CanGoPrevious == true,
-      can_seek = player.CanSeek == true,
-      can_control = player.CanControl == true,
-    }
-    assign(reading, meta)
-    reading.playing = reading.status == "playing"
-    return reading
-  end
-
   local function choose()
+    local players = media.members("players")
     if pinned and players[pinned] then return players[pinned] end
     pinned = nil
     local best
@@ -201,34 +192,32 @@ function mpris.connect(options)
     return best
   end
 
-  local function row_of(player)
-    return {
-      name = player.name, identity = player.identity, desktop_entry = player.desktop_entry,
-      status = player.status, playing = player.playing, title = player.title,
-      artist = player.artist, album = player.album, art_url = player.art_url,
-      length = player.length, position = position_of(player) / 1e6,
-      volume = player.volume, can_play = player.can_play, can_pause = player.can_pause,
-      can_go_next = player.can_go_next, can_go_previous = player.can_go_previous,
-      can_seek = player.can_seek,
-    }
+  -- Only the active player's position moves, and only while it plays: an
+  -- idle desk is not woken every second to learn that nothing moved.
+  local ticker
+  local function ensure_ticker()
+    local active = choose()
+    local playing = active and active.playing
+    if playing and not ticker then
+      ticker = media.timer(options.tick_ms or 1000, function()
+        local now = choose()
+        if now and now.playing then
+          state.active.position = position_of(now) / 1e6
+        else
+          media.cancel(ticker)
+          ticker = nil
+        end
+      end, true)
+    elseif not playing and ticker then
+      media.cancel(ticker)
+      ticker = nil
+    end
   end
 
-  local ensure_ticker
   local function publish()
-    if ensure_ticker then ensure_ticker() end
-    local list = {}
-    for _, player in pairs(players) do list[#list + 1] = player end
-    table.sort(list, function(a, b) return a.name < b.name end)
-    local rows = {}
-    for index, player in ipairs(list) do rows[index] = row_of(player) end
-    state.available = #rows > 0
-    state.count = #rows
-    state.players:replace(rows, "name")
+    ensure_ticker()
     local active = choose()
-    if not active then
-      assign(state.active, empty_active())
-      return
-    end
+    if not active then return assign(state.active, empty_active()) end
     local fields = {}
     for key in pairs(empty_active()) do fields[key] = active[key] end
     fields.position = position_of(active) / 1e6
@@ -236,63 +225,18 @@ function mpris.connect(options)
     fields.ignores_loop = ignored[active.name .. "|LoopStatus"] == true
     assign(state.active, fields)
   end
-
-  --- Re-reads the named players (all of them if none named).
-  local function refresh(names)
-    names = names or players
-    for name in pairs(names) do
-      local previous = players[name]
-      local reading = read(name)
-      if reading then
-        -- "Changed" is a new status or a new track, not a volume nudge.
-        local changed = not previous or previous.status ~= reading.status
-          or previous.track_id ~= reading.track_id or previous.title ~= reading.title
-        if changed then
-          sequence = sequence + 1
-          reading.last_active = sequence
-        else
-          reading.last_active = previous.last_active
-        end
-        players[name] = reading
-      else
-        players[name] = nil
-      end
-    end
-    publish()
-  end
-
-  -- The players that changed since the last re-read; `schedule()` with no
-  -- name means all of them.
-  local dirty, dirty_all = {}, false
-  local reread = dbus_client.debounce(options.debounce_ms or 50, function()
-    local names = dirty
-    if dirty_all then names = nil end
-    dirty, dirty_all = {}, false
-    refresh(names)
-  end)
-  schedule = function(name)
-    if name then dirty[name] = true else dirty_all = true end
-    reread()
-  end
-
-  local function add(name)
-    if ignore[name] or name:sub(1, #prefix) ~= prefix then return end
-    subscribe(name)
-    refresh({ [name] = true })
-  end
+  media.on_publish(publish)
 
   local function target(name)
-    local player = players[name or ""] or choose()
-    if not player then return nil end
-    return player
+    return media.members("players")[name or ""] or choose()
   end
 
   local function control(name, method, arguments)
     local player = target(name)
     if not player then return nil, "no player" end
     local player_name = player.name
-    return client.call_async(player_name, PATH, PLAYER, method, arguments, timeout,
-      function() schedule(player_name) end)
+    return media.client.call_async(player_name, PATH, PLAYER, method, arguments, timeout,
+      function() media.reread("players", player_name) end)
   end
 
   -- A write the player answered and then did not act on, by
@@ -302,12 +246,12 @@ function mpris.connect(options)
     local player = target(name)
     if not player then return nil, "no player" end
     local player_name = player.name
-    return client.set_async(player_name, PATH, PLAYER, property, value, timeout, function()
-      schedule(player_name)
+    return media.client.set_async(player_name, PATH, PLAYER, property, value, timeout, function()
+      media.reread("players", player_name)
       local field = CHECKED[property]
       if field == nil or wanted == nil then return end
-      morf.timer(900, function()
-        local now = players[player_name]
+      media.timer(900, function()
+        local now = media.members("players")[player_name]
         if not now then return end
         local key = player_name .. "|" .. property
         local was = ignored[key]
@@ -317,11 +261,8 @@ function mpris.connect(options)
     end)
   end
 
-  --- Whether any player is on the bus.
-  function media.available() return state.available end
-
   --- The players as plain tables, keyed by bus name.
-  function media.players() return players end
+  function media.players() return media.members("players") end
 
   --- The active player's bus name, or nil.
   function media.active()
@@ -378,51 +319,55 @@ function mpris.connect(options)
   function media.raise(name)
     local player = target(name)
     if not player then return nil, "no player" end
-    return client.call_async(player.name, PATH, ROOT_IFACE, "Raise", nil, timeout)
+    return media.client.call_async(player.name, PATH, ROOT_IFACE, "Raise", nil, timeout)
   end
+end
 
-  client.on_owner_changed(function(name, _, new_owner)
-    if name:sub(1, #prefix) ~= prefix or ignore[name] then return end
-    if new_owner ~= "" then
-      add(name)
-    else
-      unsubscribe(name)
-      if players[name] then
-        players[name] = nil
-        client.forget(PATH, name)
-        publish()
-      end
-    end
-  end)
+mpris.descriptor = registry.define {
+  name = "media",
+  bus = "session",
+  debounce_ms = 50,
+  interfaces = {
+    player = { set = "players", path = PATH, interface = PLAYER, changes = "reread" },
+    identity = { set = "players", path = PATH, interface = ROOT_IFACE, changes = "reread",
+                 optional = true },
+  },
+  objects = {
+    players = { names = { prefix = PREFIX, ignore = { "playerctld" } }, from = "player",
+                fields = READING },
+  },
+  signals = {
+    { from = "player", member = "Seeked" },
+  },
+  fields = {
+    available = { from = "players", meta = "available" },
+    count = { from = "players", meta = "count" },
+    players = { from = "players", only = ROW },
+  },
+  state = { active = empty_active() },
+  bind = bind,
+}
 
-  -- The position, moving. Only the active player's row is advanced; the
-  -- list's positions are as of the last reading. The tick runs only while
-  -- something plays: an idle desk is not woken every second to learn that
-  -- nothing moved.
-  local ticker
-  ensure_ticker = function()
-    local active = choose()
-    local playing = active and active.playing
-    if playing and not ticker then
-      ticker = morf.timer(options.tick_ms or 1000, function()
-        local now = choose()
-        if now and now.playing then
-          state.active.position = position_of(now) / 1e6
-        else
-          ticker:cancel()
-          ticker = nil
-        end
-      end, true)
-    elseif not playing and ticker then
-      ticker:cancel()
-      ticker = nil
-    end
+--- Starts watching. Call it while the configuration loads.
+---
+--- Options: `bus` ("session"), `prefix` (the MPRIS name prefix; a test uses
+--- its own so it never sees, or presses, a real player), `ignore` (names
+--- after the prefix to skip; `{ "playerctld" }`), `tick_ms` (1000),
+--- `debounce_ms` (50), `clock` (a function returning milliseconds; for
+--- tests), `timeout_ms` (how long a button waits for the player; 5000),
+--- `dbus` (test seam).
+function mpris.connect(options)
+  options = options or {}
+  local objects
+  if options.prefix or options.ignore then
+    objects = { players = { names = {
+      prefix = options.prefix or PREFIX, ignore = options.ignore or { "playerctld" },
+    } } }
   end
-  ensure_ticker()
-
-  for _, name in ipairs(client.list_names()) do add(name) end
-  publish()
-  return media
+  return registry.connect("media", {
+    dbus = options.dbus, bus = options.bus, debounce_ms = options.debounce_ms, objects = objects,
+    tick_ms = options.tick_ms, clock = options.clock, timeout_ms = options.timeout_ms,
+  })
 end
 
 return mpris

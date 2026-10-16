@@ -34,9 +34,13 @@ local function record(path, kind)
   harness.blocked[#harness.blocked + 1] = kind .. ": morf." .. path
 end
 
--- A handle whose every method does nothing, for code that keeps what it got.
+-- A handle whose every method does nothing, for code that keeps what it got;
+-- read as a list it is empty.
 local inert = setmetatable({}, {
-  __index = function() return function() return nil end end,
+  __index = function(_, key)
+    if type(key) == "number" then return nil end
+    return function() return nil end
+  end,
   __call = function() return nil end,
 })
 

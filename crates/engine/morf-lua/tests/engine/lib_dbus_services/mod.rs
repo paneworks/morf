@@ -4,9 +4,10 @@
 //! engine's generic D-Bus client, and every one of them can change the
 //! machine it runs on: turn the radio off, forget a network, suspend. So none
 //! of these tests goes near a real service. Most hand the library a stand-in
-//! for `morf.dbus` written in Lua (`lib_dbus_fake.lua`), which answers in the
-//! shapes the engine's decoder produces and records every argument as the
-//! library typed it — the thing a real service would reject if it were wrong.
+//! for `morf.dbus` written in Lua (`library/tests/dbus_fake.lua`, which the
+//! library's own specs share), which answers in the shapes the engine's
+//! decoder produces and records every argument as the library typed it —
+//! the thing a real service would reject if it were wrong.
 //! One goes over a real session bus, to a fake player this test owns under a
 //! name no real player uses, to pin the decoder's shapes to the fake's.
 
@@ -17,7 +18,7 @@ use std::time::{Duration, Instant};
 
 use super::*;
 
-const FAKE: &str = include_str!("../lib_dbus_fake.lua");
+const FAKE: &str = include_str!("../../../../../../library/tests/dbus_fake.lua");
 
 /// Runs `body` with `fake`, `morf`, `ui` and `done(text)` in scope, beside the
 /// examples so `require("lib.x")` finds the libraries, until `done` is called.
@@ -96,7 +97,7 @@ fn services_over_a_private_session_bus() {
     // can be activated: a runtime starting up asks for the desktop portal,
     // and on a stock session bus that would launch one against the private
     // bus for nothing.
-    run_under_private_bus("tests::lib_dbus_services::private_bus::private_bus_");
+    run_under_private_bus("lib_dbus_services::private_bus::private_bus_");
 }
 
 /// Re-runs the ignored tests matching `filter` in a child process under
@@ -132,4 +133,5 @@ mod logind;
 mod mpris;
 mod networkmanager;
 mod private_bus;
+mod registry;
 mod upower;

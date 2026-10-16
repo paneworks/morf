@@ -26,6 +26,7 @@ pub(crate) mod model_revisions;
 pub(crate) mod pending;
 pub(crate) mod prefers;
 pub(crate) mod primary;
+pub(crate) mod resources;
 pub(crate) mod screens;
 pub(crate) mod services;
 pub(crate) mod session_lock;
