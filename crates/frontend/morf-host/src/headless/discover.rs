@@ -7,16 +7,13 @@ use std::path::Path;
 use morf_app::backend::headless::virtual_outputs;
 use morf_lua::{Limits, PermissionMode, Runtime};
 
-use crate::process::supervisor::{
-    LoadPolicy, execute_config_with, lua_screen, lua_screens, store_outputs,
-};
+use crate::process::supervisor::{LoadPolicy, execute_config_with, lua_screen, lua_screens};
 
 /// The runtime after loading `path` with every gated call refused, and how
 /// the load went. The runtime is returned either way: a configuration that
 /// stops part way has still named the modules it reached.
 pub fn discover(path: &Path, approvals: Option<&Path>) -> (Runtime, Result<(), String>) {
     let screens = virtual_outputs(1, (1920, 1080), 1);
-    store_outputs(&screens);
     let (limits, _) = Limits::from_env();
     let mut runtime = Runtime::for_screen(limits, lua_screen(&screens[0]));
     runtime.use_virtual_clock();
