@@ -66,7 +66,11 @@ pub(crate) fn assign_scene_property(
     value: SceneValue,
 ) -> Result<(), String> {
     refuse_claimed(state, node, property)?;
-    write_scene_property(state, node, property, |scene| {
+    let named = glass_fields(state, node, property, &value);
+    for field in &named {
+        refuse_claimed(state, node, field)?;
+    }
+    write_scene_property(state, node, property, &named, |scene| {
         scene.assign(node, property, value)
     })
 }
@@ -80,7 +84,7 @@ pub(crate) fn retarget_scene_property(
     value: SceneValue,
     motion: Option<morf_scene::Motion>,
 ) -> Result<(), String> {
-    write_scene_property(state, node, property, |scene| {
+    write_scene_property(state, node, property, &[], |scene| {
         scene.retarget(node, property, value, motion)
     })
 }
@@ -100,22 +104,51 @@ pub(crate) fn refuse_claimed(
     Ok(())
 }
 
+/// The flat properties a `glass` table written to `node` also sets.
+fn glass_fields(
+    state: &ReactiveState,
+    node: NodeHandle,
+    property: &str,
+    value: &SceneValue,
+) -> Vec<&'static str> {
+    match value {
+        SceneValue::Map(fields)
+            if property == "glass" && state.scene().has_property(node, "glass") == Ok(true) =>
+        {
+            morf_scene::GLASS_KEYS
+                .iter()
+                .filter(|(key, _)| fields.contains_key(*key))
+                .map(|(_, named)| *named)
+                .collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// A property's current value and target.
+fn values(
+    state: &ReactiveState,
+    node: NodeHandle,
+    property: &str,
+) -> Result<(SceneValue, SceneValue), String> {
+    let scene = state.scene();
+    let current = scene.current(node, property).map_err(|e| e.to_string())?;
+    let target = scene.target(node, property).map_err(|e| e.to_string())?;
+    Ok((current.clone(), target.clone()))
+}
+
 fn write_scene_property(
     state: &mut ReactiveState,
     node: NodeHandle,
     property: &str,
+    also: &[&'static str],
     write: impl FnOnce(&mut morf_scene::Scene) -> Result<(), morf_scene::SceneError>,
 ) -> Result<(), String> {
-    let old_current = state
-        .scene()
-        .current(node, property)
-        .map_err(|error| error.to_string())?
-        .clone();
-    let old_target = state
-        .scene()
-        .target(node, property)
-        .map_err(|error| error.to_string())?
-        .clone();
+    let old = values(state, node, property)?;
+    let also_old = also
+        .iter()
+        .map(|named| Ok((*named, values(state, node, named)?)))
+        .collect::<Result<Vec<_>, String>>()?;
     write(state.scene_mut()).map_err(|error| error.to_string())?;
     // A path that draws a channel: watched for the channel's writes.
     if property == "series" {
@@ -125,6 +158,21 @@ fn write_scene_property(
     if matches!(property, "spans" | "markup") {
         state.layout_hooks_mut().link_text(node);
     }
+    announce_change(state, node, property, old)?;
+    for (named, old) in also_old {
+        announce_change(state, node, named, old)?;
+    }
+    Ok(())
+}
+
+/// Tells whatever follows `property` that it moved from `old`, its current
+/// value and its target, if it did.
+fn announce_change(
+    state: &mut ReactiveState,
+    node: NodeHandle,
+    property: &str,
+    (old_current, old_target): (SceneValue, SceneValue),
+) -> Result<(), String> {
     let current_changed = state
         .scene()
         .current(node, property)

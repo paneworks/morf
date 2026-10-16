@@ -6,6 +6,7 @@
 //! through [`Headless`] -- the same code the shell's own loop runs.
 
 mod input;
+mod pixels;
 mod query;
 mod subject;
 mod values;
@@ -49,6 +50,8 @@ pub(crate) struct TestHost {
     /// Why there is no GPU, once that is known, so a spec full of
     /// snapshots asks the driver once.
     no_gpu: Option<String>,
+    /// Frames `test.frame` rendered, by the number each was handed out as.
+    frames: Vec<morf_host::headless::render::Picture>,
     started: Instant,
 }
 
@@ -68,6 +71,7 @@ impl TestHost {
             test_logs: 0,
             test_effect_errors: 0,
             no_gpu: None,
+            frames: Vec::new(),
             started: Instant::now(),
         }
     }
@@ -139,7 +143,7 @@ impl TestHost {
 /// Installs every host function into the spec's runtime.
 pub(crate) fn install(runtime: &mut Runtime, host: &Shared) {
     type Handler = fn(&mut TestHost, &[IpcValue]) -> Result<Vec<IpcValue>, String>;
-    let handlers: [(&'static str, Handler); 33] = [
+    let handlers: [(&'static str, Handler); 36] = [
         ("load", load),
         ("reload", reload),
         ("problems", |host, _| {
@@ -228,6 +232,9 @@ pub(crate) fn install(runtime: &mut Runtime, host: &Shared) {
                 .map_err(|error| error.to_string())
         }),
         ("snapshot", snapshot),
+        ("frame", pixels::frame),
+        ("pixel", pixels::pixel),
+        ("region", pixels::region),
         ("note", |host, arguments| {
             host.notes
                 .push(optional_text(arguments.first()).unwrap_or_default());

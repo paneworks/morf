@@ -2,7 +2,7 @@
 //! again, and the textures and passes each one keeps.
 
 use morf_layout::{Geometry, Transform2D};
-use morf_scene::NodeHandle;
+use morf_scene::{Frost, NodeHandle};
 
 use super::super::backend_types::WgpuBackend;
 use super::super::glyphs::{GlyphInstance, layer_mask_data, transformed_quad};
@@ -10,7 +10,7 @@ use super::super::targets::{clamp_scissor, create_blur_pass};
 use super::super::textures::TextureBatch;
 use super::{BackdropDraw, BackdropEntry, Beneath, BeneathOp, ChildLayers, beneath_ops};
 use crate::backdrop::{backdrop_plan, level_sizes, pass_order};
-use crate::effects::physical_damage;
+use crate::effects::{color_array, physical_damage};
 use crate::{DamageRect, DrawCommand, DrawList, Layer, LayerMask};
 
 impl WgpuBackend {
@@ -47,6 +47,9 @@ impl WgpuBackend {
                 radius,
                 saturation,
                 tint,
+                refraction,
+                frost,
+                rim,
                 ..
             } = command
             else {
@@ -124,11 +127,12 @@ impl WgpuBackend {
                 axes,
                 uv: [0.0, 0.0, 1.0, 1.0],
                 color: [1.0, 1.0, 1.0, 1.0],
-                // The glass tint, straight colour and strength; the
+                // The glass tint in linear light with its strength; the
                 // shader washes it over the saturated backdrop.
-                color_overlay: [tint.red, tint.green, tint.blue, tint.alpha],
-                // A layer's composite, marked as a backdrop so the shader
-                // applies the saturation carried in `field`.
+                color_overlay: color_array(*tint),
+                // Glass rather than a layer's composite: the shader reads
+                // its material from `field` and the backdrop's logical size
+                // from `outline_color`.
                 mode: [2.0, mask_enabled, 0.0, 0.0],
                 surface: [
                     logical.x as f32,
@@ -140,7 +144,23 @@ impl WgpuBackend {
                 mask_inverse_0,
                 mask_inverse_1,
                 mask_radii,
-                field: [*saturation as f32, 0.0, 0.0, 0.0],
+                // Saturation, frost (negative: by what is behind), the
+                // lens's bend in logical pixels, and the rim's light.
+                field: [
+                    *saturation as f32,
+                    match frost {
+                        Frost::Amount(amount) => *amount as f32,
+                        Frost::Auto => -1.0,
+                    },
+                    *refraction as f32,
+                    *rim as f32,
+                ],
+                outline_color: [
+                    (1.0 / logical.width.max(1e-3)) as f32,
+                    (1.0 / logical.height.max(1e-3)) as f32,
+                    0.0,
+                    0.0,
+                ],
                 ..GlyphInstance::default()
             });
             draws[index] = Some(BackdropDraw {
@@ -258,6 +278,10 @@ impl WgpuBackend {
     }
 
     /// Textures and passes for a backdrop over `region`.
+    ///
+    /// Every level is a mip of one texture, so the glass reads the picture as
+    /// drawn (mip 0) and its blur (mip 1) through one binding. A region too
+    /// small to halve `levels` times halves as far as it can.
     fn backdrop_entry(
         &self,
         region: DamageRect,
@@ -265,47 +289,33 @@ impl WgpuBackend {
         beneath: Vec<Beneath>,
         generation: u64,
     ) -> BackdropEntry {
-        let format = super::super::target_format(self.space);
+        let plan = (levels, offset);
+        let levels = levels.min(region.width.max(region.height).max(1).ilog2());
         let sizes = level_sizes(region.width, region.height, levels);
-        let texture = |(width, height): (u32, u32), label: &str, copy: bool| {
-            self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some(label),
-                size: wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING
-                    | if copy {
-                        wgpu::TextureUsages::COPY_DST
-                    } else {
-                        wgpu::TextureUsages::empty()
-                    },
-                view_formats: &[],
+        let source = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("morf backdrop levels"),
+            size: wgpu::Extent3d {
+                width: sizes[0].0,
+                height: sizes[0].1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: levels + 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: super::super::target_format(self.space),
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let mips = |base: u32, count: u32| {
+            source.create_view(&wgpu::TextureViewDescriptor {
+                base_mip_level: base,
+                mip_level_count: Some(count),
+                ..Default::default()
             })
         };
-        let source = texture(sizes[0], "morf backdrop source", true);
-        let source_view = source.create_view(&wgpu::TextureViewDescriptor::default());
-        let levels_made: Vec<(wgpu::Texture, wgpu::TextureView)> = sizes[1..]
-            .iter()
-            .map(|size| {
-                let level = texture(*size, "morf backdrop level", false);
-                let view = level.create_view(&wgpu::TextureViewDescriptor::default());
-                (level, view)
-            })
-            .collect();
-        let view_of = |level: usize| {
-            if level == 0 {
-                &source_view
-            } else {
-                &levels_made[level - 1].1
-            }
-        };
+        let views: Vec<wgpu::TextureView> = (0..=levels).map(|level| mips(level, 1)).collect();
         let passes = pass_order(levels)
             .into_iter()
             .map(|(from, to)| {
@@ -314,7 +324,7 @@ impl WgpuBackend {
                         &self.device,
                         &self.blur_layout,
                         &self.blur_sampler,
-                        view_of(from),
+                        &views[from],
                         sizes[from],
                         offset,
                         if to < from { 1.0 } else { 0.0 },
@@ -329,7 +339,7 @@ impl WgpuBackend {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(view_of(1)),
+                    resource: wgpu::BindingResource::TextureView(&mips(0, levels.min(1) + 1)),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -339,11 +349,11 @@ impl WgpuBackend {
         });
         BackdropEntry {
             region,
-            plan: (levels, offset),
+            plan,
             beneath,
             generation,
             source,
-            levels: levels_made,
+            views,
             passes,
             bind_group,
             used: true,

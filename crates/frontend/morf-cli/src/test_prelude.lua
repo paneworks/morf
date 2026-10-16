@@ -420,6 +420,24 @@ function test.snapshot(name, options)
   return host.snapshot(name, options.surface)
 end
 
+-- The surface as it is drawn now, to read its pixels back (default the
+-- primary; "screen" for all of them), when there is a GPU: a frame, or nil
+-- and why not. `frame.width` and `frame.height` are in pixels at the
+-- runner's scale; `frame.pixel(x, y)` is the colour there as "#rrggbbaa";
+-- `frame.region { x, y, width, height }` sums one up: its `mean` colour,
+-- and the `luma`, `variance`, `min` and `max` of its luma, from 0 to 1.
+function test.frame(options)
+  options = options or {}
+  local drawn, id, width, height = host.frame(options.surface)
+  if not drawn then return nil, id end
+  local frame = { width = width, height = height }
+  function frame.pixel(x, y) return host.pixel(id, x, y) end
+  function frame.region(box)
+    return host.region(id, box.x or box[1], box.y or box[2], box.width or box[3], box.height or box[4])
+  end
+  return frame
+end
+
 function test.note(message) host.note(tostring(message)) end
 function test.log(...)
   local parts = {}

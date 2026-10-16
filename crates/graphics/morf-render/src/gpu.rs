@@ -77,6 +77,9 @@ mod kept_tests;
 mod layer_pool;
 #[cfg(test)]
 mod layer_pool_tests;
+mod layer_share;
+#[cfg(test)]
+mod layer_share_tests;
 mod layer_targets;
 mod lcd_spans;
 #[cfg(test)]
@@ -125,6 +128,8 @@ mod field_opacity_tests;
 mod field_shape_tests;
 #[cfg(test)]
 mod field_tests;
+#[cfg(test)]
+mod glass_tests;
 #[cfg(test)]
 mod inline_source_tests;
 #[cfg(test)]

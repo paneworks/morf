@@ -175,6 +175,15 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 number("backdrop_saturation", 1.0),
                 // A colour washed over the frosted backdrop, by its alpha.
                 color("backdrop_tint", Color::rgba8(0, 0, 0, 0)),
+                // The glass material over the backdrop (`glass.rs`): how far
+                // its lens bends what is behind at the rim, in logical
+                // pixels; how frosted it is, 0 clear to 1, or "auto" to
+                // judge by how busy what is behind is; and how bright its
+                // rim catches the light. `glass` sets them as one table.
+                number("glass_refraction", 0.0),
+                any("glass_frost", Value::Number(1.0)),
+                number("glass_rim", 0.0),
+                any("glass", Value::Nil),
             ]);
             if element == Element::ClipRect {
                 properties.extend([

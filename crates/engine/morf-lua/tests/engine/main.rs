@@ -56,6 +56,7 @@ mod focus;
 mod frame_stall;
 mod fs_time;
 mod fs_watch;
+mod glass;
 mod gradients;
 mod harness;
 mod http;

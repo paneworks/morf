@@ -4,6 +4,7 @@ use morf_scene::{Color, Element, NodeHandle, Scene};
 use crate::{commands::*, effects::*, paint_fields::*, paint_text_input::*, sdf::*};
 
 mod element_commands;
+mod glass;
 mod path_paint;
 mod properties;
 mod reuse;
@@ -206,23 +207,13 @@ pub(crate) fn paint_node(
     } else {
         RectShadow::none()
     };
-    // Frosted glass goes down first, so the rectangle's own fill tints it.
+    // Glass goes down first, so the rectangle's own fill tints it.
     if painted
         && matches!(element, Element::Rect | Element::ClipRect)
-        && let morf_scene::Value::Number(radius) = scene.current(node, "backdrop_blur")?
-        && radius.is_finite()
-        && *radius > 0.0
+        && let Some(backdrop) =
+            glass::backdrop_command(scene, node, (bounds, transform, clip), radii)?
     {
-        list.commands.push(DrawCommand::Backdrop {
-            node,
-            bounds,
-            transform,
-            clip,
-            radii,
-            radius: radius.min(MAX_BACKDROP_BLUR),
-            saturation: scene.number(node, "backdrop_saturation")?.max(0.0),
-            tint: scene.color_value(node, "backdrop_tint")?,
-        });
+        list.commands.push(backdrop);
     }
     match element {
         Element::Rect | Element::ClipRect if painted => list.commands.push(DrawCommand::Quad {

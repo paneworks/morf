@@ -6,6 +6,9 @@ impl Scene {
     /// Conservative on purpose: a spurious bump costs one extra layout pass, a
     /// missed one leaves the scene drawn at stale geometry.
     pub(crate) fn touch_layout(&mut self, node: NodeId, property: &str) {
+        if property.starts_with("glass") {
+            self.glass_nodes.insert(node);
+        }
         if affects_layout(property) {
             self.bump_layout(node);
         } else {

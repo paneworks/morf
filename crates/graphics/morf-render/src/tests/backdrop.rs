@@ -145,6 +145,59 @@ fn true_is_still_the_compositors_and_the_radius_is_capped() {
     );
 }
 
+fn backdrop(list: &DrawList) -> Option<&DrawCommand> {
+    list.commands
+        .iter()
+        .find(|command| matches!(command, DrawCommand::Backdrop { .. }))
+}
+
+#[test]
+fn glass_without_a_blur_still_reads_what_is_behind() {
+    let (mut scene, root, [_, glass, _]) = glass(Value::Bool(false));
+    assert!(backdrop(&draw(&scene, root)).is_none(), "nothing asked for");
+    // Clear glass: a lens and no frost, so nothing is blurred.
+    scene.assign(glass, "glass_refraction", 6.0).unwrap();
+    scene.assign(glass, "glass_frost", 0.0).unwrap();
+    let list = draw(&scene, root);
+    let Some(DrawCommand::Backdrop {
+        radius,
+        refraction,
+        frost,
+        ..
+    }) = backdrop(&list)
+    else {
+        panic!("a lens reads what is behind")
+    };
+    assert_eq!((*radius, *refraction), (0.0, 6.0));
+    assert_eq!(*frost, morf_scene::Frost::Amount(0.0));
+    // Frost with no radius of its own blurs at the glass's.
+    scene.assign(glass, "glass_frost", "auto").unwrap();
+    let list = draw(&scene, root);
+    assert!(matches!(
+        backdrop(&list),
+        Some(DrawCommand::Backdrop { radius, frost: morf_scene::Frost::Auto, .. })
+            if *radius == GLASS_BLUR
+    ));
+    // A lens bending outward reads past the edge by as far as it bends.
+    scene.assign(glass, "glass_frost", 0.0).unwrap();
+    scene.assign(glass, "glass_refraction", -30.0).unwrap();
+    let list = draw(&scene, root);
+    let reach = backdrop(&list).unwrap().backdrop_reach().unwrap();
+    assert_eq!((reach.x, reach.width), (-10.0, 100.0));
+}
+
+#[test]
+fn a_blurred_glass_keeps_its_own_radius_and_carries_its_rim() {
+    let (mut scene, root, [_, glass, _]) = glass(Value::Number(10.0));
+    scene.assign(glass, "glass_rim", 0.5).unwrap();
+    let list = draw(&scene, root);
+    assert!(matches!(
+        backdrop(&list),
+        Some(DrawCommand::Backdrop { radius, rim, frost: morf_scene::Frost::Amount(amount), .. })
+            if *radius == 10.0 && *rim == 0.5 && *amount == 1.0
+    ));
+}
+
 #[test]
 fn a_change_beneath_the_glass_repaints_all_of_it() {
     let (mut scene, root, [ground, _, _]) = glass(Value::Number(4.0));

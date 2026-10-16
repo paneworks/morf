@@ -187,20 +187,28 @@ pub fn render_screen(headless: &mut Headless, scale: u32) -> Result<Picture, Str
 }
 
 /// Renders what `wanted` names -- a surface, or `screen` for all of them
-/// composed -- and writes it.
+/// composed -- with the label of what was drawn.
+pub fn render_picture(
+    headless: &mut Headless,
+    wanted: Option<&str>,
+    scale: u32,
+) -> Result<(Picture, String), String> {
+    if wanted == Some("screen") {
+        return Ok((render_screen(headless, scale)?, "screen".to_owned()));
+    }
+    let index = headless.surface_index(wanted)?;
+    let label = headless.surfaces[index].label();
+    Ok((render_surface(headless, index, scale)?, label))
+}
+
+/// Renders what `wanted` names, as [`render_picture`] does, and writes it.
 pub fn render_to(
     headless: &mut Headless,
     wanted: Option<&str>,
     scale: u32,
     path: &Path,
 ) -> Result<(u32, u32, String), String> {
-    let (picture, what) = if wanted == Some("screen") {
-        (render_screen(headless, scale)?, "screen".to_owned())
-    } else {
-        let index = headless.surface_index(wanted)?;
-        let label = headless.surfaces[index].label();
-        (render_surface(headless, index, scale)?, label)
-    };
+    let (picture, what) = render_picture(headless, wanted, scale)?;
     picture.save(path)?;
     Ok((picture.width, picture.height, what))
 }

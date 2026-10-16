@@ -29,6 +29,7 @@ impl Scene {
             removed: Vec::new(),
             shaders: FastMap::default(),
             terminal_screens: FastMap::default(),
+            glass_nodes: FastSet::default(),
             tracks: FastMap::default(),
             masks: FastMap::default(),
             mask_owners: FastMap::default(),
@@ -281,6 +282,7 @@ impl Scene {
             self.root_revisions.remove(&current);
             self.detached_revisions.remove(&current);
             self.terminal_screens.remove(&current);
+            self.glass_nodes.remove(&current);
             self.tracks.remove(&current);
             self.masks.remove(&current);
             if let Some(owner) = self.mask_owners.remove(&current) {
@@ -417,6 +419,9 @@ impl Scene {
         // layout pass is a great deal cheaper than a frame drawn at stale
         // geometry.
         self.touch_layout(id, property_name);
+        if property_name == "glass" {
+            self.expand_glass(node)?;
+        }
         Ok(())
     }
 }

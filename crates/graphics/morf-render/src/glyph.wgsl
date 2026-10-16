@@ -39,6 +39,18 @@ fn morf_blend_output(color: vec4<f32>) -> vec4<f32> {
     return vec4<f32>(encoded * color.a, color.a);
 }
 
+/// A straight linear colour in the space this pipeline's target holds:
+/// unchanged for a linear target, encoded on the sRGB curve for a gamma one.
+fn morf_target_rgb(linear: vec3<f32>) -> vec3<f32> {
+    if !MORF_GAMMA_BLEND {
+        return linear;
+    }
+    let straight = clamp(linear, vec3<f32>(0.0), vec3<f32>(1.0));
+    let low = straight * 12.92;
+    let high = 1.055 * pow(straight, vec3<f32>(1.0 / 2.4)) - 0.055;
+    return select(high, low, straight <= vec3<f32>(0.0031308));
+}
+
 @group(0) @binding(0) var atlas: texture_2d<f32>;
 @group(0) @binding(1) var atlas_sampler: sampler;
 
@@ -109,8 +121,87 @@ fn morf_effect_hook(uv: vec2<f32>, sampled: vec4<f32>) -> vec4<f32> {
     return sampled; // morf-hook: effect
 }
 
+/// How far a glass's lens reaches in from its rim, as a share of its shorter
+/// side.
+const GLASS_BAND: f32 = 0.25;
+/// How far in from the edge its rim's light fades, in logical pixels.
+const GLASS_RIM_WIDTH: f32 = 1.5;
+/// The variance of the backdrop against its blurred mean at which automatic
+/// frost begins, and at which it is complete.
+const GLASS_QUIET: f32 = 0.0005;
+const GLASS_BUSY: f32 = 0.01;
+
+/// Glass over what this surface drew beneath it. Mip 0 of the backdrop is
+/// that picture as drawn and mip 1 its blur: the lens moves where both are
+/// read, the frost mixes them, and saturation, tint and the rim's light go
+/// over the mix. `field` holds saturation, frost (negative: by what is
+/// behind), the lens's bend and the rim; `outline_color.xy` the backdrop's
+/// logical size, inverted.
+fn morf_glass(input: VertexOutput) -> vec4<f32> {
+    let shaped = input.mode.y > 0.5;
+    let local = vec2<f32>(
+        dot(input.mask_inverse_0.xyz, vec3<f32>(input.surface_point, 1.0)),
+        dot(input.mask_inverse_1.xyz, vec3<f32>(input.surface_point, 1.0)),
+    ) - input.mask_bounds.xy;
+    let size = input.mask_bounds.zw;
+    let distance = select(-1.0e4, rounded_distance(local, size, input.mask_radii), shaped);
+    let edge = max(fwidth(distance), 0.0001);
+    let coverage = smoothstep(edge, -edge, distance);
+
+    // The lens is a slab with a rounded rim, its corners rounded at least as
+    // far as the rim reaches so the slope turns smoothly round them. It bends
+    // most at the edge and not at all past the rim.
+    let band = max(min(size.x, size.y) * GLASS_BAND, 1.0);
+    let lens = max(input.mask_radii, vec4<f32>(band));
+    let step = vec2<f32>(0.5, 0.0);
+    let slope = vec2<f32>(
+        rounded_distance(local + step.xy, size, lens) - rounded_distance(local - step.xy, size, lens),
+        rounded_distance(local + step.yx, size, lens) - rounded_distance(local - step.yx, size, lens),
+    );
+    let normal = select(vec2<f32>(0.0), normalize(slope), shaped && dot(slope, slope) > 1.0e-8);
+    let inside = 1.0 - clamp(-distance / band, 0.0, 1.0);
+    let bend = -normal * input.field.z * inside * inside;
+    // From the shape's own space back to the surface's.
+    let a = input.mask_inverse_0.x;
+    let c = input.mask_inverse_0.y;
+    let b = input.mask_inverse_1.x;
+    let d = input.mask_inverse_1.y;
+    let determinant = a * d - b * c;
+    var moved = vec2<f32>(0.0);
+    if abs(determinant) > 1.0e-6 {
+        moved = vec2<f32>(d * bend.x - c * bend.y, a * bend.y - b * bend.x) / determinant;
+    }
+    let uv = input.uv + moved * input.outline_color.xy;
+    let sharp = textureSampleLevel(atlas, atlas_sampler, uv, 0.0);
+    let blurred = textureSampleLevel(atlas, atlas_sampler, uv, 1.0);
+
+    // Automatic frost: how busy what is behind is, as the variance of this
+    // point against the mean its blur gives.
+    var frost = input.field.y;
+    if frost < 0.0 {
+        let apart = sharp - blurred;
+        frost = smoothstep(GLASS_QUIET, GLASS_BUSY, dot(apart, apart) * 0.25);
+    }
+    let color = mix(sharp, blurred, frost);
+    let grey = dot(color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+    var rgb = clamp(mix(vec3<f32>(grey), color.rgb, input.field.x), vec3<f32>(0.0), vec3<f32>(color.a));
+    rgb = mix(rgb, morf_target_rgb(input.color_overlay.rgb) * color.a, input.color_overlay.a);
+    var lit = vec4<f32>(rgb, color.a);
+    if input.field.w > 0.0 {
+        // Light from the upper left, brightest on the rim that faces it.
+        let facing = 0.6 + 0.4 * dot(normal, vec2<f32>(-0.6, -0.8));
+        let fade = exp(min(distance, 0.0) / GLASS_RIM_WIDTH);
+        let glow = clamp(input.field.w * facing * fade, 0.0, 1.0);
+        lit = lit * (1.0 - glow) + vec4<f32>(glow);
+    }
+    return lit * (input.color.a * coverage);
+}
+
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+    if input.mode.x > 1.5 {
+        return morf_glass(input);
+    }
     var sampled = morf_effect_hook(input.uv, morf_sample(input.uv));
 
     // A layer mask trims the quad. For a distance field the sampled red channel
@@ -223,17 +314,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         // A layer composited back: its target holds what its subtree wrote,
         // already in the space this pipeline writes, so it is not encoded
         // again.
-        var rgb = sampled.rgb;
-        if input.mode.x > 1.5 {
-            // A frosted backdrop, saturated by `field.x`. Premultiplied
-            // colour mixes with its own grey just as straight colour does;
-            // the clamp keeps a boosted channel within its alpha.
-            let grey = dot(rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
-            rgb = clamp(mix(vec3<f32>(grey), rgb, input.field.x), vec3<f32>(0.0), vec3<f32>(sampled.a));
-            // Then the tint: a straight colour washed over by its alpha.
-            rgb = mix(rgb, input.color_overlay.rgb * sampled.a, input.color_overlay.a);
-        }
-        return vec4<f32>(rgb * input.color.a, alpha);
+        return vec4<f32>(sampled.rgb * input.color.a, alpha);
     }
     let color = select(sampled.rgb * input.color.rgb, input.color.rgb, input.mode.z > 0.5);
     return morf_blend_output(
