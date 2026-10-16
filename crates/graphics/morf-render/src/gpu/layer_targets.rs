@@ -1,3 +1,4 @@
+use super::layer_share::Placement;
 use super::{backend_types::*, glyphs::*, targets::*, textures::*};
 use crate::DrawList;
 use crate::effects::color_array;
@@ -22,8 +23,6 @@ fn physical_quad(
         ],
     )
 }
-
-use super::layer_share::Placement;
 
 impl WgpuBackend {
     /// Takes a target for every layer something reads this frame and prepares
