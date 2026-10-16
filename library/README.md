@@ -612,7 +612,9 @@ require("lib.services.upower").format_time(seconds)  -- "3 h 12 min"
 
 Power profiles are read from `org.freedesktop.UPower.PowerProfiles`, falling
 back to `net.hadess.PowerProfiles`, and only when one of them is already
-running.
+running. The module is a registry descriptor (`lib.services.registry`):
+`morf.service("power", { owner = node })` binds the same service, and
+`power.close()` lets go of it.
 
 ### `mpris` — `org.mpris.MediaPlayer2.*`, session bus
 
@@ -640,7 +642,10 @@ while playing. Every player lives at the same object path; the engine routes a
 signal only to the subscriptions naming its sender, so a player's change
 re-reads that player alone (debounced), and its subscriptions close when it
 leaves. The buttons are sent without waiting on the player. `playerctld` is
-skipped by default (`ignore`).
+skipped by default (`ignore`). The module is a registry descriptor whose
+`bind` keeps the active choice, the position clock and the buttons:
+`morf.service("media", { owner = node })` binds the same service, and
+`media.close()` lets go of it.
 
 ### `logind` — `org.freedesktop.login1`, system bus
 

@@ -91,6 +91,7 @@
 ---@field screencopy Morf.Screencopy
 ---@field screens Morf.Screens
 ---@field screens_revision fun(...): any
+---@field service fun(...): any
 ---@field session_lock any
 ---@field session_lock_state fun(...): any
 ---@field session_paths fun(...): any

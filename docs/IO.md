@@ -213,6 +213,147 @@ proxy:call_with("AddConnection", {
 A string that is not valid UTF-8 given where no signature says otherwise
 goes as `ay`; given for an `s`, it is made valid, as always.
 
+## System services: `morf.service`
+
+```lua
+local power = morf.service("power")
+local media = morf.service("media", { owner = panel })
+ui.Text { text = function() return media.state.active.title end }
+```
+
+`morf.service(name, options)` binds a system service the library's registry
+(`lib.services.registry`) describes and returns its binding: `binding.state`
+is ordinary reactive state, read from a binding like any `morf.state` table,
+beside the service's own methods. Two are registered:
+
+| name | service | state and methods |
+|---|---|---|
+| `power` | UPower and power-profiles-daemon (`lib.services.upower`) | `available`, `on_battery`, `lid_is_closed`, `lid_is_present`, `display`, `devices`, `peripherals`, `profiles` (`available`, `service`, `active`, `degraded`, `list`); `set_profile(name)`, `devices()` |
+| `media` | MPRIS players (`lib.services.mpris`) | `available`, `count`, `players`, `active`; `play_pause()`, `next()`, `previous()`, `seek(s)`, `set_position(s)`, `set_volume(v)`, `set_active(name)`, `position()`, `players()` |
+
+Options, all optional: `owner`, a node whose removal closes the binding
+(after the node's own `on_destroyed`); `bus` and `service`, another bus or
+bus name; `debounce_ms`; `interfaces` and `objects`, partial overrides of the
+descriptor by alias; `dbus`, a stand-in for `morf.dbus` (the test seam); and
+what the service's module reads itself (`media`: `tick_ms`, `clock`,
+`timeout_ms`). `require("lib.services.upower").connect()` and
+`require("lib.services.mpris").connect()` bind the same services, with the
+options they always took.
+
+- An unknown name raises ``unknown service `x` (registered: media, power)``;
+  `registry.names()` is the list. The names are the capability vocabulary a
+  module's permissions manifest lists (`services = { "media", "power" }`).
+- While an imported module with no approval runs its top level,
+  `morf.service` refuses with `nil` and a reason, as `morf.run` does (the
+  `services` permission group).
+- `binding.close()` ends every subscription and timer the binding holds:
+  true the first time, false after. A binding with no `owner` lives as long
+  as its runtime and goes with it, at a reload or at exit.
+  `binding.refresh()` re-reads everything before it returns.
+- Binding starts nothing: a name nobody owns is read as absent, never
+  activated.
+
+### Describing a service
+
+A descriptor is data, given to `registry.define` when the module holding it
+is required. It says which objects are read, which signals change what,
+and how each raw property becomes a field:
+
+```lua
+local registry = require("lib.services.registry")
+registry.define {
+  name = "power", bus = "system", service = "org.freedesktop.UPower", debounce_ms = 60,
+  interfaces = {
+    root = { path = "/org/freedesktop/UPower", interface = "org.freedesktop.UPower" },
+    device = { set = "devices", interface = "org.freedesktop.UPower.Device" },
+    profiles = { any_of = {
+      { service = "net.hadess.PowerProfiles", path = "/net/hadess/PowerProfiles",
+        interface = "net.hadess.PowerProfiles" },
+    } },
+  },
+  objects = {
+    devices = { list = { from = "root", method = "EnumerateDevices" }, from = "device", fields = {
+      path = { meta = "key" },
+      percentage = { prop = "Percentage", as = "percent" },
+    } },
+  },
+  signals = {
+    { from = "root", member = "DeviceAdded", adds = "devices" },
+    { from = "root", member = "DeviceRemoved", removes = "devices" },
+  },
+  fields = {
+    available = { from = "root", meta = "available" },
+    on_battery = { from = "root", prop = "OnBattery", as = "bool" },
+    devices = { from = "devices" },
+    profile = { from = "profiles", prop = "ActiveProfile", as = "string" },
+  },
+  actions = {
+    set_profile = { write = "ActiveProfile", on = "profiles", as = "string" },
+  },
+}
+```
+
+- `interfaces` names the sources fields read. A fixed source is one object:
+  `path`, `interface`, and `service` when it is not the descriptor's;
+  `any_of` lists such alternatives, and the first whose name is owned
+  answers. A source with `set = "x"` is that interface on each member of
+  set `x`. `changes = "reread"` re-reads a source on `PropertiesChanged`
+  rather than merging what the signal carried; `optional = true` lets a
+  member exist without it.
+- `objects` names the sets: members a method lists (`list = { from, method
+  }`, object paths, kept current by the `adds` and `removes` signals), or
+  every bus name under a prefix (`names = { prefix, ignore }`, kept current
+  by `NameOwnerChanged`). Each member has subscriptions of its own, closed
+  when it leaves. A set's `fields` is a member's reading; one of them is
+  `meta = "key"`, the member's path or bus name.
+- `signals`: on a fixed source, `adds` or `removes` the member the signal's
+  first argument names, and otherwise re-reads the source; on a set's
+  source, re-reads that member. `PropertiesChanged` needs no entry: every
+  source is subscribed, a change is merged in place, and a property it
+  invalidates is re-read, debounced by `debounce_ms`. A name that changes
+  owner is read afresh at once, and what it said before is forgotten.
+- `fields` is the state's shape. A field reads `prop` (a name, or a path
+  into a dictionary such as `{ "Metadata", "xesam:title" }`) from its
+  source `from`, coerced by `as`, with `default` when absent. A field with
+  `fields` is a nested table with the same `from`. A field `from` a set is a
+  list of the members' readings sorted by key, filtered by `where = { field
+  = value }` (or `{ except = value }`) and cut to `only = { columns }`. A
+  `meta` field is the binder's own fact: `available` (the source answered,
+  or the set is not empty), `service` (the bus name that answered), `count`.
+  Every field falls back to its coerced default when its source goes.
+- `as` names a coercion the registry provides (`registry.coerce`): `raw`,
+  `bool`, `number`, `percent` (clamped to 0-100), `divide` (by `by`),
+  `string`, `lower`, `enum` (`values[raw]`), `one_of` (raw is among
+  `values`), `list_text` ("a, b"), `object_paths`, and `records` (a list of
+  dictionaries as rows of `fields`, keyed by `key`).
+- `actions` adds methods: `write = "Property", on = source, as = coercion`
+  sets the property on whichever name answered and re-reads it, answering
+  true or nil and why (`missing` when no name answers); `rows = "field"`
+  answers a list field's rows as plain tables.
+- `state` adds fields the descriptor does not read, for `bind` to write.
+
+### What the format cannot say: `bind`
+
+One function in the descriptor, `bind = function(binding) end`, runs once
+before the first read for whatever the data cannot express. `media` keeps
+its active-player choice, position clock and buttons there. It works
+through the binding, so the binder still owns teardown:
+
+- `binding.on_read(set, fn)`: `fn(key, reading, previous)` amends a member's
+  reading before it is published;
+- `binding.on_publish(fn)`: runs after each change is published;
+- `binding.timer(ms, fn, repeat)` and `binding.cancel(timer)`: timers that
+  end with the binding;
+- `binding.own(fn)`: runs when the binding closes;
+- `binding.reread(set, key)`: re-reads one member, debounced;
+- `binding.members(set)`, `binding.rows(field)`, `binding.client` (the
+  `dbus_client`), `binding.descriptor` (with the options' overrides
+  applied), `binding.options`.
+
+`bind` may add methods; replacing one of the binder's own (`close`,
+`refresh`, `state`...) is an error, and so is any error it raises: the
+binding is closed and the error is raised from `morf.service`.
+
 ## What is bounded, and what is cleaned up
 
 - A runtime runs at most 64 children and holds at most 64 connections;
@@ -231,6 +372,8 @@ goes as `ay`; given for an `s`, it is made valid, as always.
   configuration started is killed and reaped, except `detached` ones, and
   every connection is closed and every watch dropped; nothing from the old
   configuration calls into the new one.
+- A `morf.service` binding gives back its subscriptions and timers when it
+  is closed, when its `owner` node is removed, or with its runtime.
 - morf's own reload-on-save follows the configuration's `.lua` files
   through the same shared watcher: it sleeps until one is written, waits
   for 50 ms of quiet, and reloads when the files' sizes or times actually
