@@ -23,7 +23,8 @@ use morf_app::Backend;
 use morf_app::{Output, WindowId};
 use morf_layout::{Layout, Size};
 use morf_lua::Runtime;
-use morf_render::{RenderEngine, WgpuBackend};
+use morf_paint::RenderEngine;
+use morf_render::WgpuBackend;
 use morf_scene::{Element, NodeHandle};
 
 use crate::host::windows::{Kind, Windows};

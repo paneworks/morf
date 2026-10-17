@@ -10,7 +10,8 @@ mod properties;
 mod reuse;
 
 pub use reuse::{CopiedRun, Copies};
-pub(crate) use reuse::{PaintCache, Reuse, RunCursor, SpanBase, append_node, extend_runs};
+pub(crate) use reuse::{PaintCache, Reuse, SpanBase, append_node};
+pub use reuse::{RunCursor, extend_runs};
 
 use element_commands::*;
 use path_paint::path_paint;
@@ -43,7 +44,7 @@ pub(crate) fn resolved_color(
         morf_scene::Value::Color(color) => *color,
         _ => inherited.color.unwrap_or(Color::rgba8(0, 0, 0, 255)),
     };
-    if !crate::gpu::hdr::presenting_hdr() {
+    if !morf_value::present::presenting_hdr() {
         return Ok(color);
     }
     Ok(brighter(color, scene.number(node, "hdr")?))

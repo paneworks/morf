@@ -104,19 +104,19 @@ pub struct Copies<'a> {
 
 /// Walks a list's copied runs in command order.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct RunCursor<'a> {
+pub struct RunCursor<'a> {
     runs: &'a [CopiedRun],
     run: usize,
 }
 
 impl<'a> RunCursor<'a> {
-    pub(crate) fn new(runs: &'a [CopiedRun]) -> Self {
+    pub fn new(runs: &'a [CopiedRun]) -> Self {
         Self { runs, run: 0 }
     }
 
     /// The command of the last list that command `index` was copied from,
     /// if it was; asked in ascending order.
-    pub(crate) fn source(&mut self, index: usize) -> Option<usize> {
+    pub fn source(&mut self, index: usize) -> Option<usize> {
         while self
             .runs
             .get(self.run)
@@ -131,7 +131,7 @@ impl<'a> RunCursor<'a> {
 
 /// Appends one copied item to runs of items, joining it to the last run
 /// where it follows on in both lists.
-pub(crate) fn extend_runs(runs: &mut Vec<CopiedRun>, to: usize, from: usize, len: usize) {
+pub fn extend_runs(runs: &mut Vec<CopiedRun>, to: usize, from: usize, len: usize) {
     if len == 0 {
         return;
     }

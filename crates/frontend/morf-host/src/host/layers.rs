@@ -6,7 +6,7 @@ use morf_app::{
     KeyboardFocus, LayerAnchors, LayerConfig, PRIMARY_LAYER, ShellLayer, physical_size,
 };
 use morf_lua::{LayerSurfaceConfig, Runtime, WindowSurfaceConfig, WindowSurfaceKind};
-use morf_render::RenderEngine;
+use morf_paint::RenderEngine;
 use std::collections::HashSet;
 
 use crate::host::windows::{Kind, Windows};

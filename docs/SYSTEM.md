@@ -16,8 +16,10 @@ core       morf-layout    measuring and placing nodes                       scen
 graphics   morf-text      shaping, fonts, glyph rasters                     scene layout vector value
 graphics   morf-vector    outlines and SVG                                  image value
 graphics   morf-image     decoding, the image cache, XDG data dirs          value
-graphics   morf-render    painting a laid-out scene with wgpu               scene layout text vector
-                                                                            image value
+graphics   morf-paint     painting a laid-out scene into draw lists,        scene layout text vector
+                          damage tracking, CPU field/path raster            value
+graphics   morf-render    presenting draw lists with wgpu                   paint scene layout text
+                                                                            vector image value
 platform   morf-app       our own windowing: window kinds, one event type,  value
                           outputs, input, cursors; Wayland and headless
                           backends behind the Backend trait

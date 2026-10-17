@@ -3,6 +3,10 @@ use crate::{commands::*, effects::*};
 use glyph_layer::polygon_params;
 use morf_value::region::Shape;
 
+/// The field fragment shader the GPU backend compiles: the CPU packing in
+/// this module and the shader must agree, and the paint tests say so.
+pub const FIELD_WGSL: &str = include_str!("field.wgsl");
+
 /// How many layers one field may compose.
 ///
 /// A composition is resolved in a single fragment shader, so every layer costs
@@ -86,7 +90,7 @@ fn fade_combinations(layers: &[SdfLayer], absent: u32, fading: u32) -> ([[f32; 4
 
 /// Invisible layers and cuts bring no colour to the painted surface.
 /// They must not prevent filling solid tiles without evaluating the field.
-pub(crate) fn same_fill(layers: &[SdfLayer]) -> bool {
+pub fn same_fill(layers: &[SdfLayer]) -> bool {
     layers.first().is_some_and(|first| {
         layers
             .iter()
@@ -451,5 +455,5 @@ mod quad;
 mod reach;
 
 pub use cull::{FIELD_TILE, FieldTile, composable, composed_distance};
-pub(crate) use cull::{Spill, field_tiles};
+pub use cull::{Spill, field_tiles};
 pub use reach::*;

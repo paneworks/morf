@@ -1781,6 +1781,7 @@ dependencies = [
  "morf-io",
  "morf-layout",
  "morf-lua",
+ "morf-paint",
  "morf-render",
  "morf-scene",
  "morf-text",
@@ -1819,6 +1820,7 @@ dependencies = [
  "morf-io",
  "morf-layout",
  "morf-lua",
+ "morf-paint",
  "morf-render",
  "morf-runtime",
  "morf-scene",
@@ -1896,15 +1898,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "morf-paint"
+version = "0.2.9"
+dependencies = [
+ "bytemuck",
+ "kurbo",
+ "morf-layout",
+ "morf-scene",
+ "morf-text",
+ "morf-value",
+ "morf-vector",
+ "resvg",
+]
+
+[[package]]
 name = "morf-render"
 version = "0.2.9"
 dependencies = [
  "ash",
  "bytemuck",
- "kurbo",
  "libc",
  "morf-image",
  "morf-layout",
+ "morf-paint",
  "morf-scene",
  "morf-shader",
  "morf-text",
@@ -1912,7 +1928,6 @@ dependencies = [
  "morf-vector",
  "pollster",
  "raw-window-handle",
- "resvg",
  "wgpu",
 ]
 

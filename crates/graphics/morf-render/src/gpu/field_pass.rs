@@ -118,7 +118,7 @@ impl FieldVariant {
                         && (layer.morph <= 0.0 || layer.morph_to == Shape::Box)
                 }) {
                     return if fading
-                        && crate::field::same_fill(layers)
+                        && morf_paint::field::same_fill(layers)
                         && layers
                             .iter()
                             .all(|layer| layer.opacity <= 0.0 || layer.blend_group == 0)
@@ -259,8 +259,7 @@ pub(crate) fn build_field_pipeline(
         bind_group_layouts: &[Some(layout), Some(shader_layout), textures, data],
         immediate_size: 0,
     });
-    let mut source =
-        field_shader_source(include_str!("../field.wgsl"), user, owns_coverage, vertex)?;
+    let mut source = field_shader_source(morf_paint::FIELD_WGSL, user, owns_coverage, vertex)?;
     if variant == FieldVariant::BoxesUniform && device.features().contains(wgpu::Features::SUBGROUP)
     {
         source = source.replace(

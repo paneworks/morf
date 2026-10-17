@@ -135,3 +135,19 @@ impl Encoding {
         self != Self::Srgb
     }
 }
+
+/// Set once any surface presents HDR: until then a node's `hdr` brightness
+/// is left out, so an SDR frame looks as it was written.
+static PRESENTING_HDR: AtomicBool = AtomicBool::new(false);
+
+/// Records that a surface presents with `encoding`, when it is an HDR one.
+pub fn mark_presenting(encoding: Encoding) {
+    if encoding.hdr() {
+        PRESENTING_HDR.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// Whether some surface of this process presents HDR.
+pub fn presenting_hdr() -> bool {
+    PRESENTING_HDR.load(std::sync::atomic::Ordering::Relaxed)
+}

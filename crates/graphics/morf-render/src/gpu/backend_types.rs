@@ -236,7 +236,7 @@ pub struct WgpuBackend {
     /// `Path` outlines already drawn, by everything that shaped their pixels,
     /// and the path data already parsed.
     pub(crate) path_textures: HashMap<u64, TextureImage>,
-    pub(crate) path_outlines: crate::path::PathOutlines,
+    pub(crate) path_outlines: morf_paint::path::PathOutlines,
     /// Offscreen layer targets, kept between frames and handed to whichever
     /// layer fits: each layer is rendered only over what is read of it, into
     /// a texture about that size. See `layer_pool`.

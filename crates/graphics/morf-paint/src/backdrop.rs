@@ -17,12 +17,12 @@ pub(crate) const MAX_LEVELS: u32 = 6;
 ///
 /// `radius` is the standard deviation of the Gaussian the result stands in
 /// for, as in CSS `blur()`. What each chain spreads an impulse to was
-/// measured with [`reference_blur`] ([`SPREAD`], checked by the
+/// measured with [`reference_blur`] (the `SPREAD` table, checked by the
 /// `backdrop_plan_matches_the_asked_radius` test), so the plan takes the
 /// shallowest chain that reaches the radius without stretching its taps past
 /// one and a half texels — further, and they start to leave gaps — and reads
 /// the reach off the measurements.
-pub(crate) fn backdrop_plan(radius: f64) -> (u32, f32) {
+pub fn backdrop_plan(radius: f64) -> (u32, f32) {
     let radius = radius.max(0.0);
     if radius < spread(2, 0) * 0.6 {
         // Below what two levels can do at their shortest reach; one halving
@@ -68,7 +68,7 @@ fn spread(levels: u32, offset: usize) -> f64 {
 }
 
 /// The size of each level of a region's chain: level 0 is the region itself.
-pub(crate) fn level_sizes(width: u32, height: u32, levels: u32) -> Vec<(u32, u32)> {
+pub fn level_sizes(width: u32, height: u32, levels: u32) -> Vec<(u32, u32)> {
     let mut sizes = vec![(width.max(1), height.max(1))];
     for _ in 0..levels {
         let (w, h) = *sizes.last().expect("level 0 is always there");
@@ -79,7 +79,7 @@ pub(crate) fn level_sizes(width: u32, height: u32, levels: u32) -> Vec<(u32, u32
 
 /// Which level each pass reads and which it writes, in order: down to the
 /// deepest level and back up to level 1.
-pub(crate) fn pass_order(levels: u32) -> Vec<(usize, usize)> {
+pub fn pass_order(levels: u32) -> Vec<(usize, usize)> {
     let levels = levels as usize;
     let mut passes: Vec<(usize, usize)> = (0..levels).map(|level| (level, level + 1)).collect();
     passes.extend((1..levels).rev().map(|level| (level + 1, level)));
@@ -87,17 +87,17 @@ pub(crate) fn pass_order(levels: u32) -> Vec<(usize, usize)> {
 }
 
 /// One channel of a picture, for the reference.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Plane {
-    pub(crate) width: usize,
-    pub(crate) height: usize,
-    pub(crate) pixels: Vec<f32>,
+pub struct Plane {
+    pub width: usize,
+    pub height: usize,
+    pub pixels: Vec<f32>,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl Plane {
-    pub(crate) fn new(width: usize, height: usize) -> Self {
+    pub fn new(width: usize, height: usize) -> Self {
         Self {
             width,
             height,
@@ -105,13 +105,13 @@ impl Plane {
         }
     }
 
-    pub(crate) fn at(&self, x: usize, y: usize) -> f32 {
+    pub fn at(&self, x: usize, y: usize) -> f32 {
         self.pixels[y * self.width + x]
     }
 
     /// Bilinear, clamped at the edges, with texel centres at half-integers:
     /// what a linear sampler with clamp-to-edge addressing returns.
-    pub(crate) fn sample(&self, u: f32, v: f32) -> f32 {
+    pub fn sample(&self, u: f32, v: f32) -> f32 {
         let x = u * self.width as f32 - 0.5;
         let y = v * self.height as f32 - 0.5;
         let x0 = x.floor();
@@ -128,8 +128,8 @@ impl Plane {
 }
 
 /// One pass of `blur.wgsl`, into a target of `size`.
-#[cfg(test)]
-pub(crate) fn reference_pass(source: &Plane, size: (usize, usize), offset: f32, up: bool) -> Plane {
+#[cfg(any(test, feature = "test-support"))]
+pub fn reference_pass(source: &Plane, size: (usize, usize), offset: f32, up: bool) -> Plane {
     let mut target = Plane::new(size.0, size.1);
     let step_x = offset / source.width as f32;
     let step_y = offset / source.height as f32;
@@ -156,8 +156,8 @@ pub(crate) fn reference_pass(source: &Plane, size: (usize, usize), offset: f32, 
 }
 
 /// The whole chain on the CPU: what the GPU leaves at level 1 for `plane`.
-#[cfg(test)]
-pub(crate) fn reference_blur(plane: &Plane, levels: u32, offset: f32) -> Plane {
+#[cfg(any(test, feature = "test-support"))]
+pub fn reference_blur(plane: &Plane, levels: u32, offset: f32) -> Plane {
     let sizes = level_sizes(plane.width as u32, plane.height as u32, levels);
     let mut planes: Vec<Plane> = vec![plane.clone()];
     planes.resize(sizes.len(), Plane::new(1, 1));

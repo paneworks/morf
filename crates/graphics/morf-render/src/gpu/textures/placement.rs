@@ -1,9 +1,9 @@
 //! Where a texture lands: its placement in its box, the field uniforms it is
 //! sampled with, and the instance that draws it.
 
-use crate::effects::color_array;
 use crate::{DistanceFieldStyle, ImageFillMode};
 use morf_layout::{Geometry, Transform2D};
+use morf_paint::effects::color_array;
 
 use super::super::glyphs::*;
 use super::{TextureBatch, TextureImage, TexturePlacement, TextureStyle};

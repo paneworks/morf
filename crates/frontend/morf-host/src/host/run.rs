@@ -1,6 +1,7 @@
 use morf_app::{LayerClient, Output};
 use morf_lua::{Limits, Runtime, Screen};
-use morf_render::{RenderEngine, ShaderRegistration, WgpuBackend};
+use morf_paint::RenderEngine;
+use morf_render::{ShaderRegistration, WgpuBackend};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;

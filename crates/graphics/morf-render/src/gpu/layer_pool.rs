@@ -31,8 +31,8 @@
 
 use morf_layout::Geometry;
 
-use crate::effects::physical_damage;
 use crate::{DamageRect, DrawList, Layer};
+use morf_paint::effects::physical_damage;
 
 use super::targets::{intersect_damage, union_damage as union};
 
@@ -224,7 +224,7 @@ pub(crate) fn layer_regions(
             // A pixel of margin: the composite samples texel centres, and a
             // rounding error must find the neighbour it would have found in a
             // full-surface target rather than a cleared one.
-            let reads = crate::effects::merge_damage(
+            let reads = morf_paint::effects::merge_damage(
                 std::mem::take(&mut wanted[index])
                     .into_iter()
                     .filter_map(|read| intersect_damage(grow(read, 1, surface), extent))

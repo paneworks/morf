@@ -2,8 +2,8 @@
 //! selection and caret.
 
 use crate::TextEdit;
-use crate::effects::color_array;
 use morf_layout::{Geometry, Transform2D};
+use morf_paint::effects::color_array;
 use morf_scene::{Color, DecorationLine, TextDecoration};
 use morf_text::{LineBand, TextSystem};
 

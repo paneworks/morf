@@ -2,7 +2,8 @@
 //! than its worker failing and the output being brought up again.
 
 use morf_lua::Runtime;
-use morf_render::{RenderEngine, WgpuBackend};
+use morf_paint::RenderEngine;
+use morf_render::WgpuBackend;
 
 /// Rebuilds `renderer` on a fresh device if its own was lost, registers the
 /// configuration's shaders with it again and has the next frame drawn in

@@ -119,7 +119,7 @@ pub(crate) fn collect_field_instances(
                         // An inner shadow darkens the inside, and layers of
                         // several colours mix across it: then every pixel
                         // has to walk them.
-                        solid: !*shadow_inner && crate::field::same_fill(sources),
+                        solid: !*shadow_inner && morf_paint::field::same_fill(sources),
                     },
                 ),
                 _ => None,

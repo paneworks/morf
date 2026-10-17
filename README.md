@@ -15,7 +15,7 @@ The `morf-lua` crate embeds [Luna](https://github.com/onix-os/luna) as a bounded
 ```
 crates/
   core/      morf-value  morf-scene  morf-layout
-  graphics/  morf-text  morf-vector  morf-image  morf-render
+  graphics/  morf-text  morf-vector  morf-image  morf-paint  morf-render
   platform/  morf-app  morf-desktop  morf-io  morf-audio  morf-terminal  morf-system
   engine/    morf-shader  morf-runtime  morf-kit  morf-lua
   frontend/  morf-host  morf-cli

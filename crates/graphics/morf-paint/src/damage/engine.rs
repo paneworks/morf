@@ -81,8 +81,8 @@ impl<B: RenderBackend> RenderEngine<B> {
     }
 
     /// What the last list made copied from the one before it.
-    #[cfg(test)]
-    pub(crate) fn copies(&self) -> Copies<'_> {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn copies(&self) -> Copies<'_> {
         self.paint.copies()
     }
 

@@ -17,7 +17,7 @@
 //! cannot describe falls back: scRGB to PQ, PQ to plain sRGB, the frame as
 //! without the setting. A buffer of eight bits is always sRGB.
 
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use morf_value::present::{ColorSupport, Encoding};
 
@@ -141,21 +141,6 @@ pub fn encode_pq(linear: [f64; 3], reference_white: f64) -> [f64; 3] {
         let wide = row[0] * linear[0] + row[1] * linear[1] + row[2] * linear[2];
         pq_encode(wide.max(0.0) * reference_white)
     })
-}
-
-/// Set once any surface presents HDR: until then a node's `hdr` brightness
-/// is left out, so an SDR frame looks as it was written.
-static PRESENTING_HDR: AtomicBool = AtomicBool::new(false);
-
-pub(crate) fn mark_presenting(encoding: Encoding) {
-    if encoding.hdr() {
-        PRESENTING_HDR.store(true, Ordering::Relaxed);
-    }
-}
-
-/// Whether some surface of this process presents HDR.
-pub fn presenting_hdr() -> bool {
-    PRESENTING_HDR.load(Ordering::Relaxed)
 }
 
 /// Encodings already said, so each is logged once.

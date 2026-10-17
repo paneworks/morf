@@ -80,7 +80,7 @@ impl PathPaint {
     /// How far past the node's box the drawing may reach, in logical pixels:
     /// half a stroke, more at a mitred corner or a square cap, and a pixel of
     /// antialiasing.
-    pub(crate) fn margin(&self, width: f64, height: f64) -> f64 {
+    pub fn margin(&self, width: f64, height: f64) -> f64 {
         let mut margin = 1.0;
         if self.strokes() {
             let ([scale_x, scale_y], _) = self.to_node(width, height);
@@ -96,7 +96,7 @@ impl PathPaint {
     }
 
     /// A key for everything that shapes the pixels, at a pixel size.
-    pub(crate) fn key(&self, pixels: (u32, u32), logical: (f64, f64)) -> u64 {
+    pub fn key(&self, pixels: (u32, u32), logical: (f64, f64)) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.d.hash(&mut hasher);
         self.morph_to.hash(&mut hasher);
@@ -136,7 +136,7 @@ impl PathPaint {
 
 /// Parsed outlines, by their path data, so a static `d` is read once.
 #[derive(Default)]
-pub(crate) struct PathOutlines {
+pub struct PathOutlines {
     parsed: HashMap<String, Option<BezPath>>,
 }
 
@@ -160,7 +160,7 @@ impl PathOutlines {
     }
 
     /// The outline at this point of its morph, in path units.
-    pub(crate) fn outline(&mut self, paint: &PathPaint) -> Option<BezPath> {
+    pub fn outline(&mut self, paint: &PathPaint) -> Option<BezPath> {
         let from = self.parse(&paint.d);
         let progress = paint.morph_progress.clamp(0.0, 1.0);
         if paint.morph_to.is_empty() || progress <= 0.0 {
@@ -345,10 +345,10 @@ fn skia_color(color: Color) -> tiny_skia::Color {
 }
 
 /// One path drawn into straight-alpha RGBA pixels.
-pub(crate) struct PathPixels {
-    pub(crate) width: u32,
-    pub(crate) height: u32,
-    pub(crate) rgba: Vec<u8>,
+pub struct PathPixels {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
 }
 
 /// Draws `paint` into a `pixels`-sized image covering the node's box, grown by
@@ -362,7 +362,7 @@ pub(crate) struct PathPixels {
 /// ticks along the edge of a fullscreen frame was a fullscreen image -- eight
 /// million pixels rasterized on the CPU, 30 to 400 ms each, a dozen of them a
 /// start -- for a strip ten pixels deep.
-pub(crate) fn drawn_extent(
+pub fn drawn_extent(
     outlines: &mut PathOutlines,
     paint: &PathPaint,
     logical: (f64, f64),
@@ -403,7 +403,7 @@ pub(crate) fn rasterize(
 
 /// Rasterizes the part of a path inside `region` (in its node's coordinates)
 /// into an image of `pixels`.
-pub(crate) fn rasterize_region(
+pub fn rasterize_region(
     outlines: &mut PathOutlines,
     paint: &PathPaint,
     logical: (f64, f64),

@@ -262,7 +262,7 @@ pub(crate) fn effect_bounds(
     }
 }
 
-pub(crate) fn color_array(color: Color) -> [f32; 4] {
+pub fn color_array(color: Color) -> [f32; 4] {
     [
         srgb_channel_to_linear(color.red),
         srgb_channel_to_linear(color.green),
@@ -303,7 +303,7 @@ pub(crate) fn srgb_channel_to_linear(channel: f32) -> f32 {
     }
 }
 
-pub(crate) fn physical_damage(geometry: Geometry, scale_120: u32) -> Option<DamageRect> {
+pub fn physical_damage(geometry: Geometry, scale_120: u32) -> Option<DamageRect> {
     if geometry.width <= 0.0 || geometry.height <= 0.0 {
         return None;
     }
@@ -329,7 +329,7 @@ pub(crate) fn physical_damage(geometry: Geometry, scale_120: u32) -> Option<Dama
 /// per-frame damage path. Damage rectangles are an unordered set — the
 /// compositor is told about each one independently — so the last element can
 /// simply be moved into the hole instead.
-pub(crate) fn merge_damage(mut damage: Vec<DamageRect>) -> Vec<DamageRect> {
+pub fn merge_damage(mut damage: Vec<DamageRect>) -> Vec<DamageRect> {
     let mut index = 0;
     while index < damage.len() {
         let mut other = index + 1;

@@ -5,7 +5,7 @@
 use morf_app::{Event, InputRect, PRIMARY_LAYER, WindowId};
 use morf_layout::TextMeasurer;
 use morf_lua::{BandLayout, Runtime};
-use morf_render::Overlay;
+use morf_paint::Overlay;
 use morf_value::region::{Region, Shape};
 
 /// The band for a surface of `size`: `previous` while nothing it was laid

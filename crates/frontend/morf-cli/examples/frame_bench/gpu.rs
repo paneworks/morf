@@ -7,7 +7,8 @@ use std::time::Duration;
 
 use morf_layout::Size;
 use morf_lua::{Runtime, WindowSurfaceKind};
-use morf_render::{BlendSpace, RenderEngine, ShaderRegistration, WgpuBackend};
+use morf_paint::{BlendSpace, RenderEngine};
+use morf_render::{ShaderRegistration, WgpuBackend};
 use morf_scene::NodeHandle;
 
 use super::settled;

@@ -9,7 +9,8 @@
 
 use morf_desktop::{CaptureBuffer, Desktop, ScreencopyFormat, ScreencopyFrame};
 use morf_lua::{Runtime, Screencopy as LuaScreencopy};
-use morf_render::{FOURCC_ARGB8888, FOURCC_XRGB8888, RenderEngine, WgpuBackend, split_dev_t};
+use morf_paint::RenderEngine;
+use morf_render::{FOURCC_ARGB8888, FOURCC_XRGB8888, WgpuBackend, split_dev_t};
 use std::os::fd::AsFd;
 
 pub fn apply_screencopy_requests(runtime: &mut Runtime, desktop: &mut dyn Desktop) {

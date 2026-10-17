@@ -1,6 +1,6 @@
-use crate::effects::color_array;
 use crate::{DrawCommand, DrawList, VerticalAlignment};
 use morf_layout::{Geometry, TextMeasurer, TextOptions};
+use morf_paint::effects::color_array;
 use morf_scene::{Color, DecorationLine, TextDecoration};
 use morf_text::{RasterGlyph, TextSystem};
 

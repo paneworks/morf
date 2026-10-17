@@ -1,6 +1,6 @@
 use morf_app::Backend;
 use morf_lua::Runtime;
-use morf_render::RenderEngine;
+use morf_paint::RenderEngine;
 
 use morf_app::{Event, PRIMARY_LAYER, WindowId, physical_size};
 use std::sync::mpsc;

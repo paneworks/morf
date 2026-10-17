@@ -9,9 +9,9 @@ use super::super::glyphs::{GlyphInstance, layer_mask_data, transformed_quad};
 use super::super::targets::{clamp_scissor, create_blur_pass};
 use super::super::textures::TextureBatch;
 use super::{BackdropDraw, BackdropEntry, Beneath, BeneathOp, ChildLayers, beneath_ops};
-use crate::backdrop::{backdrop_plan, level_sizes, pass_order};
-use crate::effects::{color_array, physical_damage};
 use crate::{DamageRect, DrawCommand, DrawList, Layer, LayerMask};
+use morf_paint::backdrop::{backdrop_plan, level_sizes, pass_order};
+use morf_paint::effects::{color_array, physical_damage};
 
 impl WgpuBackend {
     /// Whether the last frame was skipped for want of a buffer, cleared by

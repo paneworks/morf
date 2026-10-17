@@ -110,10 +110,10 @@ pub(crate) fn field_area(
 /// How far past the surface an outer shadow falls.
 #[derive(Clone, Copy, Debug)]
 pub struct ShadowReach {
-    pub(crate) offset_x: f64,
-    pub(crate) offset_y: f64,
-    pub(crate) blur: f64,
-    pub(crate) spread: f64,
+    pub offset_x: f64,
+    pub offset_y: f64,
+    pub blur: f64,
+    pub spread: f64,
 }
 
 /// How far a layer reaches from its own centre, once it has been rotated.

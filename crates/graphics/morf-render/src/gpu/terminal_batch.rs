@@ -18,7 +18,7 @@ use super::glyph_batch::PreparedBand;
 use super::glyphs::PreparedGlyph;
 use super::textures::glyph_field_uniform;
 use crate::DistanceFieldStyle;
-use crate::effects::color_array;
+use morf_paint::effects::color_array;
 
 fn color(rgba: [u8; 4]) -> Color {
     Color::rgba8(rgba[0], rgba[1], rgba[2], rgba[3])

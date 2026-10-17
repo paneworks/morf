@@ -35,5 +35,6 @@ image.workspace = true
 [dev-dependencies]
 morf-layout.workspace = true
 # The frame benchmarks draw with the renderer directly.
+morf-paint.workspace = true
 morf-render.workspace = true
 pollster.workspace = true

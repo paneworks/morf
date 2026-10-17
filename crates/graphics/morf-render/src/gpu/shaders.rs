@@ -316,7 +316,7 @@ pub(crate) fn effect_shader_source(body: &str, shader: Option<&str>) -> Option<S
 mod tests {
     use super::*;
 
-    const FIELD: &str = include_str!("../field.wgsl");
+    const FIELD: &str = morf_paint::FIELD_WGSL;
     const GLYPH: &str = include_str!("../glyph.wgsl");
 
     #[test]

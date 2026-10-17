@@ -6,7 +6,8 @@ use morf_app::{
 };
 use morf_layout::{Hit, Layout};
 use morf_lua::{LayerSurfaceConfig, PopupSurfaceConfig, Runtime, ToplevelSurfaceConfig};
-use morf_render::{RenderEngine, WgpuBackend};
+use morf_paint::RenderEngine;
+use morf_render::WgpuBackend;
 use morf_scene::NodeHandle;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;

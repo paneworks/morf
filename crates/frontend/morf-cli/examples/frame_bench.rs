@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 
 use morf_layout::{Layout, Size, TextMeasurer, TextOptions};
 use morf_lua::{Limits, Runtime, Screen};
-use morf_render::DrawList;
+use morf_paint::DrawList;
 use morf_scene::{Element, NodeHandle};
 
 #[path = "frame_bench/gpu.rs"]
@@ -335,10 +335,10 @@ fn main() {
         .filter(|command| {
             matches!(
                 command,
-                morf_render::DrawCommand::Field {
+                morf_paint::DrawCommand::Field {
                     shader: Some(_),
                     ..
-                } | morf_render::DrawCommand::Quad {
+                } | morf_paint::DrawCommand::Quad {
                     shader: Some(_),
                     ..
                 }
@@ -462,8 +462,8 @@ fn main() {
     }
     println!(
         "  DrawCommand size   {} bytes  ({} KiB for this scene)",
-        std::mem::size_of::<morf_render::DrawCommand>(),
-        std::mem::size_of::<morf_render::DrawCommand>() * nodes / 1024
+        std::mem::size_of::<morf_paint::DrawCommand>(),
+        std::mem::size_of::<morf_paint::DrawCommand>() * nodes / 1024
     );
     println!("  poll_services      {idle:?}");
     println!(

@@ -4,7 +4,7 @@
 use morf_app::{Backend, Event, PRIMARY_LAYER, WindowId, WindowKind};
 use morf_desktop::Desktop;
 use morf_lua::Runtime;
-use morf_render::RenderEngine;
+use morf_paint::RenderEngine;
 use morf_text::TextSystem;
 use std::time::{Duration, Instant};
 

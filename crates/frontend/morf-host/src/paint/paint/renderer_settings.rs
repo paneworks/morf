@@ -2,7 +2,8 @@
 //! opacity and blend space.
 
 use morf_app::Backend;
-use morf_render::{BlendSpace, RenderEngine, WgpuBackend};
+use morf_paint::{BlendSpace, RenderEngine};
+use morf_render::WgpuBackend;
 
 /// Draws a renderer's text in subpixels where this output and the
 /// configuration allow it (morf-render's lcd.rs has the rules), and tells it
@@ -15,9 +16,9 @@ pub fn apply_subpixel(
     opaque: bool,
 ) {
     let text = client.own_output().and_then(|output| {
-        morf_render::subpixel_text_for(
+        morf_paint::subpixel_text_for(
             setting,
-            morf_render::font_subpixel(),
+            morf_paint::font_subpixel(),
             output.subpixel,
             output.transform,
         )

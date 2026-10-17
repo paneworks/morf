@@ -299,7 +299,7 @@ impl WgpuBackend {
             };
             let wanted = surface.hdr_encoding(format);
             hdr::say(wanted, &surface.offered(), Some("through the swapchain"));
-            hdr::mark_presenting(wanted);
+            morf_value::present::mark_presenting(wanted);
             return wanted;
         };
         let support = link.color_support();
@@ -311,7 +311,7 @@ impl WgpuBackend {
         match link.set_encoding(wanted) {
             Ok(()) => {
                 hdr::say(wanted, &advertised, None);
-                hdr::mark_presenting(wanted);
+                morf_value::present::mark_presenting(wanted);
                 wanted
             }
             Err(why) => {

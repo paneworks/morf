@@ -4,7 +4,8 @@
 use morf_app::Backend;
 use morf_desktop::{Desktop, DesktopEvent, ToplevelAction};
 use morf_lua::{Runtime, Toplevel, Workspace, WorkspaceRequest};
-use morf_render::{RenderEngine, WgpuBackend};
+use morf_paint::RenderEngine;
+use morf_render::WgpuBackend;
 
 use crate::capture::{
     OfferedCapture, answer_capture_offer, apply_screencopy_requests, dispatch_screencopy,

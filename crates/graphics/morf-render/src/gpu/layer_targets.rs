@@ -1,7 +1,7 @@
 use super::layer_share::Placement;
 use super::{backend_types::*, glyphs::*, targets::*, textures::*};
 use crate::DrawList;
-use crate::effects::color_array;
+use morf_paint::effects::color_array;
 
 /// A quad over physical pixels `(x, y, width, height)` of a surface
 /// `target_size` big, in clip space.

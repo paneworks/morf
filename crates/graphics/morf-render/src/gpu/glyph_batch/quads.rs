@@ -12,10 +12,10 @@ use std::collections::HashMap;
 
 use super::PreparedBand;
 use super::bands::band_instance;
-use crate::effects::color_array;
 use crate::gpu::backend_types::GpuError;
 use crate::gpu::glyphs::*;
 use crate::{CopiedRun, RunCursor};
+use morf_paint::effects::color_array;
 
 /// Where laid-out glyphs go in [`super::Laid`] order, and in the runs a
 /// copier records.

@@ -2,7 +2,7 @@ use morf_app::Backend as _;
 use morf_app::{LayerClient, Output, WindowId};
 use morf_io::IpcIncoming;
 use morf_lua::Runtime;
-use morf_render::RenderEngine;
+use morf_paint::RenderEngine;
 use morf_value::IpcValue;
 use std::os::fd::AsFd;
 use std::path::PathBuf;

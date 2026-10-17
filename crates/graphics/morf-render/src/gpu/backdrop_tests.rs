@@ -9,9 +9,9 @@ use morf_layout::{Layout, Size};
 use morf_scene::{Element, NodeHandle, Scene};
 
 use super::field_tests::read_frame;
-use crate::backdrop::{Plane, backdrop_plan, reference_blur};
 use crate::tests::NoText;
 use crate::*;
+use morf_paint::backdrop::{Plane, backdrop_plan, reference_blur};
 
 const SIZE: u32 = 64;
 

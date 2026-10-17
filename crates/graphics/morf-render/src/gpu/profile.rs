@@ -11,7 +11,7 @@
 
 use super::targets::intersect_damage;
 use crate::DamageRect;
-use crate::effects::physical_damage;
+use morf_paint::effects::physical_damage;
 
 /// The stages timestamps are written between.
 pub(crate) const MARKS: [&str; 4] = ["start", "layers", "surface", "present"];

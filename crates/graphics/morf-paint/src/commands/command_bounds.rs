@@ -26,7 +26,7 @@ impl DrawCommand {
     /// transparent catcher over the screen, a dimmer at rest. It stays in the
     /// list (a layer's reach may be measured by it) but is neither shaded
     /// nor damage.
-    pub(crate) fn draws_nothing(&self) -> bool {
+    pub fn draws_nothing(&self) -> bool {
         let Self::Quad {
             color,
             color_overlay,
@@ -48,7 +48,7 @@ impl DrawCommand {
             && shader.is_none()
     }
 
-    pub(crate) fn bounds(&self) -> Geometry {
+    pub fn bounds(&self) -> Geometry {
         let bounds = match self {
             Self::Quad {
                 bounds,
@@ -117,7 +117,7 @@ impl DrawCommand {
             .map_or(bounds, |clip| intersect_geometry(bounds, clip))
     }
 
-    pub(crate) fn clip(&self) -> Option<Geometry> {
+    pub fn clip(&self) -> Option<Geometry> {
         match self {
             Self::Quad { clip, .. }
             | Self::Text { clip, .. }

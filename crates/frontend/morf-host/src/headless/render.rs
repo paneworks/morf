@@ -7,7 +7,8 @@
 use std::path::Path;
 
 use morf_layout::Size;
-use morf_render::{BlendSpace, RenderEngine, WgpuBackend};
+use morf_paint::{BlendSpace, RenderEngine};
+use morf_render::WgpuBackend;
 
 use crate::headless::Headless;
 use crate::host::reload_band::band_overlay;

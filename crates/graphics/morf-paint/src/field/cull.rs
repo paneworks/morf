@@ -176,15 +176,15 @@ fn compose(layers: &[Prepared<'_>], point: [f32; 2], take: Take) -> f32 {
 }
 
 /// What a field reaches beyond its composed surface.
-pub(crate) struct Spill {
+pub struct Spill {
     /// Outline, softness and antialiasing, in logical pixels.
-    pub(crate) edge: f64,
+    pub edge: f64,
     /// An outer shadow, if the field casts one.
-    pub(crate) shadow: Option<ShadowReach>,
+    pub shadow: Option<ShadowReach>,
     /// Whether a tile deep inside the surface may be filled without the
     /// layers being walked: every layer the same colour, and no inner shadow
     /// darkening the inside.
-    pub(crate) solid: bool,
+    pub solid: bool,
 }
 
 /// One run of tiles to draw: its area in the node's own physical space,
@@ -208,7 +208,7 @@ enum Held {
 /// whole — it is small, a layer has no CPU twin, or no tile is empty.
 ///
 /// Neighbouring tiles in a row are joined, so a solid band is one instance.
-pub(crate) fn field_tiles(
+pub fn field_tiles(
     layers: &[SdfLayer],
     bounds: Geometry,
     area: [f32; 4],

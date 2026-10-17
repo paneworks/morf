@@ -1,8 +1,8 @@
 //! Drawing one command or one layer into a pass, as every pass of a frame does,
 //! and where each command can put pixels.
 
-use crate::effects::physical_damage;
 use crate::{DamageRect, DrawList, ShaderBinding};
+use morf_paint::effects::physical_damage;
 
 use super::super::{
     backdrops::BackdropDraw,

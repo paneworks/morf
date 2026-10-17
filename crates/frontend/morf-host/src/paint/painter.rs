@@ -2,7 +2,8 @@
 //! test`, a CI runner) -- nothing but a text system, so every window is laid
 //! out, observed and given its input region as it would be, and never drawn.
 
-use morf_render::{RenderEngine, WgpuBackend};
+use morf_paint::RenderEngine;
+use morf_render::WgpuBackend;
 use morf_text::TextSystem;
 
 pub enum Painter {

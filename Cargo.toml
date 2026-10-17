@@ -58,6 +58,7 @@ morf-layout = { path = "crates/core/morf-layout" }
 morf-kit = { path = "crates/engine/morf-kit" }
 morf-lua = { path = "crates/engine/morf-lua" }
 morf-vector = { path = "crates/graphics/morf-vector" }
+morf-paint = { path = "crates/graphics/morf-paint" }
 morf-shader = { path = "crates/engine/morf-shader" }
 morf-render = { path = "crates/graphics/morf-render" }
 morf-scene = { path = "crates/core/morf-scene" }

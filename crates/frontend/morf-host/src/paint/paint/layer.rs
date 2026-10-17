@@ -4,7 +4,8 @@
 use morf_app::Backend;
 use morf_app::{InputRect, WindowId};
 use morf_lua::{LayerSurfaceConfig, Runtime};
-use morf_render::{RenderEngine, WgpuBackend};
+use morf_paint::RenderEngine;
+use morf_render::WgpuBackend;
 use morf_scene::NodeHandle;
 use morf_value::region::{Rect as RegionRect, Region};
 
