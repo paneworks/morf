@@ -610,8 +610,18 @@ function osk.new(options)
     return nodes
   end
 
-  -- Every mode and page is built once; the one on show is visible.
+  -- Every mode and page is built once, the one on show first: when the
+  -- board is first in use, the rest ahead of being asked for while the
+  -- shell is idle. Built, a layer stays, shown while it is on show.
+  local used = morf.signal(named("used"), false)
   local layers = {}
+  local function lazily(shown, build)
+    layers[#layers + 1] = ui.Loader {
+      width = W, height = 1, keep = true, preload = true,
+      active = function() return used:get() and shown() end,
+      source = build,
+    }
+  end
   local function layer(mode_name, page_name, with_numbers)
     local rows
     if mode_name == "numbers" or mode_name == "phone" or mode_name == "letters" then
@@ -624,16 +634,17 @@ function osk.new(options)
       if page_name == "letters" and with_numbers then rows[#rows + 1] = PAGES.numrow end
       for _, r in ipairs(base) do rows[#rows + 1] = r end
     end
-    local nodes = build_page(mode_name .. (with_numbers and "n" or ""), page_name, rows)
-    nodes.visible = function()
+    lazily(function()
       if mode:get() ~= mode_name then return false end
       if mode_name == "numbers" or mode_name == "phone" or mode_name == "letters" then return true end
       if page:get() ~= page_name then return false end
       if page_name == "letters" and mode_name ~= "dev" then return numbers:get() == with_numbers end
       return true
-    end
-    nodes.width, nodes.height = W, 1
-    layers[#layers + 1] = ui.Item(nodes)
+    end, function()
+      local nodes = build_page(mode_name .. (with_numbers and "n" or ""), page_name, rows)
+      nodes.width, nodes.height = W, 1
+      return ui.Item(nodes)
+    end)
   end
   layer("full", "letters", true)
   layer("full", "letters", false)
@@ -794,6 +805,9 @@ function osk.new(options)
   morf.effect(named("lifecycle"), function()
     enabled() mode:get() page:get() numbers:get()
     cancel()
+  end, { owner = root })
+  morf.effect(named("used"), function()
+    if enabled() and not used:get() then used:set(true) end
   end, { owner = root })
 
   return {
