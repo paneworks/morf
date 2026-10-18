@@ -115,8 +115,39 @@ fn lua_reload_requests_are_coalesced_and_consumed() {
         )
         .unwrap();
 
-    assert_eq!(runtime.take_reload_request(), Some(true));
+    let hard = ReloadRequest {
+        hard: true,
+        output: false,
+    };
+    assert_eq!(runtime.take_reload_request(), Some(hard));
     assert_eq!(runtime.take_reload_request(), None);
+}
+
+#[test]
+fn a_reload_of_this_output_alone_gives_way_to_one_of_every_output() {
+    let mut runtime = Runtime::default();
+    runtime
+        .execute(
+            "reload-output.lua",
+            br#"
+                local core = require("morf.core")
+                core.reload { output = true }
+                morf.ipc.again = function() core.reload { output = true } core.reload() end
+            "#,
+        )
+        .unwrap();
+
+    let here = ReloadRequest {
+        hard: false,
+        output: true,
+    };
+    assert_eq!(runtime.take_reload_request(), Some(here));
+    runtime.call_ipc("again", &[]).unwrap();
+    assert_eq!(
+        runtime.take_reload_request(),
+        Some(ReloadRequest::default())
+    );
+    assert!(runtime.execute("bad.lua", b"morf.reload(3)").is_err());
 }
 
 #[test]

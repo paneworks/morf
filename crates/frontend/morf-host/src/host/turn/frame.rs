@@ -30,7 +30,10 @@ impl Host {
         // only a paint asks for one -- without this it waits, frozen, for
         // whatever paints next: a pill that stays lit, a swell that shows
         // seconds late.
-        if !repaint && frame_wait.is_none() && runtime.has_motion() {
+        if !repaint
+            && frame_wait.is_none()
+            && (runtime.has_motion() || self.state.turning.is_some())
+        {
             repaint = true;
         }
         // A paint owed for longer than a stall is made without the callback.
@@ -115,6 +118,17 @@ impl Host {
         if self.a11y.turn(runtime, &self.state, &name, repaint) {
             self.follow_up = true;
         }
+        // A replaced runtime goes once nothing is moving, or once it has
+        // waited long enough.
+        let quiet =
+            !repaint && !self.follow_up && !runtime.has_motion() && self.state.turning.is_none();
+        if self
+            .retired
+            .as_ref()
+            .is_some_and(|(_, since)| quiet || since.elapsed() > super::RETIRED_GRACE)
+        {
+            self.retired = None;
+        }
         // Prepare unopened pages between events, without asking for frames.
         // Each slice yields to input and stops while animation is running.
         // A fresh layout alone is not a scheduler: once it settles, the rest
@@ -122,7 +136,7 @@ impl Host {
         if !repaint
             && !self.follow_up
             && !runtime.has_motion()
-            && !self.state.animating_shaders
+            && !self.state.animating()
             && let Some(renderer) = self.state.painter.gpu()
         {
             let backend = renderer.backend_mut();
@@ -166,6 +180,7 @@ impl Host {
             }
         }
         apply_parent_transitions(runtime, &mut state.painter, client)?;
+        let shown = crate::paint::cover::shown(state, runtime, client);
         let painting = Instant::now();
         let painted_frame = paint(
             runtime,
@@ -173,6 +188,7 @@ impl Host {
             client,
             state.primary_root,
             Some(&mut state.layout),
+            shown.as_ref(),
         );
         slow(self.report_slow, &self.name, "a frame", painting);
         // Skipped for want of a buffer: owed, and painted on the next
@@ -220,7 +236,7 @@ impl Host {
         if !skipped {
             let shown = runtime.scene().paint_revision();
             self.frame_accounting
-                .painted(state.refresh, shown, state.animating_shaders);
+                .painted(state.refresh, shown, state.animating());
         }
         Ok(Turn::Again)
     }

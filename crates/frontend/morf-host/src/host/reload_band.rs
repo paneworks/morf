@@ -31,6 +31,7 @@ pub fn band_overlay(band: Option<&BandLayout>) -> Option<Overlay<'_>> {
     band.map(|band| Overlay {
         root: band.root,
         layout: &band.layout,
+        conceals: false,
     })
 }
 

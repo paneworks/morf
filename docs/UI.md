@@ -380,6 +380,16 @@ surface (a press on the band itself goes no further), or when a handler
 registered later is given the error. `test.reload` in a spec reloads the
 same way ([TESTING.md](TESTING.md)).
 
+`morf.reload()` reloads every output's runtime, `morf.reload(true)` makes
+their surfaces again as well, and `morf.reload { output = true }` (with
+`hard` if wanted) reloads only the runtime of the output that asked: what
+a screen turned between portrait and landscape needs, leaving the other
+screens as they are. When an output turns, its shell's own surface holds
+the frame it showed last, still where it stood on the panel, until the
+configuration has laid itself out the new way up -- a reload it asked for
+as the screens changed, or at once -- and then turns that frame upright
+and fades it into the new one.
+
 Work the primary does for every screen hands its answer over with
 `morf.shared(name, initial)`: a signal like `morf.signal`'s (`get`, `set`,
 read by bindings), whose writes reach the signal of the same name in every

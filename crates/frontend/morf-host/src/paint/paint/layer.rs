@@ -4,7 +4,7 @@
 use morf_app::Backend;
 use morf_app::{InputRect, WindowId};
 use morf_lua::{LayerSurfaceConfig, Runtime};
-use morf_paint::RenderEngine;
+use morf_paint::{Overlay, RenderEngine};
 use morf_render::WgpuBackend;
 use morf_scene::NodeHandle;
 use morf_value::region::{Rect as RegionRect, Region};
@@ -21,6 +21,7 @@ use super::renderer_settings::{apply_blend, apply_subpixel};
 /// Every layer surface derives its input region the same way: an explicit mask
 /// when the configuration supplies one, and otherwise the live geometry of the
 /// interactive items, recomputed here so it tracks the surface as it changes.
+#[allow(clippy::too_many_arguments)]
 pub fn paint_layer(
     runtime: &mut Runtime,
     renderer: &mut RenderEngine<WgpuBackend>,
@@ -29,6 +30,7 @@ pub fn paint_layer(
     root: NodeHandle,
     config: &LayerSurfaceConfig,
     mut cache: Option<&mut CachedLayout>,
+    cover: Option<&crate::paint::cover::Shown>,
 ) -> Result<CachedLayout, String> {
     let (width, height) = client
         .layer_logical_size(layer)
@@ -83,6 +85,12 @@ pub fn paint_layer(
             band_for(runtime, previous, (width, height), renderer.backend_mut())
         })
         .flatten();
+    let cover = cover.and_then(|shown| {
+        let source = crate::paint::cover::COVER_SOURCE;
+        let size = (width, height);
+        let laid = runtime.pose_cover(source, shown.pose, size, renderer.backend_mut())?;
+        Some((laid, shown.conceals))
+    });
     let scene = runtime.scene();
     let painted = scene.paint_stamp(root).map_err(|error| error.to_string())?;
     let stamp = (!fresh).then(|| scene.input_stamp(root).ok()).flatten();
@@ -167,8 +175,16 @@ pub fn paint_layer(
     // the buffer itself (`WgpuBackend::declares_damage`).
     let render = |renderer: &mut RenderEngine<WgpuBackend>| {
         let declare = !renderer.backend_mut().declares_damage();
-        let overlay = band_overlay(band.as_ref());
-        renderer.render_over(&scene, &layout, overlay, scale_120, |damage| {
+        let overlays: Vec<_> = cover
+            .iter()
+            .map(|(laid, conceals)| Overlay {
+                root: laid.root,
+                layout: &laid.layout,
+                conceals: *conceals,
+            })
+            .chain(band_overlay(band.as_ref()))
+            .collect();
+        renderer.render_over(&scene, &layout, &overlays, scale_120, |damage| {
             if !declare {
                 return;
             }
@@ -305,6 +321,7 @@ pub fn paint_layer_surface(
         surface.root,
         &config,
         surface.layout.as_mut(),
+        None,
     )?;
     // A binding on this tree's layout geometry (`layout_width`, ...) hears
     // the frame as it is observed, after the render, and may move the tree

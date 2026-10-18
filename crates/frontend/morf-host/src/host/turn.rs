@@ -99,7 +99,13 @@ pub struct Host {
     containment_repaint: bool,
     /// Whether slow stages are reported on stderr.
     report_slow: bool,
+    /// The runtime the last reload replaced, and when: dropped on a quiet
+    /// turn once the new one has painted, or after [`RETIRED_GRACE`].
+    retired: Option<(Runtime, Instant)>,
 }
+
+/// How long a replaced runtime waits for a quiet turn to be dropped in.
+const RETIRED_GRACE: Duration = Duration::from_secs(2);
 
 impl Host {
     pub(crate) fn request_paint(&mut self) {
@@ -150,6 +156,7 @@ impl Host {
         links: Option<&Links<'_>>,
     ) -> Result<Turn, String> {
         self.frame_accounting.begin_turn();
+        runtime.set_host_motion(self.state.turning.is_some());
         let base = morf_lua::profile::stage(Stage::Services);
         let events: Vec<Event> = std::iter::from_fn(|| self.backend.next_event()).collect();
         let commands: Vec<WorkerCommand> =
@@ -159,8 +166,7 @@ impl Host {
             false => self.ordered_turn(runtime, links, events, commands),
         };
         drop(base);
-        let moving =
-            runtime.has_motion() || self.state.animating_shaders || self.state.primary_deferred;
+        let moving = runtime.has_motion() || self.state.animating() || self.state.primary_deferred;
         self.frame_accounting.end_turn(moving);
         turned
     }
@@ -191,11 +197,27 @@ impl Host {
                     continue;
                 };
                 self.follow_up = true;
-                let update = {
+                if let WorkerCommand::Screens(screens) = &command {
+                    repaint |= crate::paint::cover::screens_changed(
+                        &mut self.state,
+                        &*self.backend,
+                        screens,
+                        &name,
+                    );
+                }
+                let reload = matches!(command, WorkerCommand::Reload { .. });
+                let mut update = {
                     let _timed =
                         Timed::start(self.report_slow, &name, Stage::Handlers, "an IPC call");
                     handle_worker_command(runtime, Some(links.screen), links.policy, command)
                 };
+                if let Some(old) = update.retired.take() {
+                    self.retired = Some((old, Instant::now()));
+                }
+                // Worked or not, a held frame waits for this reload no longer.
+                if let Some(turning) = self.state.turning.as_mut().filter(|_| reload) {
+                    turning.rebuilt();
+                }
                 repaint |= update.repaint;
                 recreate_surface |= update.recreate_surface;
                 if update.reset_input {

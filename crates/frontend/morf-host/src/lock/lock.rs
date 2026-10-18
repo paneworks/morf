@@ -106,6 +106,8 @@ pub enum SupervisorMessage {
     Ipc(IpcIncoming),
     Reload {
         hard: bool,
+        /// Only this output's runtime, when one is named.
+        output: Option<String>,
     },
     WatchFiles(bool),
     /// The configuration asked the shell to stop.

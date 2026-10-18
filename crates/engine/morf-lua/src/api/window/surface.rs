@@ -305,12 +305,25 @@ pub(crate) fn install_shell_api<'gc>(
     });
     morf.set_field(ctx, "has_version", has_version);
     let reload_state = Rc::clone(&state);
+    // `morf.reload(hard)`, or `morf.reload { hard = ..., output = ... }`:
+    // `output`, only this output's runtime.
     let reload = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let hard: Option<bool> = stack.consume(ctx)?;
-        reload_state
-            .borrow_mut()
-            .lifecycle_mut()
-            .ask_reload(hard.unwrap_or(false));
+        let asked = match stack.consume::<LuaValue>(ctx)? {
+            LuaValue::Table(options) => {
+                let field = |name| table_bool(ctx, options, name, false);
+                ReloadRequest {
+                    hard: field("hard").map_err(HostError)?,
+                    output: field("output").map_err(HostError)?,
+                }
+            }
+            LuaValue::Nil => ReloadRequest::default(),
+            LuaValue::Boolean(hard) => ReloadRequest {
+                hard,
+                output: false,
+            },
+            _ => return Err(HostError("morf.reload takes a boolean or a table".into()).into()),
+        };
+        reload_state.borrow_mut().lifecycle_mut().ask_reload(asked);
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "reload", reload);

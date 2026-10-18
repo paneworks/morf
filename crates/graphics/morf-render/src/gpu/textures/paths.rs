@@ -109,6 +109,7 @@ pub(crate) fn push_path_textures(
                 distance_field: false,
                 field: DistanceFieldStyle::default(),
                 spread: 1.0,
+                drawn: false,
             },
             context.target_size,
             scale,

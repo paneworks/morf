@@ -11,6 +11,7 @@ mod vm;
 
 pub use self::runtime::keys;
 pub use self::vm::arguments;
+pub use self::vm::config::cover::{CoverLayout, CoverPose};
 pub use self::vm::config::reload_band::{BandLayout, ReloadFailure};
 pub use self::vm::profile;
 pub use self::vm::state_cell::{StateRef, StateRefMut};

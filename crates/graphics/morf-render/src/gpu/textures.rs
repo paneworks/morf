@@ -120,6 +120,8 @@ pub(crate) struct TextureStyle {
     pub(crate) field: DistanceFieldStyle,
     /// Source-pixel range the cached field encodes on either side of the edge.
     pub(crate) spread: f32,
+    /// A frame this renderer drew, composited back as a layer is.
+    pub(crate) drawn: bool,
 }
 
 pub(crate) struct TextureBatchContext<'a> {
@@ -183,13 +185,13 @@ pub(crate) fn create_texture_batch(
             let Some(external) = context.external.get(name) else {
                 continue;
             };
-            let intrinsic = (external.image.width, external.image.height);
+            let intrinsic = external.size;
             let placement = texture_placement(*bounds, intrinsic, *fill_mode, *transform);
             push_texture_instance(
                 &mut batch,
                 command_index,
                 TextureImage {
-                    _texture: external.image.texture.clone(),
+                    _texture: external.texture.clone(),
                     bind_group: external.bind_group.clone(),
                     frame: None,
                 },
@@ -199,6 +201,7 @@ pub(crate) fn create_texture_batch(
                     distance_field: *distance_field,
                     field: *distance_field_style,
                     spread: *distance_field_spread,
+                    drawn: external.drawn,
                 },
                 context.target_size,
                 scale,
@@ -265,6 +268,7 @@ pub(crate) fn create_texture_batch(
                     distance_field: false,
                     field: *distance_field_style,
                     spread: *distance_field_spread,
+                    drawn: false,
                 },
                 context.target_size,
                 scale,
@@ -304,6 +308,7 @@ pub(crate) fn create_texture_batch(
                     distance_field: *distance_field,
                     field: *distance_field_style,
                     spread: *distance_field_spread,
+                    drawn: false,
                 },
                 context.target_size,
                 scale,
@@ -409,6 +414,7 @@ pub(crate) fn create_texture_batch(
                 distance_field: *distance_field,
                 field: *distance_field_style,
                 spread: *distance_field_spread,
+                drawn: false,
             },
             (target_width, target_height),
             scale,

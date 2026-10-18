@@ -182,9 +182,12 @@ pub struct Runtime {
     /// The engine-owned reload-error band, while one is shown: a failed
     /// reload no `on_reload_failed` handler reported.
     pub(crate) reload_error: RefCell<Option<crate::vm::config::reload_band::ReloadBand>>,
+    /// The engine-owned cover, while one is up: a picture of a surface laid
+    /// over it while it turns.
+    pub(crate) cover: RefCell<Option<crate::vm::config::cover::Cover>>,
 }
 
-pub use morf_runtime::requests::{ToplevelRequest, WorkspaceRequest};
+pub use morf_runtime::requests::{ReloadRequest, ToplevelRequest, WorkspaceRequest};
 
 #[derive(Clone, Copy)]
 pub(crate) enum StorageKind {

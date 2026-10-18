@@ -7,11 +7,18 @@ use std::fmt;
 use super::{glyphs::*, targets::*, textures::*};
 
 /// Adapter selected for the wgpu renderer.
-/// A published GPU texture: the image it wraps, and its view and bind group,
-/// made once because the texture never changes size or format.
+/// A published GPU texture: the texture, its size, and its bind group, made
+/// once because the texture never changes size or format.
 pub(crate) struct ExternalTexture {
-    pub(crate) image: crate::gpu::dmabuf::DmabufImage,
+    pub(crate) texture: wgpu::Texture,
+    pub(crate) size: (u32, u32),
     pub(crate) bind_group: wgpu::BindGroup,
+    /// A frame this renderer drew (`WgpuBackend::snapshot`): premultiplied
+    /// and in the target's own space, so composited as a layer is rather
+    /// than decoded as a picture.
+    pub(crate) drawn: bool,
+    /// The exported image behind a capture, kept for as long as it shows.
+    pub(crate) _export: Option<crate::gpu::dmabuf::DmabufImage>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

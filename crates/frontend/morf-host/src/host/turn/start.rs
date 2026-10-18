@@ -129,7 +129,7 @@ impl Host {
         apply_parent_transitions(runtime, &mut painter, &*backend)?;
         let primary_root = primary_surface_root(runtime)?;
         let painting = Instant::now();
-        let layout = paint(runtime, &mut painter, &*backend, primary_root, None)?;
+        let layout = paint(runtime, &mut painter, &*backend, primary_root, None, None)?;
         slow(options_report, &name, "the first frame", painting);
         let windows_opening = Instant::now();
         let mut windows = Windows::default();
@@ -163,6 +163,8 @@ impl Host {
             keyboard_changes: Vec::new(),
             fallback_tick: None,
             forced_paint: None,
+            transform: crate::paint::cover::transform_of(backend.outputs(), &name),
+            turning: None,
             painter,
         };
         Ok(Self {
@@ -187,6 +189,7 @@ impl Host {
             alarm_rings: 0,
             containment_repaint: false,
             report_slow: options_report,
+            retired: None,
         })
     }
 

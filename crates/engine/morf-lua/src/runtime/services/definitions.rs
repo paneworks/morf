@@ -36,7 +36,9 @@ pub(super) fn reconcile_loaders(
     // turn, and none while anything animates -- the frame a build
     // costs is exactly the frame a motion cannot spare. Something
     // that never stops (a spinner) holds a preload back only so long.
-    let still = !loader_definitions.is_empty() && !state.scene().has_motion();
+    let still = !loader_definitions.is_empty()
+        && !state.scene().has_motion()
+        && !state.retained().host_motion;
     let now = std::time::Instant::now();
     for (node, factory) in loader_definitions {
         let Ok(active) = state.scene().bool_value(node, "active") else {

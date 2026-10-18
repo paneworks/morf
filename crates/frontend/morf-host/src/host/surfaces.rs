@@ -179,6 +179,18 @@ pub struct SurfaceEventState {
     /// What the shell's own surface is painted with, and what tells every
     /// window whether it is drawn or only laid out.
     pub painter: crate::paint::painter::Painter,
+    /// The output's transform as this surface last knew it.
+    pub transform: Option<&'static str>,
+    /// The shell's own surface turning with its output, while it does.
+    pub turning: Option<crate::paint::cover::Turning>,
+}
+
+impl SurfaceEventState {
+    /// Whether something the configuration did not start moves every frame:
+    /// a shader reading the clock, or the surface turning.
+    pub fn animating(&self) -> bool {
+        self.animating_shaders || self.turning.is_some()
+    }
 }
 
 /// Whether a paint the shell's own surface owes -- deferred until its frame
@@ -231,9 +243,9 @@ pub fn surface_root(surface: WindowId, layer: NodeHandle, windows: &Windows) -> 
 }
 
 pub fn primary_surface_root(runtime: &Runtime) -> Result<NodeHandle, String> {
-    let band = runtime.reload_band_root();
+    let engine_roots = [runtime.reload_band_root(), runtime.cover_root()];
     let mut roots = runtime.scene().roots();
-    roots.retain(|root| Some(*root) != band);
+    roots.retain(|root| !engine_roots.contains(&Some(*root)));
     let mut window_roots = HashSet::new();
     for surface in runtime.window_surface_configs() {
         if !window_roots.insert(surface.root) {

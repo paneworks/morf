@@ -33,6 +33,15 @@ impl Runtime {
         self.reactive.borrow().has_motion()
     }
 
+    /// Tells the runtime whether the host animates something of its own (a
+    /// surface turning), which Loader preloads wait for as for motion.
+    pub fn set_host_motion(&mut self, moving: bool) {
+        let mut state = self.reactive.borrow_mut();
+        if state.retained().host_motion != moving {
+            state.retained_mut().host_motion = moving;
+        }
+    }
+
     /// Moves every theme colour easing to a new value on by `delta`, and
     /// hands each reader the colour on show.
     /// Returns how many colours moved.

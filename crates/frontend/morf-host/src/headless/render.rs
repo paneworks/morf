@@ -94,7 +94,7 @@ fn draw(headless: &mut Headless, index: usize, scale: u32) -> Result<Picture, St
                 .lay_out_reload_band(size, engine.backend_mut())
         })
         .flatten();
-    let overlay = band_overlay(band.as_ref());
+    let overlays: Vec<_> = band_overlay(band.as_ref()).into_iter().collect();
     // Twice: the second frame is the incremental one, which reuses an effect
     // layer's target the way every frame after the first does.
     for _ in 0..2 {
@@ -102,7 +102,7 @@ fn draw(headless: &mut Headless, index: usize, scale: u32) -> Result<Picture, St
             .render_over(
                 &headless.runtime.scene(),
                 &layout,
-                overlay,
+                &overlays,
                 scale * 120,
                 |_| {},
             )

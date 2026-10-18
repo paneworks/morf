@@ -107,7 +107,10 @@ pub fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> Result<(
     thread::spawn(move || {
         follow_lua_files(&reload_roots, &watcher_enabled, |_| {
             reload_tx
-                .send(SupervisorMessage::Reload { hard: false })
+                .send(SupervisorMessage::Reload {
+                    hard: false,
+                    output: None,
+                })
                 .is_ok()
         });
     });
@@ -333,11 +336,13 @@ pub fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> Result<(
                     return Ok(());
                 }
             }
-            Ok(SupervisorMessage::Reload { hard }) => {
+            Ok(SupervisorMessage::Reload { hard, output: only }) => {
                 match fs::read(path.as_ref()) {
                     Ok(bytes) => {
                         source = Arc::from(bytes);
-                        for (output, worker) in &workers {
+                        // Every output, or the one that asked alone.
+                        let asked = |name: &String| only.as_ref().is_none_or(|only| only == name);
+                        for (output, worker) in workers.iter().filter(|(name, _)| asked(name)) {
                             let (reply, result) = mpsc::sync_channel(1);
                             if worker
                                 .commands

@@ -46,6 +46,7 @@ pub fn handle_surface_event(
     match event {
         Event::Configure { id, .. } | Event::Scale { id, .. } if id == PRIMARY_LAYER => {
             let (width, height) = client.physical_size();
+            crate::paint::cover::before_resize(state, client, name, (width, height));
             state.painter.resize(width, height);
             for surface in state
                 .windows

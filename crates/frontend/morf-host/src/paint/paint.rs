@@ -26,6 +26,7 @@ pub fn paint(
     client: &dyn Backend,
     root: NodeHandle,
     cache: Option<&mut CachedLayout>,
+    cover: Option<&crate::paint::cover::Shown>,
 ) -> Result<CachedLayout, String> {
     // `MORF_FRAME_LOG=1` prints how long each frame of the primary surface
     // took on the CPU side, submission included, so a configuration that
@@ -42,6 +43,7 @@ pub fn paint(
             root,
             &config,
             cache,
+            cover,
         ),
         Painter::Layout(text) => {
             lay_out_layer(runtime, text, client, PRIMARY_LAYER, root, &config, cache)

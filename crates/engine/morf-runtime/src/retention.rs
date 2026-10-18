@@ -37,6 +37,9 @@ pub struct Retained {
     pub retain_callbacks: HashMap<NodeHandle, RetainCallbacks>,
     /// Retained nodes to destroy once Lua can run.
     pub retained_destroy_queue: HashSet<NodeHandle>,
+    /// Whether the host animates something of its own (a surface turning):
+    /// preloads wait for it as they wait for the scene's motion.
+    pub host_motion: bool,
 }
 
 impl Retained {

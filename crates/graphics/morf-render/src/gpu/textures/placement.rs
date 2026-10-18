@@ -142,7 +142,7 @@ pub(crate) fn push_texture_instance(
         color: [1.0, 1.0, 1.0, 1.0],
         color_overlay: color_array(style.overlay),
         mode: [
-            0.0,
+            f32::from(style.drawn),
             0.0,
             f32::from(style.distance_field),
             f32::from(style.distance_field),

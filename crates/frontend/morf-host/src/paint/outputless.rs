@@ -200,9 +200,13 @@ fn drive_outputless(
                 }
             }
         }
-        if let Some(hard) = runtime.take_reload_request() {
-            tx.send(SupervisorMessage::Reload { hard })
-                .map_err(|_| "output supervisor stopped".to_owned())?;
+        if let Some(asked) = runtime.take_reload_request() {
+            let output = asked.output.then(|| OUTPUTLESS.to_owned());
+            tx.send(SupervisorMessage::Reload {
+                hard: asked.hard,
+                output,
+            })
+            .map_err(|_| "output supervisor stopped".to_owned())?;
         }
         if runtime.quit_requested() {
             tx.send(SupervisorMessage::Quit)

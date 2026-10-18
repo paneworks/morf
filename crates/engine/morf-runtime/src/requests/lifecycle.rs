@@ -10,10 +10,19 @@ use morf_value::IpcValue;
 
 use crate::handler::Handler;
 
+/// A reload a configuration asked for.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ReloadRequest {
+    /// Its surfaces made again as well, not only its runtime.
+    pub hard: bool,
+    /// Only the runtime of the output that asked, not every output's.
+    pub output: bool,
+}
+
 /// A reload, file watching, quitting and unlocking, as asked.
 pub struct Lifecycle {
-    /// A reload asked for: `Some(hard)`.
-    reload_request: Option<bool>,
+    /// A reload asked for.
+    reload_request: Option<ReloadRequest>,
     /// Whether the configuration's files are watched for a reload.
     watch_files: bool,
     /// Whether that changed since the host last asked.
@@ -65,13 +74,20 @@ impl Lifecycle {
         self.shell_root = root;
     }
 
-    /// Asks for a reload; a hard one wins over a soft one.
-    pub fn ask_reload(&mut self, hard: bool) {
-        self.reload_request = Some(self.reload_request.unwrap_or(false) || hard);
+    /// Asks for a reload: a hard one wins over a soft one, and one of every
+    /// output over one of the asking output alone.
+    pub fn ask_reload(&mut self, asked: ReloadRequest) {
+        self.reload_request = Some(match self.reload_request {
+            Some(earlier) => ReloadRequest {
+                hard: earlier.hard || asked.hard,
+                output: earlier.output && asked.output,
+            },
+            None => asked,
+        });
     }
 
-    /// The reload asked for, if one was: `Some(hard)`.
-    pub fn take_reload_request(&mut self) -> Option<bool> {
+    /// The reload asked for, if one was.
+    pub fn take_reload_request(&mut self) -> Option<ReloadRequest> {
         self.reload_request.take()
     }
 

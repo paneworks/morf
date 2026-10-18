@@ -198,7 +198,7 @@ impl DrawList {
         &mut self,
         scene: &Scene,
         layout: &Layout,
-        overlay: Option<Overlay<'_>>,
+        overlays: &[Overlay<'_>],
         previous: &DrawList,
         cache: &mut PaintCache,
     ) -> Result<(), RenderError> {
@@ -219,7 +219,7 @@ impl DrawList {
             revision: scene.paint_revision(),
             volatile: false,
         };
-        let built = self.rebuild_with(scene, layout, overlay, base, Some(&mut reuse));
+        let built = self.rebuild_with(scene, layout, overlays, base, Some(&mut reuse));
         if built.is_err() {
             reuse.cache.forget();
         }

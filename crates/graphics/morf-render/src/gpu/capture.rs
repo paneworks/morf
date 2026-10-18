@@ -75,8 +75,16 @@ impl WgpuBackend {
                 },
             ],
         });
-        self.external_textures
-            .insert(name.into(), ExternalTexture { image, bind_group });
+        self.external_textures.insert(
+            name.into(),
+            ExternalTexture {
+                texture: image.texture.clone(),
+                size: (image.width, image.height),
+                bind_group,
+                drawn: false,
+                _export: Some(image),
+            },
+        );
         Ok(())
     }
 
@@ -104,7 +112,7 @@ impl WgpuBackend {
     pub fn published_texture_size(&self, name: &str) -> Option<(u32, u32)> {
         self.external_textures
             .get(name)
-            .map(|external| (external.image.width, external.image.height))
+            .map(|external| external.size)
     }
 
     /// Reads a published texture back as RGBA pixels.
@@ -115,7 +123,7 @@ impl WgpuBackend {
     /// only way to know the zero-copy path shows the same picture.
     pub fn texture_pixels(&self, name: &str) -> Option<ImageData> {
         let external = self.external_textures.get(name)?;
-        let (width, height) = (external.image.width, external.image.height);
+        let (width, height) = external.size;
         let bytes_per_row = (width * 4).next_multiple_of(256);
         let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("morf capture readback"),
@@ -130,7 +138,7 @@ impl WgpuBackend {
             });
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
-                texture: &external.image.texture,
+                texture: &external.texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,

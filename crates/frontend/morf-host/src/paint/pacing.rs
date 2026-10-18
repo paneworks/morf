@@ -170,7 +170,7 @@ pub fn primary_frame(
     // the frame *advance*, and the pacer still decides which callbacks
     // are painted on. Forcing a repaint outside this path would spin as
     // fast as the event loop turns rather than at the output's rate.
-    let advanced = frame.active || frame.changed > 0 || state.animating_shaders;
+    let advanced = frame.active || frame.changed > 0 || state.animating();
     if advanced {
         // A surface that cannot paint inside one refresh paints on
         // every second callback instead, and keeps that cadence rather

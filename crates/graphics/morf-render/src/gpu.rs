@@ -97,6 +97,7 @@ mod present_tests;
 mod profile;
 mod shader_registry;
 mod shaders;
+mod snapshot;
 mod swapchain_hdr;
 mod targets;
 mod terminal_batch;

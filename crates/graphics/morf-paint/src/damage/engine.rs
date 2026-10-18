@@ -52,6 +52,9 @@ pub trait RenderBackend {
 pub struct Overlay<'a> {
     pub root: NodeHandle,
     pub layout: &'a Layout,
+    /// Whether it stands for the whole surface, so nothing of the scene
+    /// under it is drawn: a picture of the surface while it is rebuilt.
+    pub conceals: bool,
 }
 
 /// Scene painter and damage tracker driving a selected backend.
@@ -94,15 +97,16 @@ impl<B: RenderBackend> RenderEngine<B> {
         scale_120: u32,
         declare: impl FnOnce(&[DamageRect]),
     ) -> Result<Vec<DamageRect>, RenderError> {
-        self.render_over(scene, layout, None, scale_120, declare)
+        self.render_over(scene, layout, &[], scale_120, declare)
     }
 
-    /// Paints one resolved scene frame with `overlay` drawn over it.
+    /// Paints one resolved scene frame with `overlays` drawn over it, in
+    /// order.
     pub fn render_over(
         &mut self,
         scene: &Scene,
         layout: &Layout,
-        overlay: Option<Overlay<'_>>,
+        overlays: &[Overlay<'_>],
         scale_120: u32,
         declare: impl FnOnce(&[DamageRect]),
     ) -> Result<Vec<DamageRect>, RenderError> {
@@ -112,7 +116,7 @@ impl<B: RenderBackend> RenderEngine<B> {
         let built = list.rebuild_from(
             scene,
             layout,
-            overlay,
+            overlays,
             &self.damage.previous,
             &mut self.paint,
         );

@@ -75,15 +75,20 @@ impl Host {
     /// Tells the supervisor what the configuration asked of it: a reload,
     /// to quit (and then this output stops driving frames), files watched.
     pub(super) fn tell_supervisor(
-        &self,
+        &mut self,
         runtime: &mut Runtime,
         links: &Links<'_>,
     ) -> Result<Option<Turn>, String> {
         let stopped = |_| "output supervisor stopped".to_owned();
-        if let Some(hard) = runtime.take_reload_request() {
+        if let Some(asked) = runtime.take_reload_request() {
+            if let Some(turning) = &mut self.state.turning {
+                turning.rebuilding();
+            }
+            let output = asked.output.then(|| self.name.clone());
+            let hard = asked.hard;
             links
                 .tx
-                .send(SupervisorMessage::Reload { hard })
+                .send(SupervisorMessage::Reload { hard, output })
                 .map_err(stopped)?;
         }
         if runtime.quit_requested() {

@@ -161,7 +161,7 @@ fn test_panic_here(screen: Option<&Screen>, args: &[morf_lua::IpcValue]) -> bool
     }
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Default)]
 pub struct WorkerUpdate {
     pub repaint: bool,
     pub reset_input: bool,
@@ -170,6 +170,10 @@ pub struct WorkerUpdate {
     /// A new configuration replaced the old one: what the old one set on
     /// the outputs (their gamma) goes with it.
     pub reloaded: bool,
+    /// The runtime a reload replaced. Tearing a large one down takes tens
+    /// of milliseconds, which a host spends after the new one's first
+    /// frame rather than before it.
+    pub retired: Option<Runtime>,
 }
 
 pub fn handle_worker_command(
@@ -199,10 +203,7 @@ pub fn handle_worker_command(
             let _ = reply.send(result.map_err(|error| error.to_string()));
             WorkerUpdate {
                 repaint,
-                reset_input: false,
-                refresh_idle: false,
-                recreate_surface: false,
-                reloaded: false,
+                ..WorkerUpdate::default()
             }
         }
         WorkerCommand::Screens(screens) => {
@@ -288,10 +289,11 @@ pub fn handle_worker_command(
                         .map_err(|error| error.to_string())
                 });
             let succeeded = result.is_ok();
+            let mut retired = None;
             let repaint = match &result {
                 Ok(()) => {
                     candidate.dispatch_reload_completed();
-                    *runtime = candidate;
+                    retired = Some(std::mem::replace(runtime, candidate));
                     true
                 }
                 // Reported by the configuration's own handlers, or shown on
@@ -305,6 +307,7 @@ pub fn handle_worker_command(
                 refresh_idle: succeeded,
                 recreate_surface: succeeded && hard,
                 reloaded: succeeded,
+                retired,
             }
         }
     }

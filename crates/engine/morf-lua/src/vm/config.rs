@@ -10,6 +10,7 @@ use crate::{
     runtime::state::*, vm::execute::*, vm::loader::*, vm::types::*,
 };
 
+pub(crate) mod cover;
 mod lint;
 mod permissions;
 pub(crate) mod reload_band;
@@ -57,6 +58,7 @@ impl Runtime {
             permissions,
             lint_queue: RefCell::new(Vec::new()),
             reload_error: RefCell::new(None),
+            cover: RefCell::new(None),
         };
         crate::vm::extensions::apply_extensions(&mut runtime);
         runtime
@@ -333,7 +335,7 @@ impl Runtime {
     }
 
     /// Takes a reload request raised by Lua configuration.
-    pub fn take_reload_request(&mut self) -> Option<bool> {
+    pub fn take_reload_request(&mut self) -> Option<ReloadRequest> {
         self.reactive
             .borrow_mut()
             .lifecycle_mut()

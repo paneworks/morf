@@ -200,7 +200,7 @@ pub struct ToplevelRequest {
 mod lifecycle;
 mod queue;
 
-pub use lifecycle::Lifecycle;
+pub use lifecycle::{Lifecycle, ReloadRequest};
 pub use queue::Requests;
 
 /// One workspace, as the engine hands it to a configuration.
