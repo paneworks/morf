@@ -216,7 +216,11 @@ pub fn reconcile_with(
     let crossing = workers.is_empty() || was_outputless != desired.contains_key(OUTPUTLESS);
     let mut stale = workers
         .iter()
-        .filter(|(name, worker)| desired.get(*name) != Some(&worker.screen))
+        .filter(|(name, worker)| {
+            !desired
+                .get(*name)
+                .is_some_and(|wanted| same_output(wanted, &worker.screen))
+        })
         .map(|(name, _)| name.clone())
         .collect::<Vec<_>>();
     // The primary goes last, so its values are the ones handed over: every
@@ -227,6 +231,13 @@ pub fn reconcile_with(
         let worker = workers.remove(&name).expect("worker key is present");
         worker.request_stop();
         let _ = worker.join.join();
+    }
+    // A kept worker's output may have turned, moved or been rescaled: it
+    // takes the new geometry, which `morf.screens` already carries to it.
+    for (name, worker) in workers.iter_mut() {
+        if let Some(wanted) = desired.get(name) {
+            worker.screen = wanted.clone();
+        }
     }
     // Every runtime that is going has gone -- and given its bus names back
     // -- before any is told it is primary.
@@ -252,6 +263,12 @@ pub fn reconcile_with(
         let worker = spawn(name, screen, seed.clone(), is_primary);
         workers.insert(name.clone(), worker);
     }
+}
+
+/// Whether two descriptions are of one output: what a rotation, a new mode,
+/// a move or a rescale leaves as it was.
+fn same_output(a: &Output, b: &Output) -> bool {
+    a.id == b.id && a.name == b.name && a.make == b.make && a.model == b.model
 }
 
 /// Starts the thread that runs the configuration for one output, or for none.

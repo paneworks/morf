@@ -6,6 +6,7 @@ mod pacing;
 mod popups;
 mod primary;
 mod reload_band;
+mod rotation;
 mod screens;
 
 // The supervisor and its workers: screen sets, IPC dispatch, hot reload.
