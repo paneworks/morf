@@ -63,9 +63,19 @@ function M.new(spec)
 
   -- --------------------------------------------------------------- pages --
 
-  -- Each page is built ahead of time while the shell is idle, and shown
-  -- for good once the panel is first opened.
+  -- The chosen tab's page is built ahead of time while the shell is idle;
+  -- the others when the panel first shows them. Each stays once built.
   local opened = morf.signal("caelestia." .. spec.id .. ".opened", false)
+  local seen = {}
+  for i in ipairs(tabs) do seen[i] = morf.signal("caelestia." .. spec.id .. ".seen." .. i, false) end
+  morf.effect("caelestia." .. spec.id .. ".seen", function()
+    if not opened:get() then return end
+    local now = tab:get()
+    -- A phone drags the neighbours in by hand: they are seen as it does.
+    for i = now - (phone and 1 or 0), now + (phone and 1 or 0) do
+      if seen[i] and not seen[i]:get() then seen[i]:set(true) end
+    end
+  end)
   local pages = {}
   for i, t in ipairs(tabs) do
     pages[i] = ui.Item {
@@ -74,8 +84,9 @@ function M.new(spec)
       x=page_wipe and (i-1)*(page_w+2*PAD) or nil,
       visible=function() return not page_wipe or display:get()==i end,
       ui.Loader {
-        anchors = { fill = true }, keep = true, preload = true,
-        active = function() return opened:get() end,
+        anchors = { fill = true }, keep = true,
+        preload = function() return tab:get() == i end,
+        active = function() return seen[i]:get() end,
         source = function() return t.build(page_w, page_h) end,
       },
     }

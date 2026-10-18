@@ -570,6 +570,11 @@ function V.build(M)
       clear,
     }
 
+    -- The wallpapers' strip is built the first time the launcher shows them.
+    local walls = morf.signal("caelestia.launcher.walls.built", wide())
+    morf.effect("caelestia.launcher.walls.build", function()
+      if wide() and not walls:get() then walls:set(true) end
+    end)
     local content = ui.Item {
       anchors = { fill = true },
       -- An instrument's panel: a hairline frame, and L-brackets on its corners.
@@ -579,7 +584,11 @@ function V.build(M)
       kit.decor("corners", { length = 14, inset = 4 }) or ui.Item {},
       header_row,
       results,
-      carousel(),
+      ui.Loader {
+        anchors = { fill = true }, keep = true,
+        active = function() return walls:get() end,
+        source = function() return ui.Item { anchors = { fill = true }, carousel() } end,
+      },
       search,
       legend,
     }

@@ -204,6 +204,11 @@ function M.page(w, h)
   local names = {}
   for _, d in ipairs(M.DETAILS) do
     names[d.key] = d.name
+    -- Each detail is built the first time it opens, and kept.
+    local wanted = morf.signal("caelestia.settings.built." .. d.key, M.detail:get() == d.key)
+    morf.effect("caelestia.settings.build." .. d.key, function()
+      if M.detail:get() == d.key and not wanted:get() then wanted:set(true) end
+    end)
     stack[#stack + 1] = ui.Item {
       id = "settings-detail-" .. d.key,
       width = w, height = h,
@@ -211,7 +216,11 @@ function M.page(w, h)
       opacity=function() return M.detail:get()==d.key and 1 or 0 end,
       translate_x=function() return M.detail:get()==d.key and 0 or 20 end,
       behavior={opacity={duration=theme.duration.small},translate_x=SWITCH},
-      model.page_content(d.key, w, h),
+      ui.Loader {
+        anchors = { fill = true }, keep = true,
+        active = function() return wanted:get() end,
+        source = function() return model.page_content(d.key, w, h) end,
+      },
     }
   end
   M.head = {
