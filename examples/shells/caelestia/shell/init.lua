@@ -85,6 +85,20 @@ morf.effect("caelestia.scale", function()
   zoom_settle = morf.timer(300, function() zoom_settle = nil morf.reload() end, false)
 end)
 
+-- --------------------------------------------------------------- rotation --
+
+-- A screen turned between portrait and landscape: this output's shell is
+-- built again in place for the other layout, and what is open stays open.
+local built_portrait = require("responsive").portrait()
+morf.effect("caelestia.rotation", function()
+  morf.screens_revision()
+  local portrait = require("responsive").portrait()
+  if portrait ~= built_portrait then
+    built_portrait = portrait
+    morf.reload { output = true }
+  end
+end)
+
 -- ---------------------------------------------------------------- drawers --
 
 local launcher = require("launcher")
