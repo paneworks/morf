@@ -36,13 +36,12 @@ local DISMISS=PHONE and "down" or "up"
 local TABS_H = 68            -- icons, labels, indicator and hairline
 local function panel_height() return math.floor((responsive.desk_height() - 2 * theme.BORDER) * 0.8) end
 local function view_height() local _,h=responsive.dashboard() return math.max(1,h) end
-local subpages, PAGE = {}, {{840,439}}
-for i=2,6 do
-  kit.collect(LAYERS[i])
-  local page = model.page(i)
-  subpages[i], PAGE[i] = page.page, {page.WIDTH,page.HEIGHT}
+-- Each tab's page size: the page's own once it is built, and till then
+-- what the desk gives a page of its kind.
+local PAGE = {}
+local function page_size(i)
+  return PAGE[i] or { responsive.dashboard((model.tabs[i] or model.tabs[1]).key) }
 end
-kit.collect(LAYERS[1])
 local ROW1, ROW2 = 132, 295
 
 M.tab = model.tab
@@ -50,7 +49,7 @@ M.tab = model.tab
 --- The panel's size on tab `i`.
 function M.size(i)
   if COMPACT then return PANEL_W, panel_height() end
-  local p = PAGE[i] or PAGE[1]
+  local p = page_size(i)
   return p[1] + 2 * PAD, TABS_H + PAD + p[2] + PAD - 1
 end
 local function width() return (M.size(M.tab:get())) end
@@ -62,7 +61,21 @@ local function height() local _, h = M.size(M.tab:get()) return h end
 local SWITCH = { duration = theme.duration.normal, easing = theme.ease.emphasized_decel }
 local opened = model.opened
 
+-- The cards of a tab bud in or out; there are none before the panel is.
+local budding
+local function bud(i, coming) if budding then budding(i, coming) end end
+M.bud = bud
 
+-- The panel itself, built when the dashboard first opens or, before that,
+-- while the shell is idle.
+local function build()
+local subpages = {}
+for i=2,6 do
+  kit.collect(LAYERS[i])
+  local page = model.page(i)
+  subpages[i], PAGE[i] = page.page, {page.WIDTH,page.HEIGHT}
+end
+kit.collect(LAYERS[1])
 
 -- ------------------------------------------------------------------- tabs --
 
@@ -129,7 +142,7 @@ if COMPACT then
   -- On a phone every page scrolls in the one view the dashboard has; while
   -- it runs on below, a dashed line along the view's foot says so.
   for i, page in ipairs(pages) do
-    local initial_h = (PAGE[i] or PAGE[1])[2]
+    local initial_h = page_size(i)[2]
     local function content_h() return i==6 and view_height() or initial_h end
     local node, _, t = kit.scroll({ id = "dashboard-scroll-" .. i, width = CW, height = view_height, clip = true,
       ui.Item { width = CW, height = content_h, page } })
@@ -196,21 +209,19 @@ local running = {}
 --- other -- or shrink a touch and fade as they go. While they move the
 --- field's seams soften a little, so neighbours touch like liquid; at rest
 --- they are crisp and apart.
-local function bud(i, coming)
+budding = function(i, coming)
   for _, r in ipairs(running[i] or {}) do r:stop() end
   running[i] = {}
   local duration
   running[i], duration = theme.motion.entries(LAYERS[i] or {}, coming, { stagger = 22 })
   stir(i, duration)
-
 end
-M.bud = bud
 
 -- Where page `i` starts along the track: the pages side by side, a
 -- padding's width apart on either side.
 local function offset(i)
   local x = 0
-  for k = 1, i - 1 do x = x + PAGE[k][1] + PAD * 2 end
+  for k = 1, i - 1 do x = x + page_size(k)[1] + PAD * 2 end
   return x
 end
 
@@ -290,8 +301,10 @@ morf.effect("caelestia.dashboard.liquid", function()
   end
   was_tab = tab
 end)
+return content
+end
 
-return { content=content, width=width, height=height, size=M.size, bud=bud,
+return { content=build, width=width, height=height, size=M.size, bud=bud,
   edge="top", props={behavior={width=SWITCH,height=SWITCH}} }
 end
 return V
