@@ -4,7 +4,8 @@ local M={area=shared.area}
 function M.contacts(region,allowed,single)
   local function keyboard() return require("keyboard") end
   return shared.contacts(region,{
-    allowed=function() return require("responsive").portrait() and (not allowed or allowed()) end,
+    allowed=function() return (region~="bottom" or require("phone_gestures").global_allowed())
+      and (not allowed or allowed()) end,
     active=function() return keyboard().active() end,
     show=function(mode) return keyboard().show(mode) end,
     hide=function() return keyboard().set(false) end,

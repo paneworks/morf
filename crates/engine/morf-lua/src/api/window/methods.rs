@@ -1,10 +1,12 @@
 //! Window handle methods: updates, size, the popup settings, and parents.
 
 use luna::{Callback, CallbackReturn, Context, Table, UserRef, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::{layer_parse::*, scene_bindings::*, state::*, surface_types::*, window_parse::*};
+use crate::{
+    api::ui::scene::*, api::window::layer::*, api::window::parse::*, runtime::host_types::*,
+    runtime::state::*,
+};
 
 mod layer;
 
@@ -12,14 +14,14 @@ pub(crate) use layer::{set_window_layer_setting, window_configure_method};
 
 pub(crate) fn window_updates_enabled_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, value): (UserRef<WindowSurfaceToken>, Option<bool>) = stack.consume(ctx)?;
         let mut state = state.borrow_mut();
         let (current, changed) = {
             let surface = state
-                .windows
+                .windows_mut()
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -29,7 +31,7 @@ pub(crate) fn window_updates_enabled_method<'gc>(
             }
             (surface.updates_enabled, changed)
         };
-        state.windows.window_surfaces_changed |= changed;
+        state.windows_mut().window_surfaces_changed |= changed;
         stack.replace(ctx, current);
         Ok(CallbackReturn::Return)
     })
@@ -37,7 +39,7 @@ pub(crate) fn window_updates_enabled_method<'gc>(
 
 pub(crate) fn window_size_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, width, height): (UserRef<WindowSurfaceToken>, Option<i64>, Option<i64>) =
@@ -62,7 +64,7 @@ pub(crate) fn window_size_method<'gc>(
         let mut state = state.borrow_mut();
         let (width, height, changed) = {
             let surface = state
-                .windows
+                .windows_mut()
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -77,7 +79,7 @@ pub(crate) fn window_size_method<'gc>(
             }
             (*size.0, *size.1, before != (*size.0, *size.1))
         };
-        state.windows.window_surfaces_changed |= changed;
+        state.windows_mut().window_surfaces_changed |= changed;
         let result = Table::new(&ctx);
         result.set_field(ctx, "width", i64::from(width));
         result.set_field(ctx, "height", i64::from(height));
@@ -88,7 +90,7 @@ pub(crate) fn window_size_method<'gc>(
 
 pub(crate) fn popup_bool_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     property: &'static str,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -96,7 +98,7 @@ pub(crate) fn popup_bool_method<'gc>(
         let mut state = state.borrow_mut();
         let (current, changed) = {
             let surface = state
-                .windows
+                .windows_mut()
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -113,7 +115,7 @@ pub(crate) fn popup_bool_method<'gc>(
             }
             (*current, changed)
         };
-        state.windows.window_surfaces_changed |= changed;
+        state.windows_mut().window_surfaces_changed |= changed;
         stack.replace(ctx, current);
         Ok(CallbackReturn::Return)
     })
@@ -121,7 +123,7 @@ pub(crate) fn popup_bool_method<'gc>(
 
 pub(crate) fn popup_string_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     property: &'static str,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -132,7 +134,7 @@ pub(crate) fn popup_string_method<'gc>(
         let mut state = state.borrow_mut();
         let (current, changed) = {
             let surface = state
-                .windows
+                .windows_mut()
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -150,7 +152,7 @@ pub(crate) fn popup_string_method<'gc>(
             }
             (current.clone(), changed)
         };
-        state.windows.window_surfaces_changed |= changed;
+        state.windows_mut().window_surfaces_changed |= changed;
         stack.replace(ctx, current);
         Ok(CallbackReturn::Return)
     })
@@ -158,7 +160,7 @@ pub(crate) fn popup_string_method<'gc>(
 
 pub(crate) fn popup_anchor_rect_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, x, y, width, height): PopupAnchorArgs<'gc> = stack.consume(ctx)?;
@@ -191,7 +193,7 @@ pub(crate) fn popup_anchor_rect_method<'gc>(
         let (current, changed) = {
             let id = surface.id;
             let surface = state
-                .windows
+                .windows_mut()
                 .window_surfaces
                 .get_mut(&id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -229,9 +231,9 @@ pub(crate) fn popup_anchor_rect_method<'gc>(
             )
         };
         if clear_node_anchor {
-            state.windows.popup_node_anchors.remove(&surface.id);
+            state.windows_mut().popup_node_anchors.remove(&surface.id);
         }
-        state.windows.window_surfaces_changed |= changed;
+        state.windows_mut().window_surfaces_changed |= changed;
         let result = Table::new(&ctx);
         result.set_field(ctx, "x", i64::from(current.0));
         result.set_field(ctx, "y", i64::from(current.1));
@@ -244,7 +246,7 @@ pub(crate) fn popup_anchor_rect_method<'gc>(
 
 pub(crate) fn popup_offset_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, x, y): (UserRef<WindowSurfaceToken>, Option<i64>, Option<i64>) =
@@ -262,7 +264,7 @@ pub(crate) fn popup_offset_method<'gc>(
         let mut state = state.borrow_mut();
         let (current, changed) = {
             let surface = state
-                .windows
+                .windows_mut()
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -278,7 +280,7 @@ pub(crate) fn popup_offset_method<'gc>(
                 before != (config.offset_x, config.offset_y),
             )
         };
-        state.windows.window_surfaces_changed |= changed;
+        state.windows_mut().window_surfaces_changed |= changed;
         let result = Table::new(&ctx);
         result.set_field(ctx, "x", i64::from(current.0));
         result.set_field(ctx, "y", i64::from(current.1));
@@ -289,14 +291,14 @@ pub(crate) fn popup_offset_method<'gc>(
 
 pub(crate) fn popup_constraints_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, values): (UserRef<WindowSurfaceToken>, Option<Table>) = stack.consume(ctx)?;
         let mut state = state.borrow_mut();
         let (current, changed) = {
             let surface = state
-                .windows
+                .windows_mut()
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -327,7 +329,7 @@ pub(crate) fn popup_constraints_method<'gc>(
             }
             (config.constraints, before != config.constraints)
         };
-        state.windows.window_surfaces_changed |= changed;
+        state.windows_mut().window_surfaces_changed |= changed;
         let result = Table::new(&ctx);
         result.set_field(ctx, "slide_x", current.slide_x);
         result.set_field(ctx, "slide_y", current.slide_y);
@@ -342,13 +344,13 @@ pub(crate) fn popup_constraints_method<'gc>(
 
 pub(crate) fn window_parent_id_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
         let parent = state
             .borrow()
-            .windows
+            .windows()
             .window_surfaces
             .get(&surface.id)
             .map(|surface| match &surface.kind {
@@ -367,7 +369,7 @@ pub(crate) fn window_parent_id_method<'gc>(
 
 pub(crate) fn window_set_parent_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, parent): (
@@ -381,7 +383,7 @@ pub(crate) fn window_set_parent_method<'gc>(
         let mut state = state.borrow_mut();
         if let Some(parent) = parent {
             let parent_surface = state
-                .windows
+                .windows()
                 .window_surfaces
                 .get(&parent)
                 .ok_or_else(|| HostError("window parent is stale".into()))?;
@@ -401,18 +403,20 @@ pub(crate) fn window_set_parent_method<'gc>(
                     return Err(HostError("window parent chain exceeds 64 levels".into()).into());
                 }
                 current =
-                    state.windows.window_surfaces.get(&id).and_then(|surface| {
-                        match &surface.kind {
+                    state
+                        .windows()
+                        .window_surfaces
+                        .get(&id)
+                        .and_then(|surface| match &surface.kind {
                             WindowSurfaceKind::Popup(config) => config.parent,
                             WindowSurfaceKind::Toplevel(config) => config.parent,
                             WindowSurfaceKind::Layer(_) => None,
-                        }
-                    });
+                        });
             }
         }
         let changed = {
             let target = state
-                .windows
+                .windows_mut()
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -440,7 +444,7 @@ pub(crate) fn window_set_parent_method<'gc>(
                 }
             }
         };
-        state.windows.window_surfaces_changed |= changed;
+        state.windows_mut().window_surfaces_changed |= changed;
         stack.replace(
             ctx,
             parent.map_or(LuaValue::Nil, |id| LuaValue::Integer(id as i64)),

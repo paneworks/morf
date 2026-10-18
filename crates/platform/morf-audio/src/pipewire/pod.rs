@@ -343,7 +343,14 @@ fn decode_body(kind: u32, body: &[u8], depth: usize) -> Option<Pod> {
     })
 }
 
+/// The largest top-level POD read from the library. Every param this backend
+/// reads is a few hundred bytes; a size beyond this is a corrupt header.
+const MAX_POD_SIZE: usize = 1 << 20;
+
 /// Reads a POD the library handed over.
+///
+/// The top-level size is the only one taken on trust, and it is bounded;
+/// every nested size is checked against the body that contains it.
 ///
 /// # Safety
 /// `pod` must be null or point at a complete POD.
@@ -351,10 +358,33 @@ pub unsafe fn read(pod: *const super::ffi::SpaPod) -> Option<Pod> {
     if pod.is_null() {
         return None;
     }
+    // SAFETY: the header is readable for any non-null POD.
+    let size = unsafe { (*pod).size } as usize;
+    if size > MAX_POD_SIZE {
+        return None;
+    }
     // SAFETY: a POD is its header followed by `size` bytes of body.
-    let bytes = unsafe {
-        let size = (*pod).size as usize;
-        std::slice::from_raw_parts(pod.cast::<u8>(), 8 + size)
-    };
+    let bytes = unsafe { std::slice::from_raw_parts(pod.cast::<u8>(), 8 + size) };
     Pod::decode(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_header_claiming_more_than_any_param_is_refused() {
+        let header = super::super::ffi::SpaPod {
+            size: u32::MAX,
+            type_: TYPE_STRUCT,
+        };
+        assert!(unsafe { read(&header) }.is_none());
+    }
+
+    #[test]
+    fn a_child_larger_than_its_parent_is_refused() {
+        let mut bytes = Pod::Struct(vec![Pod::Int(1)]).encode().bytes();
+        bytes[8..12].copy_from_slice(&64u32.to_ne_bytes());
+        assert!(Pod::decode(&bytes).is_none());
+    }
 }

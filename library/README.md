@@ -227,7 +227,7 @@ end, function(ok, replies) end)
 
 ## m3shapes
 
-`lib/m3shapes.lua` draws Material 3's expressive shapes (cookie, clover,
+`lib/util/m3shapes.lua` draws Material 3's expressive shapes (cookie, clover,
 sunny, burst, gem, pill, arch, heart, ...: `shapes.NAMES`) as `ui.Path`
 outlines. Each is a polygon with per-corner rounding, cut into the same
 number of cubics (`shapes.SEGMENTS`, 72) starting at the top, so
@@ -259,7 +259,7 @@ drawn.
 
 ## spectrum
 
-`lib/spectrum.lua` turns the bands `morf.audio.monitor` measures into
+`lib/util/spectrum.lua` turns the bands `morf.audio.monitor` measures into
 visualiser bars: a noise floor, a sensitivity that follows the music's
 loudness, a little memory on the way up, a fall under gravity, and peaks
 that lean on their neighbours.
@@ -281,7 +281,7 @@ every pair of bars. Lua retains monitor subscriptions, signals and lifecycle.
 
 ## lyrics
 
-`lib/lyrics.lua` reads LRC (several times a line, `[offset:]`, word
+`lib/integrations/lyrics.lua` reads LRC (several times a line, `[offset:]`, word
 timings dropped), finds the line for a moment, and finds lyrics for a
 track: an `.lrc` beside the playing file, then lrclib.net (keyless), cached
 on disk for a week (a miss too).
@@ -301,7 +301,7 @@ ui.Text { text = function() return follow.line:get() end }
 
 ## settings
 
-`lib/settings.lua` keeps a shell's preferences: nested defaults in the
+`lib/util/settings.lua` keeps a shell's preferences: nested defaults in the
 configuration, a JSON file holding only what differs, every leaf a signal,
 the file watched so another screen's runtime or an editor changes it live
 (only the keys that moved re-run). A value must have its default's type;
@@ -321,7 +321,7 @@ config.values.bar.persistent = true       -- the same, through nested tables
 
 ## frecency
 
-`lib/frecency.lua` remembers launches, each halving in weight every
+`lib/util/frecency.lua` remembers launches, each halving in weight every
 `half_life` days (14), in a small JSON file, and ranks a launcher's
 `morf.text.fuzzy` results with it: by use alone for an empty query, and a
 bounded lift among comparable matches otherwise.
@@ -334,7 +334,7 @@ used.rank(query, apps, { key = "name", id = "id", limit = 30 })   -- fuzzy hits,
 
 ## lule
 
-`lib/lule.lua` reads the scheme lule (a colour generator) writes to
+`lib/integrations/lule.lua` reads the scheme lule (a colour generator) writes to
 `$LULE_A/colors.json` (`~/.cache/lule`): `{ accent, background,
 foreground, cursor, theme, wallpaper, colors }`. `lule.watch()` is a signal
 kept current as lule rewrites it. For the colours themselves as the tool
@@ -351,7 +351,7 @@ result. Invalid options return `nil, reason` before starting a process.
 
 ## material
 
-`lib/material.lua` makes Material 3 colour schemes over `morf.color`'s HCT:
+`lib/util/material.lua` makes Material 3 colour schemes over `morf.color`'s HCT:
 five tonal palettes placed around a source colour's hue, and every role
 (`primary`, `onPrimaryContainer`, `surfaceContainerHigh`, `outlineVariant`,
 the `*Fixed` roles, ...) at its tone for dark or light. This is what an M3
@@ -371,14 +371,14 @@ material.from_image("~/Pictures/sea.jpg", { mode = "light" }, function(ok, s) ..
 | `material.score(swatches, opts)` | a picture's best source colours, best first (a colour's share and its neighbours' within 15 degrees of hue, and its chroma; greys do not count; `#4285f4` when nothing has colour) |
 | `material.from_image(path, opts, on_done)` | quantised off the loop, scored, and made a scheme: `on_done(true, s)` or `on_done(false, message)` |
 | `material.hex(s)` | the roles as `#rrggbb` |
-| `material.terminal(s)` | sixteen terminal colours and extras, in `lib/palette.lua`'s shape, for its writers |
+| `material.terminal(s)` | sixteen terminal colours and extras, in `lib/util/palette.lua`'s shape, for its writers |
 
 The palette rules and the score follow Material Color Utilities
 (Apache-2.0). There is one contrast level, the standard one.
 
 ## palette
 
-`lib/palette.lua` derives a whole desk's colours from a wallpaper: the
+`lib/util/palette.lua` derives a whole desk's colours from a wallpaper: the
 thirteen tokens impasto uses (`background surface surfaceHover border text
 textMuted accent accentHover accentText red green yellow blue`), a
 sixteen-colour terminal set, and writers for the programs that read them.
@@ -612,7 +612,9 @@ require("lib.services.upower").format_time(seconds)  -- "3 h 12 min"
 
 Power profiles are read from `org.freedesktop.UPower.PowerProfiles`, falling
 back to `net.hadess.PowerProfiles`, and only when one of them is already
-running.
+running. The module is a registry descriptor (`lib.services.registry`):
+`morf.service("power", { owner = node })` binds the same service, and
+`power.close()` lets go of it.
 
 ### `mpris` — `org.mpris.MediaPlayer2.*`, session bus
 
@@ -640,7 +642,10 @@ while playing. Every player lives at the same object path; the engine routes a
 signal only to the subscriptions naming its sender, so a player's change
 re-reads that player alone (debounced), and its subscriptions close when it
 leaves. The buttons are sent without waiting on the player. `playerctld` is
-skipped by default (`ignore`).
+skipped by default (`ignore`). The module is a registry descriptor whose
+`bind` keeps the active choice, the position clock and the buttons:
+`morf.service("media", { owner = node })` binds the same service, and
+`media.close()` lets go of it.
 
 ### `logind` — `org.freedesktop.login1`, system bus
 

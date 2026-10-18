@@ -101,7 +101,12 @@ test.it("mobile page fits a narrow phone and scrolls to connections",function()
   load("material",false,340,440)
   test.truthy(test.find{text="Vodafone NL",visible=true})
   local scroll=test.get("mobile-scroll")
-  test.wheel(0,3000,{x=scroll.x+scroll.width-2,y=220}) test.advance(100)
+  -- Scroll in steps until the second profile's button is inside the page.
+  for _=1,30 do
+    local b=test.get("mobile-connect-2")
+    if b and b.y>=scroll.y and b.y+b.height<=scroll.y+scroll.height then break end
+    test.wheel(0,120,{x=scroll.x+scroll.width-2,y=220}) test.advance(30)
+  end
   test.click("mobile-connect-2") test.advance(50)
   test.eq(state().calls[1].value,"/profile/2")
   if morf.env("MORF_THEME_SNAPSHOTS")=="1" then test.snapshot("mobile-compact.png") end

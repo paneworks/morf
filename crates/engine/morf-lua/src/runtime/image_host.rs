@@ -6,9 +6,9 @@
 
 use luna::{Context, Executor, Table, Value as LuaValue, Variadic};
 
-use crate::api_image_ops::rgba_color;
-use crate::image_jobs::{CaptureSave, ImageJob, ImageOutcome, RawCapture};
-use crate::{reactive_execute::drive_executor, surface_types::Screencopy, types::*};
+use crate::api::media::image_ops::rgba_color;
+use crate::runtime::image_jobs::{CaptureSave, ImageJob, ImageOutcome, RawCapture};
+use crate::{runtime::host_types::Screencopy, vm::execute::drive_executor, vm::types::*};
 use morf_runtime::Handler;
 
 impl Runtime {
@@ -17,7 +17,7 @@ impl Runtime {
     /// Returns how many ran. Whether the scene changed is for the caller to
     /// ask the scene, as it does for every other service.
     pub(crate) fn poll_image_jobs(&mut self) -> usize {
-        let done = self.reactive.borrow_mut().image_jobs.drain();
+        let done = self.reactive.borrow_mut().image_jobs_mut().drain();
         let count = done.len();
         for (callback, result) in done {
             if let Err(message) = self
@@ -37,11 +37,7 @@ impl Runtime {
     /// screenshot bound for disk has no business holding a screen's worth of
     /// memory in the renderer as well.
     pub fn screencopy_publishes(&self, request_id: u64) -> bool {
-        !self
-            .reactive
-            .borrow()
-            .screencopy_saves
-            .contains_key(&request_id)
+        !self.reactive.borrow().capture_saves().is_saving(request_id)
     }
 
     /// Sends a capture meant for a file to the image workers.
@@ -56,15 +52,15 @@ impl Runtime {
         let Some(save) = self
             .reactive
             .borrow_mut()
-            .screencopy_saves
-            .remove(&request_id)
+            .capture_saves_mut()
+            .take(request_id)
         else {
             return Err(result);
         };
         let callback = self
             .reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .screencopy_callbacks
             .remove(&request_id);
         let failure = match result {
@@ -95,7 +91,7 @@ impl Runtime {
                 };
                 self.reactive
                     .borrow_mut()
-                    .image_jobs
+                    .image_jobs_mut()
                     .submit(job, callback.clone())
                     .err()
             }
@@ -182,7 +178,7 @@ fn execute_image_handler(
     };
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(closure))
+        ctx.fetch(&crate::vm::handler_store::stashed(closure)?)
             .into(),
         args,
     );

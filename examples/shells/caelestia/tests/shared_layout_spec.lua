@@ -6,6 +6,8 @@ local function load(style)
     CAELESTIA_FONT_FILE="",LULE_A="/nonexistent/lule",HYPRLAND_INSTANCE_SIGNATURE=false},source=[[
     require("services").here=function() return true end
     require("services").weather=function() return {available=false} end
+    -- Nothing playing, whatever players the session bus has.
+    require("services").media=nil
     require("init")
     morf.ipc.test_page=function(index)
       local dashboard=require("dashboard")
@@ -68,8 +70,21 @@ test.it("dashboard, settings and workspaces keep the same sections and geometry 
             -- The search label uses each skin's font metrics; containers and
             -- control dimensions remain exact, with the same row ordering.
             local tolerance=id=="tasks-list" and key=="y" and 4 or 1
-            test.near(value,baseline[id][key],tolerance,id.." "..key)
+            -- (Refresh fits its label in each skin's face; New task takes
+            -- the rest of the row, whose extent is checked below.)
+            if not (id=="tasks-add" and key=="width") then
+              test.near(value,baseline[id][key],tolerance,id.." "..key)
+            end
           end
+        end
+      end
+      if case[1]=="tasks" then
+        local refresh=test.get("tasks-refresh-box")
+        local row={x=test.get("tasks-add").x,right=refresh.x+refresh.width}
+        if style=="material" then baseline["tasks-row"]=row
+        else
+          test.near(row.x,baseline["tasks-row"].x,1,"tasks row x")
+          test.near(row.right,baseline["tasks-row"].right,1,"tasks row right")
         end
       end
       if style=="tsugumori" and index==1 then

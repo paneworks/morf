@@ -1,4 +1,4 @@
--- Emoji by name: every one lib/emoji_data.lua knows (Unicode's own names),
+-- Emoji by name: every one lib/util/emoji_data.lua knows (Unicode's own names),
 -- searched fuzzily.
 --
 --   local emoji = require("lib.util.emoji")

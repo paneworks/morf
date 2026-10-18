@@ -9,7 +9,7 @@
 //! as the node's own keys would.
 
 #[cfg(not(feature = "a11y"))]
-use {crate::surfaces::SurfaceEventState, morf_lua::Runtime, morf_scene::NodeHandle};
+use {crate::host::surfaces::SurfaceEventState, morf_lua::Runtime, morf_scene::NodeHandle};
 
 #[cfg(feature = "a11y")]
 mod live {
@@ -22,7 +22,7 @@ mod live {
     use morf_scene::NodeHandle;
     use morf_value::IpcValue;
 
-    use crate::surfaces::SurfaceEventState;
+    use crate::host::surfaces::SurfaceEventState;
 
     /// How stale a tree may get on layout alone (things moving with no
     /// property written): bounds a screen reader reads are this fresh.
@@ -62,7 +62,10 @@ mod live {
             let mut acted = false;
             for root in &roots {
                 let adapter = self.adapters.entry(*root).or_insert_with(|| Adapter {
-                    accessibility: Accessibility::new(Arc::new(morf_io::wake_all)),
+                    accessibility: Accessibility::new({
+                        let waker = morf_io::waker();
+                        Arc::new(move || waker.wake())
+                    }),
                     built_revision: None,
                     built_at: None,
                 });

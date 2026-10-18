@@ -6,8 +6,8 @@
 use morf_scene::{Element, Scene};
 
 use super::field_tests::{field_command, field_layer};
-use crate::damage::DamageTracker;
 use crate::{DrawCommand, DrawList, Operation, SdfLayer, Shape};
+use morf_paint::damage::DamageTracker;
 
 const SIDE: f64 = 2000.0;
 

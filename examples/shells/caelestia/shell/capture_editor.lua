@@ -445,7 +445,7 @@ function M.export(action)
       local function save(target,then_copy)
         if not target then M.busy:set(false) M.status:set("Save cancelled") owned.remove(path) M.redraw() return end
         target=backend.expand(target)
-        local folder=target:match("^(.*)/[^/]+$") if folder then morf.fs.mkdir(folder) end
+        local folder=target:match("^(.*)/[^/]+$") if folder and folder~="" then morf.fs.mkdir(folder) end
         backend.save(path,target,function(good,message)
           if current~=generation then return end
           if good and then_copy then backend.copy(path,copy_done) else complete(good,message) end
@@ -491,5 +491,16 @@ function M.key(key,text,mods)
   if text=="f" then local d=M.document if d and (d.tool=="rect" or d.tool=="ellipse") then M.style("filled",not d.styles[d.tool].filled) end return end
   for _,tool in ipairs(M.tools) do if text==tool[3] then M.choose(tool[1]) return end end
 end
-M.node=require("themes").view("capture_editor").build(M)
+-- The editor is built the first time a capture opens it; it shows and
+-- hides itself from then on.
+local ui=require("morf.ui")
+local view=require("themes").view("capture_editor")
+local wanted=morf.signal("caelestia.capture.editor.built",M.active:get())
+morf.effect("caelestia.capture.editor.build",function()
+  if M.active:get() and not wanted:get() then wanted:set(true) end
+end)
+M.node=ui.Item {anchors={fill=true},z=100,
+  ui.Loader {anchors={fill=true},keep=true,
+    active=function() return wanted:get() end,
+    source=function() return ui.Item {anchors={fill=true},view.build(M)} end}}
 return M

@@ -1,14 +1,14 @@
 use luna::{
     Callback, CallbackReturn, Context, Function, Table, UserData, UserRef, Value as LuaValue,
 };
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
 use morf_scene::{AnimationStep, Behavior, Easing, GroupId, Keyframe, Scene, keyframe_steps};
 
 use crate::{
-    configure::*, lua_values::*, reactive_bindings::*, scene_bindings::*, state::*, table_menu::*,
+    api::ui::bindings::*, api::ui::configure::*, api::ui::scene::*, runtime::state::*,
+    value::lua::*, value::table::*,
 };
 
 /// Deepest nesting a group specification may reach.
@@ -23,7 +23,7 @@ pub(crate) const MAX_GROUP_DEPTH: usize = 8;
 /// the whole schedule instead of naming every property it touches.
 pub(crate) fn install_group_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let methods = Table::new(&ctx);
@@ -32,7 +32,7 @@ pub(crate) fn install_group_api<'gc>(
         let state = Rc::clone(&state);
         let callback = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let handle: UserRef<GroupToken> = stack.consume(ctx)?;
-            let acted = control(&mut state.borrow_mut().scene, handle.id);
+            let acted = control(state.borrow_mut().scene_mut(), handle.id);
             stack.replace(ctx, acted);
             Ok(CallbackReturn::Return)
         });
@@ -51,7 +51,7 @@ pub(crate) fn install_group_api<'gc>(
             let handle: UserRef<GroupToken> = stack.consume(ctx)?;
             let finished = state
                 .borrow_mut()
-                .scene
+                .scene_mut()
                 .finish_group(handle.id)
                 .map_err(|error| HostError(error.to_string()))?;
             stack.replace(ctx, finished);
@@ -80,6 +80,7 @@ pub(crate) fn install_group_api<'gc>(
                 steps.push(parse_group_step(ctx, options, 0).map_err(HostError)?);
             }
             let step = AnimationStep::Sequential(steps);
+            refuse_claimed_steps(&state.borrow(), &step).map_err(HostError)?;
             let repeat = parse_repeat(ctx, options).map_err(HostError)?;
             let delay = milliseconds(
                 table_number(ctx, options, "delay", 0.0).map_err(HostError)?,
@@ -98,12 +99,12 @@ pub(crate) fn install_group_api<'gc>(
             let id = {
                 let mut state = state.borrow_mut();
                 let id = state
-                    .scene
+                    .scene_mut()
                     .start_group_after(step, repeat, delay)
                     .map_err(|error| HostError(error.to_string()))?;
                 if let Some(callback) = callback {
                     state
-                        .animation
+                        .animation_mut()
                         .groups
                         .insert(id, crate::vm::handler_store::register(callback));
                 }
@@ -121,6 +122,17 @@ pub(crate) fn install_group_api<'gc>(
         _ => unreachable!("the animation table is installed before its group API"),
     };
     animation.set_field(ctx, "play", play);
+}
+
+/// Refuses a group that would animate a property `ui.claims` owns.
+fn refuse_claimed_steps(state: &ReactiveState, step: &AnimationStep) -> Result<(), String> {
+    match step {
+        AnimationStep::Property { node, property, .. } => refuse_claimed(state, *node, property),
+        AnimationStep::Pause(_) => Ok(()),
+        AnimationStep::Sequential(steps) | AnimationStep::Parallel(steps) => steps
+            .iter()
+            .try_for_each(|step| refuse_claimed_steps(state, step)),
+    }
 }
 
 /// Reads the array part of a table as an ordered list of steps.

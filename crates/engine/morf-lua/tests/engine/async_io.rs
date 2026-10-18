@@ -120,6 +120,7 @@ fn run_collects_output_codes_and_failures() {
         assert(not r.fail.ok and r.fail.code == 1 and r.fail.stdout == "")
         assert(r.cat.stdout == "from stdin")
         assert(not r.missing.ok and r.missing.code == nil and r.missing.error:find("nonexistent"))
+        assert(r.missing.error_kind == "not_found", r.missing.error_kind)
         assert(r.nested.stdout == "outer+inner")
         "#,
     );
@@ -151,6 +152,9 @@ fn run_times_out_and_kill_ends_a_child() {
 
 #[test]
 fn kill_signals_a_process_by_its_id() {
+    // As `morf` does at start: a suite run from a background job would
+    // otherwise hand its ignored SIGINT to the sleeper.
+    morf_io::restore_ignored_signals();
     let mut runtime = start(
         r#"
         ended = nil
@@ -197,7 +201,7 @@ fn spawn_strips_ld_library_path_unless_given() {
         r#"
         local r = results
         assert(r.plain and r.given and r.clear, "waiting")
-        assert(not r.plain:find("LD_LIBRARY_PATH="), r.plain)
+        assert(not ("\n" .. r.plain):find("\nLD_LIBRARY_PATH=", 1, true), r.plain)
         assert(r.plain:find("\nPATH=") or r.plain:find("^PATH="))
         assert(r.given:find("LD_LIBRARY_PATH=/mine\n", 1, true) and r.given:find("MORF_X=1", 1, true))
         assert(r.clear == "ONLY=this\n", r.clear)

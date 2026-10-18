@@ -2,7 +2,7 @@
 local M={}
 function M.page(w,h)
   local model=require("power_model").new(require("presentation").active("settings.power"),
-    function() require("dashboard_battery").show() end)
+    function() require("dashboard_state").show("battery") end)
   return require("themes").view("power_page").build(model,w,h)
 end
 return M

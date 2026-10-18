@@ -9,16 +9,15 @@
 
 use luna::{Context, Table};
 use morf_system::prefers::Portal;
-use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::{api_state::build, state::*, surface_types::*, types::*};
+use crate::{api::ui::state::build, runtime::host_types::*, runtime::state::*, vm::types::*};
 
 pub(crate) use morf_system::prefers::PREFERENCES;
 
 pub(crate) fn install_prefers_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     screen: Option<&Screen>,
 ) {
@@ -30,8 +29,8 @@ pub(crate) fn install_prefers_api<'gc>(
     seed.set_field(ctx, "scale", screen.map_or(1, |screen| screen.scale) as i64);
     let metatable = state
         .borrow()
-        .state_metatable
-        .clone()
+        .metatables()
+        .state()
         .expect("states are installed before preferences");
     let userdata = build(ctx, &state, &metatable, "prefers", None, seed)
         .expect("the preference seed is plain scalars");
@@ -44,13 +43,9 @@ pub(crate) fn install_prefers_api<'gc>(
     if !fields.scalars.contains_key("accent_color") {
         let mut state = state.borrow_mut();
         let id = state
-            .reactive
-            .graph
-            .as_mut()
-            .expect("the graph is not running at install")
-            .signal("prefers.accent_color", IpcValue::Nil);
-        state.reactive.values.insert(id, IpcValue::Nil);
-        state.reactive.signals.push(id);
+            .reactive_mut()
+            .signal("prefers.accent_color", IpcValue::Nil)
+            .expect("the graph is not running at install");
         fields.scalars.insert("accent_color".to_owned(), id);
     }
     let id = |name: &str| fields.scalars[name];
@@ -64,13 +59,13 @@ pub(crate) fn install_prefers_api<'gc>(
         overridden: std::collections::HashSet::new(),
     };
     let reduced = matches!(
-        state.borrow().reactive.values.get(&prefers.reduced_motion),
+        state.borrow().reactive().value(prefers.reduced_motion),
         Some(IpcValue::Boolean(true))
     );
     let mut state = state.borrow_mut();
-    state.prefers = Some(prefers);
+    *state.prefers_mut() = Some(prefers);
     state
-        .scene
+        .scene_mut()
         .set_motion_scale(if reduced { 0.0 } else { 1.0 });
     drop(fields);
     morf.set_field(ctx, "prefers", userdata);

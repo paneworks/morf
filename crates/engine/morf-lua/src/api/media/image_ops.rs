@@ -14,17 +14,17 @@
 //! Sources are what `ui.Image` takes: a path, a `file://` URI, or the picture
 //! written inline as SVG text or a `data:` URI.
 
+use crate::runtime::state::StateCell;
 use luna::{Callback, CallbackReturn, Closure, Context, Function, Table, Value as LuaValue};
 use morf_image::ops::{self, ImageOp, OutputFormat, ProcessRequest, RegionEffect, ResizeMode};
-use std::cell::RefCell;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use crate::api_color::color_userdata;
-use crate::image_jobs::{ImageJob, Region};
-use crate::{scene_bindings::HostError, state::ReactiveState};
+use crate::api::color::color::color_userdata;
+use crate::runtime::image_jobs::{ImageJob, Region};
+use crate::{api::ui::scene::HostError, runtime::state::ReactiveState};
 
 /// The largest picture `pixel` decodes on the Lua thread, in pixels.
 ///
@@ -200,7 +200,7 @@ fn parse_op<'gc>(ctx: Context<'gc>, value: LuaValue<'gc>) -> Result<ImageOp, Hos
             ImageOp::Blur(sigma as f32)
         }
         "grayscale" | "greyscale" => ImageOp::Grayscale,
-        "annotations" => ImageOp::Annotations(crate::api_image_annotation::parse(
+        "annotations" => ImageOp::Annotations(crate::api::media::image_annotation::parse(
             ctx,
             arg(2),
             arg(3),
@@ -283,14 +283,14 @@ pub(crate) fn parse_ops<'gc>(
 /// Queues a job, answering the call with `true` or `nil, message`.
 pub(crate) fn queue<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     job: ImageJob,
     callback: Option<Closure<'gc>>,
 ) -> (LuaValue<'gc>, LuaValue<'gc>) {
     let callback = callback.map(|callback| ctx.stash(callback));
     match state
         .borrow_mut()
-        .image_jobs
+        .image_jobs_mut()
         .submit(job, callback.map(crate::vm::handler_store::register))
     {
         Ok(()) => (LuaValue::Boolean(true), LuaValue::Nil),
@@ -303,7 +303,7 @@ pub(crate) fn queue<'gc>(
 
 pub(crate) fn install_image_ops_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let image = Table::new(&ctx);
@@ -339,6 +339,15 @@ pub(crate) fn install_image_ops_api<'gc>(
             };
             let source = source_of(options.get_value(ctx, "source"), "image.process source")?;
             let output = source_of(options.get_value(ctx, "output"), "image.process output")?;
+            if crate::vm::permissions::refused_write(
+                ctx,
+                &process_state,
+                &mut stack,
+                "morf.image.process",
+                &output,
+            ) {
+                return Ok(CallbackReturn::Return);
+            }
             let request = ProcessRequest {
                 ops: parse_ops(ctx, options.get_value(ctx, "ops"))?,
                 format: format_of(options.get_value(ctx, "format"), &output)?,
@@ -419,14 +428,14 @@ pub(crate) fn install_image_ops_api<'gc>(
     limits.set_field(
         ctx,
         "max_in_flight",
-        crate::image_jobs::MAX_IN_FLIGHT as i64,
+        crate::runtime::image_jobs::MAX_IN_FLIGHT as i64,
     );
     image.set_field(ctx, "limits", limits);
-    crate::api_image_raw::install_raw_image_api(ctx, image);
-    crate::api_image_annotation::install(ctx, image);
-    crate::api_image_geometry::install(ctx, image);
-    crate::api_image_preview::install(ctx, image, &state);
-    crate::api_image_canvas::install(ctx, image, &state);
+    crate::api::media::image_raw::install_raw_image_api(ctx, image, &state);
+    crate::api::media::image_annotation::install(ctx, image);
+    crate::api::media::image_geometry::install(ctx, image);
+    crate::api::media::image_preview::install(ctx, image, &state);
+    crate::api::media::image_canvas::install(ctx, image, &state);
 
     morf.set_field(ctx, "image", image);
 }

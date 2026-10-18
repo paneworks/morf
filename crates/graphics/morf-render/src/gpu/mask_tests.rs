@@ -69,6 +69,7 @@ fn at(pixels: &[u8], x: u32, y: u32) -> [u8; 4] {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_node_mask_keeps_what_it_covers() {
+    require_gpu!();
     let (mut scene, root, square) = green_square();
     circle_mask(&mut scene, square);
     let pixels = draw(&scene, root);
@@ -86,6 +87,7 @@ fn a_node_mask_keeps_what_it_covers() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn an_inverted_mask_cuts_out_what_it_covers() {
+    require_gpu!();
     let (mut scene, root, square) = green_square();
     circle_mask(&mut scene, square);
     scene.assign(square, "mask_invert", true).unwrap();
@@ -97,6 +99,7 @@ fn an_inverted_mask_cuts_out_what_it_covers() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_gradient_mask_fades_the_edges() {
+    require_gpu!();
     let (mut scene, root, square) = green_square();
     let mask = Value::Map(
         [(
@@ -140,6 +143,7 @@ fn a_gradient_mask_fades_the_edges() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_mask_composes_with_opacity_and_a_rounded_clip() {
+    require_gpu!();
     let (mut scene, root, square) = green_square();
     circle_mask(&mut scene, square);
     scene.assign(square, "opacity", 0.5).unwrap();
@@ -174,6 +178,7 @@ fn a_mask_composes_with_opacity_and_a_rounded_clip() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_mask_follows_its_owner_through_a_transform() {
+    require_gpu!();
     let (mut scene, root, square) = green_square();
     scene.assign(square, "color", "#00000000").unwrap();
     let moved = node(&mut scene, root, Element::Item, [0.0, 0.0, 32.0, 32.0]);
@@ -193,6 +198,7 @@ fn a_mask_follows_its_owner_through_a_transform() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_masked_shadow_is_cut_with_the_layer() {
+    require_gpu!();
     let (mut scene, root, square) = green_square();
     scene.assign(square, "color", "#00000000").unwrap();
     let card = node(&mut scene, root, Element::Rect, [8.0, 8.0, 32.0, 32.0]);
@@ -232,6 +238,7 @@ fn a_masked_shadow_is_cut_with_the_layer() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_hidden_mask_masks_nothing_and_an_empty_one_everything() {
+    require_gpu!();
     let (mut scene, root, square) = green_square();
     let circle = circle_mask(&mut scene, square);
     scene.assign(circle, "visible", false).unwrap();
@@ -248,6 +255,7 @@ fn a_hidden_mask_masks_nothing_and_an_empty_one_everything() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn an_animated_mask_damages_what_it_changes() {
+    require_gpu!();
     let (mut scene, root, square) = green_square();
     scene.assign(square, "color", "#202020ff").unwrap();
     // A list-like panel, masked by a moving dot, with a gradient-masked

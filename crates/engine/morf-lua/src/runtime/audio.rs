@@ -5,7 +5,9 @@ use std::rc::Rc;
 use morf_audio::{Audio, Backend};
 use morf_scene::Value as SceneValue;
 
-use crate::{api_audio::*, reactive_bindings::flush_reactive, surface_types::*, types::*};
+use crate::{
+    api::media::audio::*, api::ui::bindings::flush_reactive, runtime::host_types::*, vm::types::*,
+};
 use morf_runtime::Handler;
 
 impl Runtime {
@@ -14,7 +16,7 @@ impl Runtime {
     /// configuration has not touched `morf.audio` yet.
     pub fn set_audio_backend(&mut self, backend: impl Backend) {
         let mut state = self.reactive.borrow_mut();
-        if let Some(host) = &mut state.audio
+        if let Some(host) = state.audio_mut()
             && host.session.audio.is_none()
         {
             host.session.factory = Some(Box::new(move || Audio::with_backend(backend)));
@@ -26,19 +28,13 @@ impl Runtime {
     /// True when visible scene content changed. Signals and callbacks still
     /// advance when hidden, without making an idle output render again.
     pub(crate) fn poll_audio(&mut self) -> bool {
-        let (revision_before, hidden_before) = {
-            let state = self.reactive.borrow();
-            (
-                state.revisions.scene_revision,
-                state.revisions.hidden_revisions,
-            )
-        };
+        let before = self.reactive.borrow().revisions().mark();
         let mut moved = false;
         let handlers: Vec<(Handler, Vec<SceneValue>)>;
         {
             let mut guard = self.reactive.borrow_mut();
             let state = &mut *guard;
-            let Some(host) = state.audio.as_mut() else {
+            let (Some(host), engine) = state.audio_and_engine() else {
                 return false;
             };
             // A channel takes the bands in Rust: filtered, written, drawn.
@@ -62,9 +58,8 @@ impl Runtime {
                     changed_models.push(Rc::clone(model));
                     // A list nothing draws would keep its change journal
                     // forever; one a view follows is drained by the view.
-                    let followed = state
-                        .engine
-                        .views
+                    let followed = engine
+                        .views()
                         .values()
                         .any(|view| Rc::ptr_eq(&view.model, model));
                     if !followed {
@@ -76,19 +71,13 @@ impl Runtime {
                     (host.revision, IpcValue::Integer(rows.revision)),
                 ];
                 for (id, value) in writes {
-                    if state.reactive.values.get(&id) == Some(&value) {
-                        continue;
-                    }
-                    if let Some(graph) = state.reactive.graph.as_mut()
-                        && graph.write(id, value.clone()).is_ok()
-                    {
-                        state.reactive.values.insert(id, value);
-                        moved = true;
-                    }
+                    moved |= engine.reactive_mut().update(id, value);
                 }
                 // A binding that counts the devices follows them.
                 for model in changed_models {
-                    if crate::model_revisions::bump_model_revision(state, &model).unwrap_or(false) {
+                    if crate::runtime::model_revisions::bump_model_revision(state, &model)
+                        .unwrap_or(false)
+                    {
                         moved = true;
                     }
                 }
@@ -115,8 +104,6 @@ impl Runtime {
                     .log(LogLevel::Warn, format!("audio handler: {message}"));
             }
         }
-        let state = self.reactive.borrow();
-        state.revisions.scene_revision.wrapping_sub(revision_before)
-            > state.revisions.hidden_revisions.wrapping_sub(hidden_before)
+        self.reactive.borrow().revisions().shown_since(before)
     }
 }

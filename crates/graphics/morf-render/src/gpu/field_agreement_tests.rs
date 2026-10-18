@@ -140,6 +140,7 @@ fn agrees(shape: Shape, pixels: &[u8], half: [f32; 2], centre: [f32; 2]) {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn every_family_paints_where_the_region_rasteriser_says_it_will() {
+    require_gpu!();
     let mut backend = pollster::block_on(WgpuBackend::new(SIZE, SIZE)).unwrap();
     let (half, centre) = frame(8.0, 48.0, 48.0);
     for shape in families() {
@@ -151,6 +152,7 @@ pub(crate) fn every_family_paints_where_the_region_rasteriser_says_it_will() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn every_family_agrees_in_a_box_that_is_not_square() {
+    require_gpu!();
     // A non-square box is where the two used to part company: the renderer's
     // circle inscribes the shorter side while an input region's ellipse
     // stretches to the box, and having only one of those words meant the
@@ -166,6 +168,7 @@ pub(crate) fn every_family_agrees_in_a_box_that_is_not_square() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_circle_and_an_ellipse_are_different_shapes_in_a_wide_box() {
+    require_gpu!();
     // The distinction the merge had to preserve rather than collapse. If these
     // two ever render the same, one of the words has quietly stopped meaning
     // anything.
@@ -190,6 +193,7 @@ pub(crate) fn a_circle_and_an_ellipse_are_different_shapes_in_a_wide_box() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn xor_leaves_the_overlap_open() {
+    require_gpu!();
     // Xor was the input region's word and the shader had no case for it, so a
     // configuration could compose one only on the half of the vocabulary that
     // could not draw. Two overlapping squares: both ends painted, the shared
@@ -222,6 +226,7 @@ pub(crate) fn xor_leaves_the_overlap_open() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_composed_shape_can_carry_a_gradient_like_a_rectangle() {
+    require_gpu!();
     // What the pipeline merge is for. A gradient, a border and a shadow used to
     // belong to the quad pipeline, and a star was not drawn by the quad
     // pipeline — so a star could be any one flat colour and nothing else. One
@@ -290,6 +295,7 @@ pub(crate) fn a_composed_shape_can_carry_a_gradient_like_a_rectangle() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_composed_shape_casts_a_shadow_shaped_like_itself() {
+    require_gpu!();
     // A shadow used to be a second rounded box, grown by the spread and offset.
     // It is the composition itself now — moved, and dilated by subtracting the
     // spread from its distance — so a star's shadow is star-shaped.

@@ -65,6 +65,16 @@ pub(crate) fn emit(program: &Program, slots: &[ParamSlot], size: u32) -> String 
         }
         out.push_str("};\n\n");
     }
+    // One loop budget per invocation, shared by every loop and helper, so a
+    // nest cannot multiply its guards into a GPU timeout. Named per stage
+    // because both stages can be spliced into one module.
+    let work = if vertex { "morf_vwork" } else { "morf_work" };
+    let looping = program.helpers.iter().any(|helper| has_loop(&helper.body))
+        || has_loop(&program.entry.body);
+    if looping {
+        let _ = writeln!(out, "var<private> {work}: u32 = 0u;\n");
+    }
+    let work = looping.then_some(work);
     for helper in &program.helpers {
         let signature = helper
             .params
@@ -82,6 +92,7 @@ pub(crate) fn emit(program: &Program, slots: &[ParamSlot], size: u32) -> String 
             out,
             depth: 1,
             loops: 0,
+            work,
         };
         state.block(&helper.body);
         out = state.out;
@@ -132,10 +143,14 @@ pub(crate) fn emit(program: &Program, slots: &[ParamSlot], size: u32) -> String 
             input.ty.wgsl_owned()
         );
     }
+    if let Some(work) = work {
+        let _ = writeln!(out, "    {work} = 0u;");
+    }
     let mut state = Emitter {
         out,
         depth: 1,
         loops: 0,
+        work,
     };
     state.block(&program.entry.body);
     state.out.push_str("}\n");
@@ -194,6 +209,18 @@ pub(crate) struct Emitter {
     pub(crate) out: String,
     pub(crate) depth: usize,
     pub(crate) loops: u32,
+    /// The per-invocation loop budget, when the program has a loop.
+    pub(crate) work: Option<&'static str>,
+}
+
+fn has_loop(block: &Block) -> bool {
+    block.0.iter().any(|statement| match statement {
+        Stmt::Loop { .. } => true,
+        Stmt::If { arms, otherwise } => {
+            arms.iter().any(|(_, body)| has_loop(body)) || otherwise.as_ref().is_some_and(has_loop)
+        }
+        _ => false,
+    })
 }
 
 impl Emitter {
@@ -243,6 +270,7 @@ impl Emitter {
                 guard,
                 body,
                 continuing,
+                ..
             } => self.loop_(*guard, body, continuing),
             Stmt::Break => {
                 self.indent();
@@ -262,6 +290,7 @@ impl Emitter {
                 self.expression(value, value.ty());
                 self.out.push_str(";\n");
             }
+            Stmt::Line(_) => {}
         }
     }
 
@@ -281,6 +310,16 @@ impl Emitter {
         let _ = writeln!(self.out, "if ({counter} >= {guard}u) {{ break; }}");
         self.indent();
         let _ = writeln!(self.out, "{counter} = {counter} + 1u;");
+        if let Some(work) = self.work {
+            self.indent();
+            let _ = writeln!(
+                self.out,
+                "if ({work} >= {}u) {{ break; }}",
+                crate::limits::MAX_LOOP_WORK
+            );
+            self.indent();
+            let _ = writeln!(self.out, "{work} = {work} + 1u;");
+        }
         self.block(body);
         // Whatever has to happen on the way round, including after a
         // `continue`. A counting loop's increment lives here or it is skipped.
@@ -296,81 +335,6 @@ impl Emitter {
         self.depth -= 1;
         self.indent();
         self.out.push_str("}\n");
-    }
-
-    /// Prints an expression, widening a scalar where the context wants a vector.
-    pub(crate) fn expression(&mut self, expression: &Expr, wanted: Type) {
-        let actual = expression.ty();
-        // An abstract *expression* — arithmetic over literals that nothing has
-        // decided about — takes the wanted type all the way down. `0 - 2` in a
-        // `vec4u` has to print as `0u - 2u`, not as floats WGSL then refuses to
-        // convert.
-        if actual == Type::AbstractInt && wanted.is_integer() {
-            match expression {
-                Expr::Binary {
-                    op, left, right, ..
-                } => {
-                    self.out.push('(');
-                    self.expression(left, wanted);
-                    let _ = write!(self.out, " {} ", op.wgsl());
-                    self.expression(right, wanted);
-                    self.out.push(')');
-                    return;
-                }
-                Expr::Unary { op, value, .. } => {
-                    self.out.push_str(match op {
-                        UnOp::Negate => "-(",
-                        UnOp::Not => "!(",
-                        UnOp::BitNot => "~(",
-                    });
-                    self.expression(value, wanted);
-                    self.out.push(')');
-                    return;
-                }
-                _ => {}
-            }
-        }
-        // An abstract integer prints as whatever the surrounding code wanted.
-        // This is the only place that knows, which is why it is the only place
-        // that decides.
-        if let Expr::Literal(Value::Int(value)) = expression {
-            match wanted {
-                Type::U32 => {
-                    let _ = write!(self.out, "{}u", *value as u32);
-                }
-                Type::I32 => {
-                    let _ = write!(self.out, "{}", *value as i32);
-                }
-                other if other.is_vector() => {
-                    let _ = write!(self.out, "{}({})", other.wgsl(), float(*value as f32));
-                }
-                _ => {
-                    let _ = write!(self.out, "{}", float(*value as f32));
-                }
-            }
-            return;
-        }
-        // A scalar never widens into a matrix. `m * 2.0` is a scaled matrix in
-        // WGSL already, and `mat3x3<f32>(2.0)` is not the same thing — it is
-        // not even legal.
-        if wanted.is_matrix() && actual != wanted {
-            self.raw(expression);
-            return;
-        }
-        if wanted.is_vector() && actual == Type::F32 && !matches!(expression, Expr::Literal(_)) {
-            let _ = write!(self.out, "{}(", wanted.wgsl());
-            self.raw(expression);
-            self.out.push(')');
-            return;
-        }
-        if wanted.is_vector()
-            && actual == Type::F32
-            && let Expr::Literal(Value::F32(value)) = expression
-        {
-            let _ = write!(self.out, "{}({})", wanted.wgsl(), float(*value));
-            return;
-        }
-        self.raw(expression);
     }
 }
 
@@ -404,7 +368,7 @@ fn collect_records(block: &Block, out: &mut Vec<&'static StructType>) {
                 collect_records(body, out);
                 collect_records(continuing, out);
             }
-            Stmt::Break | Stmt::Continue | Stmt::Discard => {}
+            Stmt::Break | Stmt::Continue | Stmt::Discard | Stmt::Line(_) => {}
         }
     }
 }

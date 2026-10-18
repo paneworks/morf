@@ -162,7 +162,7 @@ impl TextSystem {
         );
         let mut jobs: Vec<Job> = Vec::new();
         for key in wanted {
-            let Some(Some(pair)) = self.field_pairs.get(key) else {
+            let Some(Some(pair)) = self.field_pairs.peek(key) else {
                 continue;
             };
             let last = pair.frames.len() - 1;

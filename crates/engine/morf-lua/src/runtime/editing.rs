@@ -9,23 +9,23 @@ use morf_text::TextSystem;
 use morf_runtime::editing::CALLBACK_ROUNDS;
 pub(crate) use morf_runtime::editing::key_args;
 
-use crate::text_inputs::{self, KeyModifiers, KeyOutcome};
-use crate::{events::*, reactive_bindings::*, runtime_helpers::*, types::*};
+use crate::runtime::text_inputs::{self, KeyModifiers, KeyOutcome};
+use crate::{api::ui::bindings::*, runtime::events::*, runtime::helpers::*, vm::types::*};
 
 impl Runtime {
     /// Whether a node is a text input.
     pub fn is_text_input(&self, node: NodeHandle) -> bool {
-        self.reactive.borrow().scene.element(node).ok() == Some(Element::TextInput)
+        self.reactive.borrow().scene().element(node).ok() == Some(Element::TextInput)
     }
 
     /// The text input that has the keyboard within one scene root, if any.
     pub fn focused_text_input_in(&mut self, root: NodeHandle) -> Option<NodeHandle> {
         self.settle_text_inputs();
         let state = self.reactive.borrow();
-        state.editing.focused.filter(|node| {
-            scene_node_in_subtree(&state.scene, root, *node)
-                && state.scene.bool_value(*node, "enabled").unwrap_or(false)
-                && state.scene.bool_value(*node, "visible").unwrap_or(false)
+        state.editing().focused().filter(|node| {
+            scene_node_in_subtree(state.scene(), root, *node)
+                && state.scene().bool_value(*node, "enabled").unwrap_or(false)
+                && state.scene().bool_value(*node, "visible").unwrap_or(false)
         })
     }
 
@@ -37,23 +37,23 @@ impl Runtime {
     pub fn set_key_focus(&mut self, node: Option<NodeHandle>) -> bool {
         let terminal_moved = {
             let mut state = self.reactive.borrow_mut();
-            let terminal = node.filter(|node| state.terminals.contains(*node));
-            crate::terminals::set_focus(&mut state, terminal)
+            let terminal = node.filter(|node| state.terminals().contains(*node));
+            crate::runtime::terminals::set_focus(&mut state, terminal)
         };
         let changed = {
             let mut state = self.reactive.borrow_mut();
-            let before = state.editing.focused;
+            let before = state.editing().focused();
             match node {
-                Some(node) if state.scene.element(node).ok() == Some(Element::TextInput) => {
+                Some(node) if state.scene().element(node).ok() == Some(Element::TextInput) => {
                     text_inputs::set_focus(&mut *state, node, true);
                 }
                 _ => {
-                    if let Some(focused) = state.editing.focused {
+                    if let Some(focused) = state.editing().focused() {
                         text_inputs::set_focus(&mut *state, focused, false);
                     }
                 }
             }
-            state.editing.focused != before
+            state.editing().focused() != before
         };
         self.finish_text_input_work();
         changed || terminal_moved
@@ -149,15 +149,24 @@ impl Runtime {
     /// system that frame is painted with — so the caret it scrolls to is
     /// where the glyphs will be drawn. Returns whether it changed anything.
     pub fn sync_text_inputs(&mut self, layout: &Layout, text: &mut TextSystem) -> bool {
-        let revision = self.reactive.borrow().revisions.scene_revision;
+        let revision = self.reactive.borrow().revisions().scene();
         {
             let mut state = self.reactive.borrow_mut();
             text_inputs::reconcile_focus(&mut *state);
-            for node in text_inputs::tracked(&state.editing) {
+            for node in text_inputs::tracked(state.engine().editing()) {
                 let Some(geometry) = layout.geometry(node) else {
                     continue;
                 };
-                let Ok(shape) = InputShape::read(&state.scene, node, Some(geometry.width)) else {
+                let stamp = state.scene().paint_stamp(node).unwrap_or(u64::MAX);
+                let bounds = [geometry.x, geometry.y, geometry.width, geometry.height];
+                if !state
+                    .engine_mut()
+                    .editing_mut()
+                    .needs_sync(node, stamp, bounds)
+                {
+                    continue;
+                }
+                let Ok(shape) = InputShape::read(state.scene(), node, Some(geometry.width)) else {
                     continue;
                 };
                 // The same string at the same width paint will shape, so this
@@ -187,24 +196,24 @@ impl Runtime {
         // Terminals are fitted to their boxes at the same moment, for the
         // same reason: with the text system this frame is painted with.
         let terminals = self.sync_terminals(layout, text);
-        terminals || self.reactive.borrow().revisions.scene_revision != revision
+        terminals || self.reactive.borrow().revisions().scene() != revision
     }
 
     /// Writes each linked text's `links`: its link runs' boxes, in its own
     /// space, from the buffer this frame is painted from.
     fn sync_links(&mut self, layout: &Layout, text: &mut TextSystem) {
         let mut state = self.reactive.borrow_mut();
-        let nodes: Vec<NodeHandle> = state.linked_texts.iter().copied().collect();
+        let nodes = state.layout_hooks().linked_texts();
         for node in nodes {
-            if !state.scene.contains(node) {
-                state.linked_texts.remove(&node);
+            if !state.scene().contains(node) {
+                state.layout_hooks_mut().unlink_text(node);
                 continue;
             }
             let Some(geometry) = layout.geometry(node) else {
                 continue;
             };
             let spare = (geometry.height - f64::from(text.shaped_height(node))).max(0.0);
-            let offset = match state.scene.string_value(node, "vertical_alignment") {
+            let offset = match state.scene().string_value(node, "vertical_alignment") {
                 Ok("center") => spare / 2.0,
                 Ok("bottom") => spare,
                 _ => 0.0,
@@ -232,9 +241,9 @@ impl Runtime {
                     })
                     .collect(),
             );
-            if state.scene.current(node, "links").ok() != Some(&links) {
+            if state.scene().current(node, "links").ok() != Some(&links) {
                 let _ =
-                    crate::scene_bindings::assign_scene_property(&mut state, node, "links", links);
+                    crate::api::ui::scene::assign_scene_property(&mut state, node, "links", links);
             }
         }
     }
@@ -274,10 +283,7 @@ impl Runtime {
 
     /// Flushes what editing wrote, then runs the callbacks it owes.
     pub(crate) fn finish_text_input_work(&mut self) {
-        let flush = {
-            let mut state = self.reactive.borrow_mut();
-            state.handler_depth == 0 && std::mem::take(&mut state.flush_pending)
-        };
+        let flush = self.reactive.borrow_mut().tracking_mut().take_flush();
         if flush
             && let Err(message) = self
                 .lua
@@ -296,13 +302,13 @@ impl Runtime {
     pub(crate) fn drain_input_events(&mut self) {
         {
             let mut state = self.reactive.borrow_mut();
-            let in_handler = state.handler_depth > 0;
-            if !state.editing.start_draining(in_handler) {
+            let in_handler = state.tracking().in_handler();
+            if !state.editing_mut().start_draining(in_handler) {
                 return;
             }
         }
         for _ in 0..CALLBACK_ROUNDS {
-            let events = std::mem::take(&mut self.reactive.borrow_mut().editing.events);
+            let events = self.reactive.borrow_mut().editing_mut().take_owed();
             if events.is_empty() {
                 break;
             }
@@ -312,7 +318,7 @@ impl Runtime {
             text_inputs::reconcile_focus(&mut *self.reactive.borrow_mut());
         }
         let mut state = self.reactive.borrow_mut();
-        if state.editing.finish_draining() {
+        if state.editing_mut().finish_draining() {
             state.log(
                 LogLevel::Warn,
                 "text input callbacks kept editing their own fields; the rest were dropped",

@@ -8,6 +8,7 @@
 //! the settings behaviours and flings are built from.
 
 pub mod behaviors;
+pub mod claims;
 pub mod easing;
 pub mod exits;
 pub mod fades;
@@ -40,6 +41,8 @@ pub struct Animation {
     pub loops: HashMap<NodeHandle, BTreeMap<String, RunningLoop>>,
     /// Properties tied to another node's (`ui.follow`), applied every tick.
     pub follows: Vec<Follow>,
+    /// Choreography claims (`ui.claims`): who owns each claimed property.
+    pub claims: claims::Claims,
     /// Theme colours on their way to the value last written to them.
     pub fades: Vec<ThemeFade>,
     /// Nodes registered with retention only for their exit, so taking the

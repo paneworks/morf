@@ -17,12 +17,11 @@
 //! dismissed — `on_closed` hears it once it is gone.
 
 use luna::{Callback, CallbackReturn, Closure, Context, UserRef, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{
-    reactive_bindings::*, reactive_execute::*, scene_bindings::*, state::*, surface_types::*,
-    types::*,
+    api::ui::bindings::*, api::ui::scene::*, runtime::host_types::*, runtime::state::*,
+    vm::execute::*, vm::types::*,
 };
 use morf_runtime::Handler;
 
@@ -44,34 +43,26 @@ fn requested_size(kind: &WindowSurfaceKind) -> Option<(u32, u32)> {
 /// usually inside a binding — while the graph is running and cannot make one.
 pub(crate) fn register_window_size(state: &mut ReactiveState, id: u64) {
     let Some(size) = state
-        .windows
+        .windows()
         .window_surfaces
         .get(&id)
         .and_then(|surface| requested_size(&surface.kind))
     else {
         return;
     };
-    let Some(graph) = state.reactive.graph.as_mut() else {
-        return;
-    };
-    let width = graph.signal(
+    let Some(width) = state.reactive_mut().signal(
         format!("window.{id}.width"),
         IpcValue::Integer(i64::from(size.0)),
-    );
-    let height = graph.signal(
+    ) else {
+        return;
+    };
+    let Some(height) = state.reactive_mut().signal(
         format!("window.{id}.height"),
         IpcValue::Integer(i64::from(size.1)),
-    );
-    state
-        .reactive
-        .values
-        .insert(width, IpcValue::Integer(i64::from(size.0)));
-    state
-        .reactive
-        .values
-        .insert(height, IpcValue::Integer(i64::from(size.1)));
-    state.reactive.signals.extend([width, height]);
-    state.windows.window_sizes.insert(
+    ) else {
+        return;
+    };
+    state.windows_mut().window_sizes.insert(
         id,
         WindowSize {
             width,
@@ -92,11 +83,11 @@ pub(crate) fn window_size_field<'gc>(
         return None;
     }
     let requested = state
-        .windows
+        .windows()
         .window_surfaces
         .get(&id)
         .and_then(|surface| requested_size(&surface.kind))?;
-    let Some(size) = state.windows.window_sizes.get(&id).copied() else {
+    let Some(size) = state.windows().window_sizes.get(&id).copied() else {
         let value = if key == "width" {
             requested.0
         } else {
@@ -109,7 +100,7 @@ pub(crate) fn window_size_field<'gc>(
     } else {
         (size.height, size.size.1)
     };
-    if let Some(active) = &mut state.active {
+    if let Some(active) = state.tracking_mut().capture() {
         active.reads.insert(signal);
     }
     Some(LuaValue::Integer(i64::from(value)))
@@ -124,25 +115,23 @@ pub(crate) fn window_size_field<'gc>(
 /// the `on_closed` it would run then finds nothing: it is run here instead,
 /// by the caller, once, in both a shell and a headless run.
 pub(crate) fn destroy_window_surface(state: &mut ReactiveState, id: u64) -> Option<Handler> {
-    let window = state.windows.window_surfaces.remove(&id)?;
-    state.windows.window_surfaces_changed = true;
+    let window = state.windows_mut().window_surfaces.remove(&id)?;
+    state.windows_mut().window_surfaces_changed = true;
     let on_closed = state
-        .windows
+        .windows_mut()
         .window_handlers
         .remove(&(id, WindowEvent::Closed));
     state
-        .windows
+        .windows_mut()
         .window_handlers
         .retain(|(window, _), _| *window != id);
-    state.windows.popup_node_anchors.remove(&id);
-    if let Some(size) = state.windows.window_sizes.remove(&id) {
-        for signal in [size.width, size.height] {
-            state.reactive.values.remove(&signal);
-            state.reactive.signals.retain(|other| *other != signal);
-            state.reactive.dead_signals.push(signal);
-        }
+    state.windows_mut().popup_node_anchors.remove(&id);
+    if let Some(size) = state.windows_mut().window_sizes.remove(&id) {
+        state
+            .reactive_mut()
+            .forget_signals([size.width, size.height].into_iter().collect());
     }
-    crate::runtime_helpers::remove_scene_subtree(state, window.root);
+    crate::runtime::helpers::remove_scene_subtree(state, window.root);
     on_closed.filter(|_| window.visible)
 }
 
@@ -150,14 +139,14 @@ pub(crate) fn destroy_window_surface(state: &mut ReactiveState, id: u64) -> Opti
 /// sets the callback, or clears it given `nil`.
 pub(crate) fn window_handler_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     event: WindowEvent,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, callback): (UserRef<WindowSurfaceToken>, Option<Closure>) =
             stack.consume(ctx)?;
         let mut state = state.borrow_mut();
-        let Some(window) = state.windows.window_surfaces.get(&surface.id) else {
+        let Some(window) = state.windows().window_surfaces.get(&surface.id) else {
             return Err(HostError("window destroyed".into()).into());
         };
         if matches!(window.kind, WindowSurfaceKind::Layer(_)) && !event.for_layers() {
@@ -176,13 +165,16 @@ pub(crate) fn window_handler_method<'gc>(
         }
         match callback {
             Some(callback) => {
-                state.windows.window_handlers.insert(
+                state.windows_mut().window_handlers.insert(
                     (surface.id, event),
                     crate::vm::handler_store::register(ctx.stash(callback)),
                 );
             }
             None => {
-                state.windows.window_handlers.remove(&(surface.id, event));
+                state
+                    .windows_mut()
+                    .window_handlers
+                    .remove(&(surface.id, event));
             }
         }
         Ok(CallbackReturn::Return)
@@ -198,7 +190,7 @@ pub(crate) fn window_handlers_from_options<'gc>(
     options: luna::Table<'gc>,
 ) -> Result<(), HostError> {
     let layer = state
-        .windows
+        .windows()
         .window_surfaces
         .get(&id)
         .is_some_and(|window| matches!(window.kind, WindowSurfaceKind::Layer(_)));
@@ -210,7 +202,7 @@ pub(crate) fn window_handlers_from_options<'gc>(
             LuaValue::Nil => {}
             LuaValue::Function(luna::Function::Closure(callback)) => {
                 let floating = state
-                    .windows
+                    .windows()
                     .window_surfaces
                     .get(&id)
                     .is_some_and(|window| matches!(window.kind, WindowSurfaceKind::Toplevel(_)));
@@ -220,7 +212,7 @@ pub(crate) fn window_handlers_from_options<'gc>(
                         event.method()
                     )));
                 }
-                state.windows.window_handlers.insert(
+                state.windows_mut().window_handlers.insert(
                     (id, event),
                     crate::vm::handler_store::register(ctx.stash(callback)),
                 );
@@ -244,7 +236,7 @@ impl Runtime {
     pub fn set_window_surface_size(&mut self, id: u64, width: u32, height: u32) -> bool {
         let changed = {
             let mut state = self.reactive.borrow_mut();
-            let Some(size) = state.windows.window_sizes.get_mut(&id) else {
+            let Some(size) = state.windows_mut().window_sizes.get_mut(&id) else {
                 return false;
             };
             if size.size == (width, height) {
@@ -254,17 +246,9 @@ impl Runtime {
             let size = *size;
             let mut changed = false;
             for (signal, value) in [(size.width, width), (size.height, height)] {
-                let value = IpcValue::Integer(i64::from(value));
-                if state.reactive.values.get(&signal) == Some(&value) {
-                    continue;
-                }
-                let Some(graph) = state.reactive.graph.as_mut() else {
-                    continue;
-                };
-                if graph.write(signal, value.clone()).is_ok() {
-                    state.reactive.values.insert(signal, value);
-                    changed = true;
-                }
+                changed |= state
+                    .reactive_mut()
+                    .update(signal, IpcValue::Integer(i64::from(value)));
             }
             changed
         };
@@ -322,7 +306,7 @@ impl Runtime {
                 let handler = self
                     .reactive
                     .borrow()
-                    .windows
+                    .windows()
                     .surface_handlers
                     .get(&event)
                     .cloned();
@@ -360,7 +344,7 @@ impl Runtime {
         let handler = self
             .reactive
             .borrow()
-            .windows
+            .windows()
             .window_handlers
             .get(&(id, event))
             .cloned()?;

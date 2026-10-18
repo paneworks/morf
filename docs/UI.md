@@ -199,9 +199,9 @@ numbers; writing to a node from inside one is refused.
 ui.Layout {
   anchors = { fill = true },
   measure = function(available, children)
-    local h = 0
-    for _, c in ipairs(children) do h = math.max(h, c.height) end
-    return available.width, h
+    local w, h = 0, 0
+    for _, c in ipairs(children) do w, h = w + c.width, math.max(h, c.height) end
+    return available.width < math.huge and available.width or w, h
   end,
   place = function(bounds, children)
     local out = {}
@@ -216,7 +216,7 @@ ui.Layout {
 }
 ```
 
-`library/lib/align.lua` is exactly that bar.
+`library/lib/util/align.lua` is exactly that bar.
 
 ## 4. Lists
 
@@ -366,6 +366,30 @@ Which one, and when it moves:
   names back before the new file runs, so it finds them free too (a file
   that fails to load leaves the shell without them until the next reload).
 
+A reload that fails -- a syntax error, an error while the new file runs --
+keeps the configuration that was running, and the failure is always shown.
+`morf.on_reload_failed(function(error) end)` hears it (and
+`morf.on_reload_completed(function() end)` a reload that worked). When no
+handler takes it without raising an error of its own, the engine shows a
+band across the top of the shell's own surface instead: the file, the line
+when the error names one, and the error, wrapped to the surface's width
+and capped in height. The band is the engine's, outside the
+configuration's tree and layout, so no root, view or clip can move or
+remove it. It goes on the next reload that works, on any press on that
+surface (a press on the band itself goes no further), or when a handler
+registered later is given the error. `test.reload` in a spec reloads the
+same way ([TESTING.md](TESTING.md)).
+
+`morf.reload()` reloads every output's runtime, `morf.reload(true)` makes
+their surfaces again as well, and `morf.reload { output = true }` (with
+`hard` if wanted) reloads only the runtime of the output that asked: what
+a screen turned between portrait and landscape needs, leaving the other
+screens as they are. When an output turns, its shell's own surface holds
+the frame it showed last, still where it stood on the panel, until the
+configuration has laid itself out the new way up -- a reload it asked for
+as the screens changed, or at once -- and then turns that frame upright
+and fades it into the new one.
+
 Work the primary does for every screen hands its answer over with
 `morf.shared(name, initial)`: a signal like `morf.signal`'s (`get`, `set`,
 read by bindings), whose writes reach the signal of the same name in every
@@ -384,7 +408,7 @@ end
 ui.Text { text = function() return ("%d%%"):format(load:get()) end }
 ```
 
-`lib.poll` sources take `shared = true` for this (`lib.sysinfo` uses it):
+`lib.util.poll` sources take `shared = true` for this (`lib.services.sysinfo` uses it):
 the primary samples, the others read its samples, and a read on any screen
 keeps the primary sampling.
 
@@ -476,9 +500,43 @@ once, when the handler returns. A bare `node.text = "x"` in a handler
 reaches its readers before the next frame. Top-level configuration code
 flushes on each write, as it always did.
 
+### System services
+
+`morf.service(name, options)` binds a system service by its capability name
+-- `power` (batteries, power profiles) or `media` (players) -- and returns
+reactive state: a binding reading `binding.state` follows the service, and
+`owner = node` closes the binding when the node goes. What each service
+holds, and how a service is described, is in [IO.md](IO.md), *System
+services*.
+
+```lua
+local ui = require("morf.ui")
+morf.surface.namespace = "docs-services"
+morf.surface.width = 320
+morf.surface.height = 32
+
+local bar = ui.Rect { width = 320, height = 32, color = "#1b2128" }
+-- Both close when `bar` is destroyed.
+local power = assert(morf.service("power", { owner = bar }))
+local media = assert(morf.service("media", { owner = bar }))
+
+ui.reparent(ui.Text {
+  x = 10, y = 8, color = "#ffffff",
+  text = function()
+    local battery = "no battery"
+    if power.state.available then
+      battery = ("%d%%"):format(power.state.display.percentage)
+    end
+    local title = media.state.active.title
+    if title == "" then return battery end
+    return battery .. "  " .. title
+  end,
+}, bar)
+```
+
 ### Components
 
-`library/lib/component.lua` gives Elm's shape on these pieces: `init(args)`
+`library/lib/util/component.lua` gives Elm's shape on these pieces: `init(args)`
 returns the model's table, `view(model, send)` runs once and returns a
 tree of bindings on the model, and `update(model, msg, send)` is the one
 place the model changes. `send(msg)` returns a handler; `send_with(fn)`
@@ -527,6 +585,71 @@ asked for: a frame that came late -- the turn that asked also built a
 panel -- is not charged to it, so its first frame is its first value
 rather than a jump part of the way.
 `morf.animation.fling` coasts a property.
+
+When several states want the same property -- a panel open, peeked at,
+or at rest -- `ui.claims(node, { ... })` says who owns it instead of
+chaining conditionals in a binding:
+
+```lua
+local morf = require("morf")
+local ui = require("morf.ui")
+morf.surface.namespace = "claims"
+morf.surface.width = 320
+morf.surface.height = 200
+
+local opened = morf.signal("panel.opened", false)
+local panel = ui.Rect { width = 288, height = 200, color = "#20242c" }
+local claims = ui.claims(panel, {
+  motion = { duration = 200, easing = "out_cubic" },
+  open = { when = opened, motion = ui.spring { stiffness = 260, damping = 32 },
+           set = { x = 0, opacity = 1 } },
+  peek = { class = "asked", set = { x = -248, opacity = 1 } },
+  rest = { set = { x = -288, opacity = 0 } },
+})
+-- A scrim behind the panel, as dark as `open` is in charge.
+local scrim = ui.Rect { width = 320, height = 200, color = "#000000",
+  opacity = function() return claims.open.presence:get() * 0.4 end }
+ui.Item { width = 320, height = 200, scrim, panel }
+
+morf.ipc["toggle"] = function() opened:set(not opened:get()) end
+morf.ipc["peek"] = function() claims.peek.ask() end
+morf.ipc["unpeek"] = function() claims.peek.release() end
+```
+
+Each named entry claims the properties in its `set` while it is active;
+for each property the active claim of the highest class wins: `state`
+over `asked` over `reflex` over `posture` over `ambient`. Two active
+claims of one class on one property go to the one declared first:
+claims from an earlier `ui.claims` call before a later one, and inside
+one call, by their names in byte order (`beta` before `zeta`). A claim
+is active while its `when` holds -- a function read like a binding, a
+signal, or a boolean, true by Lua's truth (`0` and `""` hold). With no
+`when` a claim always holds, except an `asked` one: it holds from
+`claims.peek.ask()` until `claims.peek.release()`, which only asked
+claims have. `class` is `state` by default for a claim with a `when`,
+`ambient` for one without.
+
+A target is a value, a signal or a function; one that changes aims the
+property again. `motion` is a behaviour table (`{ duration, easing }`,
+`ui.spring { ... }`, `ui.smoothed { ... }`) for the whole set or one
+claim, and a property with neither moves by its own `behavior`. When a
+property's winner or its target changes, the property's animation is
+aimed at the new target by the winner's motion: it goes on from where
+it is with the speed it has, whether a spring takes over from a tween or
+the other way round. The claims that win when `ui.claims` is called set
+their properties at once, as a constructor would.
+
+`claims.open.presence` is a read-only signal, 0 while the claim yields
+and 1 while it owns every property it sets, moved by the motion moving
+its first property -- along the same easing curve, or the same spring
+-- so binding a shade, a radius or an outline to it paints according to
+who is in charge. A claimed property is the claims' alone: writing it,
+binding it, playing or flinging it, following another node with it is
+refused, and claiming a property that already has a binding, a `loop`,
+a follow or a `states` change is refused too, the whole `ui.claims`
+call with it. While its node leaves, the properties its `exit` moves are
+the exit's; taken back, they go where their claims say. `claims.open.remove()`
+takes a claim out, and a node's claims go with it.
 
 An `easing` is a name (`"out_cubic"`), a cubic Bézier `{ x1, y1, x2, y2 }` (four numbers in order, or those named fields),
 or a spline of several: `{ spline = { x1, y1, x2, y2, x, y, ... } }`, each
@@ -647,9 +770,11 @@ runs once then, deepest node first, so what the node's Lua made for it —
 a `morf.clipboard.watch`, a service subscription, a timer outside the tree
 — can be let go of. It runs as a handler once nothing else is running (never
 in the middle of a flush), with a handler's fuel; its writes flush when it
-returns, and an error in it is logged. Groups, loops, bindings and handlers
+returns, and an error in it is logged. A `morf.service` binding made with
+`owner = node` closes the same way, after the node's `on_destroyed`. Groups, loops, bindings and handlers
 that belong to a destroyed node end with it.
 
+<!-- morf-check: skip: elided with ...; shows the on_destroyed shape only -->
 ```lua
 local function clock_face()
   local unsubscribe = services.time.subscribe(function(t) ... end)
@@ -757,7 +882,7 @@ ui.Rect {
 The whole table is one property: a binding may return it, and a behavior
 on it moves every stop's colour and position at once.
 
-### Frosted glass
+### Glass
 
 `backdrop_blur` on a `Rect` or `ClipRect` takes a radius, in logical
 pixels: whatever the same surface drew beneath the shape — a wallpaper
@@ -765,7 +890,9 @@ drawn inline, the panels under a popover — is blurred and drawn back
 inside it, corners and all, with the rect's own `color` over it as the
 tint. It needs nothing from the compositor, so it looks the same under
 cage, GNOME or a compositor with no blur at all. `backdrop_saturation`
-(1 by default) greys the backdrop towards 0 or deepens it above 1.
+(1 by default) greys the backdrop towards 0 or deepens it above 1, and
+`backdrop_tint` washes a colour over the result by the colour's alpha,
+for glass that should carry the theme's hue rather than only its fill.
 
 ```lua
 ui.Rect {
@@ -773,6 +900,7 @@ ui.Rect {
   color = morf.color("#1a1a1e"):alpha(0.55),  -- the tint over the blur
   backdrop_blur = 24,
   backdrop_saturation = 1.4,
+  backdrop_tint = "#3366cc33",
 }
 ```
 
@@ -783,6 +911,42 @@ is done at half resolution and below, and kept: a panel blurs again only
 when something drawn beneath it within that reach changes, so a desk whose
 clocks tick on top of its panels blurs nothing after the first frame. A
 change under the glass repaints the whole panel.
+
+The rest of the glass is three more properties, each an ordinary property
+a behavior, a spring or a binding drives:
+
+- `glass_refraction` bends what is behind like a lens with a rounded rim,
+  in logical pixels: the backdrop at the very edge is drawn from that far
+  in, the bend fading to nothing a quarter of the shorter side in from
+  the edge. Negative bends it the other way, drawing in what lies beyond
+  the edge.
+- `glass_frost` is how much of the blur shows over the backdrop as drawn:
+  1 (the default) is frosted, 0 clear, anything between a mix. `"auto"`
+  judges by what is behind, point by point: where the backdrop differs
+  from its own blur by more than a quiet ground does -- text, stripes, a
+  busy wallpaper -- it frosts, and where it is calm it stays clear. With
+  no `backdrop_blur` of its own a frosted glass blurs at 16.
+- `glass_rim` lights the edge, 0 to 1, brightest along the top and left
+  where the light falls.
+
+`glass` sets the material in one table -- `refraction`, `frost`, `rim`,
+`tint`, `blur` and `saturation` are `glass_refraction`, `glass_frost`,
+`glass_rim`, `backdrop_tint`, `backdrop_blur` and `backdrop_saturation` --
+and what it leaves out keeps its value. A behavior on any of those moves
+it when the table changes.
+
+```lua
+local pane = ui.Rect {
+  radius = 22,
+  color = "#ffffff00",
+  glass = { refraction = 18, frost = 0, rim = 0.6 },   -- clear, a lens and a lit rim
+  behavior = { glass_frost = { duration = 250 } },
+}
+pane.glass = { frost = "auto" }   -- frosted where what is behind is busy
+```
+
+Refraction, frost and rim change nothing beneath the glass, so moving
+them never blurs again; `blur` does.
 
 It only sees this surface. Over a separate wallpaper layer, or over other
 windows, the shape has nothing beneath it to blur; for that, `backdrop_blur
@@ -979,11 +1143,12 @@ dropped and its content kept, so a notification body can be drawn as it
 came. `markup` wins over `spans`, which win over `text`.
 
 ```lua
+local function open(href) morf.spawn { command = { "xdg-open", href } } end
 ui.Text {
   font_size = 14, color = theme.ink, link_color = theme.accent, wrap = true,
   spans = { "Build ", { text = "failed", bold = true, color = "#e5484d" },
             " — ", { text = "see the log", link = "file:///tmp/build.log" } },
-  on_link = function(href) morf.spawn { command = { "xdg-open", href } } end,
+  on_link = open,
 }
 ui.Text { markup = notification.body, wrap = true, max_lines = 4, on_link = open }
 ```
@@ -1349,7 +1514,7 @@ screen. `examples/demos/sdf/path.lua` has one of each.
 {size=100, segments=72})` supplies the named expressive shapes;
 `shape_curves(shape, segments)` returns normalized cubic coordinates.
 `polygon(vertices, opts)`, `regular(sides, opts)`, `star(points, inner, opts)`
-and `lobes(count, inner, opts)` build custom outlines. `lib.m3shapes` wraps these
+and `lobes(count, inner, opts)` build custom outlines. `lib.util.m3shapes` wraps these
 operations with the existing `Shape` node and morph animation controls.
 
 `graph_series(values, {width, height, samples, bottom=0, top, closed=false})`
@@ -1420,11 +1585,11 @@ A table property holding bindings among its fields -- `accessible`,
 `plot`, `view_box` -- is bound as a whole: `plot = { kind = "bars", top =
 function() return peak:get() end }`.
 
-`lib.channel.from(values)` gives a channel for a channel, a list or a
+`lib.util.channel.from(values)` gives a channel for a channel, a list or a
 function returning one -- copied in by an effect owned by the drawing
 node -- so a component can draw whatever it is handed through a channel.
 `morf.audio.monitor { channel = bars, spectrum = { bars = 56 } }` writes
-filtered bars with no Lua per frame, and `lib.sysinfo.channel(name)` is
+filtered bars with no Lua per frame, and `lib.services.sysinfo.channel(name)` is
 a history as a channel.
 
 ### Fields
@@ -1699,6 +1864,8 @@ A kit popup (`lib.kit.popup`) closes at once -- focus back, what is under
 it live again -- and then plays its theme's exit: it stays in the layer
 for the theme's `linger` (`popup_motion`'s) as a ghost that takes no input
 and gives no focus back, and is taken back if it opens again meanwhile.
+The pose its theme gives, shut and open, is held by two `ui.claims` on its
+node, so the properties that pose sets are not written by hand.
 
 ### Right to left
 
@@ -1758,6 +1925,36 @@ desktop's colour scheme, contrast and motion preferences when not told
 (`MORF_KIT_VARIANT` overrides for a run). `morf check --kit default`
 checks it against the contract.
 
+Its glass comes by name. `kit.surface { style = ... }` is a `Rect` wearing
+one of the glass surfaces (`kit.surface_styles` lists them):
+`"clear_glass"` bends what is behind at its rim and blurs none of it,
+`"frosted_glass"` blurs and greys it, `"dark_glass"` darkens it under
+light text and `"light_glass"` lightens it under dark text, the last two
+frosting only where what is behind is busy. Each style is the glass
+material above (`tokens.surfaces` holds the four tables); a `glass` or
+`color` given beside the style is used instead of the style's, and
+`kit.surface_ink(style)` is the colour text on it reads in.
+`examples/demos/render/glass-cases.lua` draws all four.
+
+```lua
+local ui = require("morf.ui")
+local kit = require("lib.kit.skins.default").kit
+
+morf.surface.namespace = "now-playing"
+morf.surface.width = 480
+morf.surface.height = 240
+
+ui.Item {
+  width = 480, height = 240,
+  ui.Rect { anchors = { fill = true }, gradient = { angle = 120, stops = { "#e76f51", "#2a9d8f" } } },
+  kit.surface {
+    style = "dark_glass", x = 40, y = 40, width = 400, height = 160, radius = 22,
+    ui.Text { x = 24, y = 24, text = "Now playing", font_size = 20,
+              color = kit.surface_ink("dark_glass") },
+  },
+}
+```
+
 ### Accessibility
 
 A screen reader is told a tree of the shown nodes that mean something:
@@ -1766,6 +1963,7 @@ every node with an `accessible_role`, every `Text` with text (a
 Tab reaches (a `"button"` unless it says otherwise). The boxes between
 them are left out, and so is a subtree under `accessible_hidden = true`.
 
+<!-- morf-check: skip: elided with ...; shows the accessible property shape only -->
 ```lua
 ui.MouseArea { accessible_role = "switch", accessible_name = "Wi-Fi",
   accessible_description = "Off while flying",
@@ -2158,17 +2356,25 @@ grain a binding reads. Motion runs on the compositor's frame callbacks;
 only when a surface gets none (a hidden window in a nested compositor)
 does the wall clock tick it instead.
 
+A turn woken only by frame callbacks -- no input, no command over IPC, no
+service thread ringing -- ticks the motion and paints first, and runs the
+desktop's news, the clock, due timers and service results, and the effect
+flush after them, once the frame is out; whatever they change is drawn on
+the next frame. Any other turn runs them before it paints. A handler that
+takes longer than a refresh still holds the frame after it: Lua runs on the
+output's own thread.
+
 Three environment variables look inside a running output's loop, each
 printed on stderr:
 
 | Variable | Prints |
 |---|---|
-| `MORF_WAKE_LOG=1` | every wake and its cause: `compositor`, `wake fd` (a service thread), or `deadline: timer`, `caret`, `image`, `dbus-timeout`, `terminal`, `tray-retry`, `clock-seconds`, `clock-minutes`, `clock-hours`, `fallback`, `pending` (the last turn left work), with how long it slept; each timer as it fires, named by the `file:line` that made it (`ui.Timer at …` for a node); and, every two seconds while anything animates, what is moving (`path.property`, marked `(loops)` when it never ends) |
+| `MORF_WAKE_LOG=1` | every wake and its cause: `compositor`, `wake fd` (a service thread), or `deadline: timer`, `caret`, `image`, `dbus-timeout`, `terminal`, `tray-retry`, `clock-seconds`, `clock-minutes`, `clock-hours`, `fallback`, `pending` (the last turn left work), with how long it slept; each timer as it fires, named by the `file:line` that made it (`ui.Timer at …` for a node); and, every two seconds while anything animates, what is moving (`path.property`, marked `(loops)` when it never ends) and the frame accounting since the last report: how many frames, how many ran late or past 2.4x the refresh interval, which stage held each of those (`services`, `handlers`, `flush`, `motion`, `layout`, `paint`, or `waiting` when none did), and the time each stage was charged |
 | `MORF_FRAME_LOG=1` | every painted frame and what it cost; `=2` also splits any frame over 16 ms into layout, render and the rest |
 | `MORF_SLOW_MS=N` | any stage of a turn that held the output longer than N ms (default 150) |
 | `MORF_PROFILE=1` | with each slow stage, whose work filled it (below) |
 
-Every line these print starts with the time, `[12345.678]`: milliseconds
+Loop, wake and frame-summary lines start with `[12345.678]`: milliseconds
 on the monotonic clock (`CLOCK_MONOTONIC`, Python's `time.monotonic()`), so
 a log can be lined up with a screen recording or another process's log.
 
@@ -2191,6 +2397,13 @@ click) by the `file:line` of its function; a `timer`, `loader build`,
 D-Bus call`, `get` and `set` are the synchronous `morf.dbus` calls -- a
 turn that waits on the bus says so. `engine: …` is the engine's own
 bookkeeping between them. Off, it costs nothing.
+
+`MORF_FRAME_LOG=2` also reports individual slow image preparations: source
+probing, decoding, GPU upload, animation work and texture-cache maintenance.
+These use the `MORF_RENDER_SPLIT_MS` threshold (50 ms by default). Image source
+labels are bounded to 96 characters and escaped; inline SVG/data payloads are
+represented only by their byte length. These detail lines accompany the
+timestamped frame summaries. They measure CPU stages, not GPU completion.
 
 A shell that wakes more than it should says why under `MORF_WAKE_LOG`:
 a `clock-seconds` every second is a binding reading `morf.clock` where
@@ -2217,6 +2430,85 @@ swapchain as before.
 | `MORF_PRESENT=swapchain` | presents through the swapchain instead (`MORF_PRESENT_MODE=fifo\|mailbox\|immediate` picks its mode) |
 | `MORF_PRESENT_BUFFERS=N` | how many buffers of its own a surface uses at most (default 4) |
 | `MORF_PRESENT_WAIT_MS=N` | how long a frame waits for the compositor to give a buffer back before it is skipped (default 250); a skipped frame's changes go with the next one |
+| `MORF_DEPTH=10` | presents deeper than eight bits a channel where the compositor and the GPU both can (see below) |
+| `MORF_HDR=1` | presents HDR (scRGB, or PQ; `MORF_HDR=pq` prefers PQ for opaque surfaces) where the compositor can; implies `MORF_DEPTH=10`; `MORF_HDR_WHITE=N` sets SDR white in cd/m² (see below) |
+
+#### Ten-bit output
+
+`MORF_DEPTH=10` draws each surface into half-float targets and presents
+it as a deeper format the compositor advertises for `zwp_linux_dmabuf_v1`
+(or the swapchain offers) and the GPU can export: `XBGR2101010` for a
+surface declared opaque (`morf.surface.opaque = true`), `ABGR16161616F`
+for any surface, since ten-bit formats keep only two bits of alpha and a
+translucent surface's edges and shadows would come out in four steps.
+Where neither is taken it falls back to eight bits, `ARGB8888`, as without
+the setting; the log says which was chosen (and `MORF_GPU_LOG=1` what
+the compositor advertised). Gradients stop
+banding; nothing else changes. Alone this is precision only: colours are
+still sRGB, presented as sRGB. HDR, below, builds on it.
+
+#### HDR output
+
+`MORF_HDR=1` asks for HDR: it implies `MORF_DEPTH=10`, and each surface
+presented through morf's own buffers is described to the compositor with
+`wp_color_manager_v1` (a parametric image description on the surface's
+`wp_color_management_surface_v1`):
+
+| Buffer | Described as | 1.0 of SDR white lands at |
+|---|---|---|
+| `ABGR16161616F` (any surface, where the compositor takes `ext_linear`) | extended linear over sRGB primaries (scRGB) | 1.0 |
+| `XBGR2101010` (opaque surface, without `ext_linear` or with `MORF_HDR=pq`) | PQ (ST 2084) over BT.2020 | the reference white, 203 cd/m² by default |
+| `ABGR16161616F` (translucent surface, without `ext_linear`) | PQ as above | the reference white |
+
+scRGB comes first because a compositor anchors its 1.0 at SDR white: the
+SDR parts of a frame look exactly as without HDR. PQ is absolute
+luminance, and what a compositor makes of it on an SDR output is its own
+affair -- Hyprland 0.55 tone-maps it, so SDR white shows at about 220 of
+255 and mid-grey at 160 rather than 128, in its screenshots as on screen.
+`MORF_HDR=pq` asks for PQ on opaque surfaces anyway.
+
+Through the swapchain (`MORF_PRESENT=swapchain`) the driver owns the
+surface's description, so HDR is a colour space the swapchain offers for
+the deep format -- `ExtendedSrgbLinear` or `Bt2100Pq` -- chosen the same
+way and encoded by the same composite; Mesa's WSI then describes the
+surface to the compositor. A swapchain offering neither stays sRGB.
+
+Content is authored as before -- sRGB colours, blended as `morf.surface.blend`
+says -- and only the composite at the end of the frame changes: linear
+light is taken to BT.2020 primaries, scaled so SDR white sits at the
+reference white, and PQ-encoded; or, for scRGB, written as linear light.
+SDR content therefore looks as it did. `MORF_HDR_WHITE=N` puts SDR white at
+N cd/m² (80 to 1000) where the compositor takes `set_luminances`; without
+it, at the 203 cd/m² PQ implies.
+
+What cannot be had falls back, surface by surface, to the plain sRGB
+frame: a compositor without colour management (or without PQ and BT.2020),
+a swapchain without an HDR colour space, an eight-bit buffer. The log says
+once per encoding what the compositor advertised and what each surface
+was described as:
+
+```
+morf: gpu: hdr asked; wp_color_manager_v1: parametric true, luminances true, pq true, ext_linear true, bt2020 true, srgb true; surface described as PQ over BT.2020, SDR white at 203 cd/m²
+```
+
+`morf.capabilities.hdr` says whether the compositor can describe either
+encoding, `morf.capabilities.hdr_transfer` which (`"pq"`, `"ext_linear"`,
+`"pq,ext_linear"` or `"none"`). Each output's preferred description --
+transfer function, primaries, luminances -- is read too (`Backend::output_color` in
+`morf-app`).
+
+Brighter than SDR white is asked for per node, with `hdr`: how many times
+SDR white the node's `color` shines at its brightest (1 to 100, default 1),
+multiplied in linear light. It applies to the node's own `color` -- a
+rectangle's fill, a text's glyphs -- once some surface presents HDR, and
+is ignored otherwise, so an SDR frame looks as it was written:
+
+```lua
+ui.Rect { color = "#ffd27f", hdr = 3 }  -- a highlight three times SDR white
+```
+
+It needs linear blending (the default) to keep its headroom: blending in
+sRGB clamps each colour to SDR white first.
 
 ## 8. Idioms to prefer
 
@@ -2501,7 +2793,7 @@ local menu = popup.make("menu", { items = {
 } })
 menu.open(button)            -- beside its anchor; menu.close(), menu.toggle(button)
 
-popup.make("dialog", { title = "Discard?", body = "...", width = 360,
+popup.make("dialog", { title = "Discard?", body = "...", width = 360, root = surface_root,
   buttons = { { label = "Cancel" }, { label = "Discard", on_clicked = discard } } }).open()
 
 popup.toast { text = "Copied", timeout = 2500, root = node }
@@ -2879,7 +3171,8 @@ local node, box = lib.kit.transform.make("floating_panel", {
   on_committed = function(x, y, w, h, angle) save(x, y, w, h) end,
   on_close = function() end,
 })
-box.maximize()  box.minimize()  box.restore()  box.set(x, y, w, h)  box.t.box_width
+box.maximize()  box.minimize()  box.restore()  box.set(x, y, w, h)
+local live_width = box.t.box_width
 
 ```
 The node returned is the area the box floats in (filling its parent, or
@@ -3559,7 +3852,7 @@ Collection: the arrows walk it, typing jumps, Return or a press picks)
 whose rows set each family's name in the theme's face and a line in
 the family itself, and under them the family the list is on in a
 larger sample (`sample = false` leaves it out). The families are
-`fonts`, or `morf.text.families()` where the engine lists them. The
+`fonts`, or `morf.font_families()` where the engine lists them. The
 search ranks them fuzzily (`filter = false` leaves the list as given
 and only calls `on_search(query)` -- a configuration that pages its own
 list); Return in the search picks the first. An empty name keeps a
@@ -3578,7 +3871,7 @@ maximise, close -- for a window that decorates itself.
 ```lua
 local node = composites.header_bar {
   id = "header", width = function() return win.width end, window = win,
-  title = "Settings", subtitle = function() return page:get() end,
+  title = "Settings", subtitle = function() return page_title:get() end,
   start = { toggle_button }, ["end"] = { menu_button },
 }
 
@@ -3875,7 +4168,7 @@ local node, side = composites.sidebar {
   collapsed = false,                     -- icon-only; a binding, or the toggle's
   on_collapsed = function(collapsed) end,
 }
-side.select("sent") ; side.collapse(true) ; side.current() ; side.toggle_section(2)
+side.select("sent") ; side.collapse(true) ; side.current() ; side.expanded(2)
 
 ```
 Each section is a kit `collapsible_section` (a Disclosure: a press,
@@ -4097,7 +4390,7 @@ A wizard, or stepper (composite: Navigation wizard + Selection header).
 local node, wiz = composites.wizard {
   id = "setup", width = 520, height = 340,
   steps = {
-    { title = "Account", content = function(w, h) return form end,
+    { title = "Account", content = function(w, h) return account_form end,
       validate = function() if name == "" then return false, "Enter a name" end return true end },
     { title = "Theme", content = ... },
     { title = "Done", content = ... },

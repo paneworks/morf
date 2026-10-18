@@ -42,13 +42,13 @@ use morf_scene::{ListModel, Value as SceneValue};
 use morf_value::IpcTable;
 
 use crate::{
-    reactive_execute::drive_executor,
-    scene_bindings::*,
-    serialization::scene_to_lua,
-    state::*,
-    surface_types::*,
-    table_menu::{optional_closure, table_bool, table_number},
-    types::*,
+    api::ui::scene::*,
+    runtime::host_types::*,
+    runtime::state::*,
+    value::table::{optional_closure, table_bool, table_number},
+    vm::execute::drive_executor,
+    vm::loader::scene_to_lua,
+    vm::types::*,
 };
 use morf_runtime::Handler;
 
@@ -129,15 +129,15 @@ fn object_id(value: LuaValue<'_>, what: &str) -> Result<u32, HostError> {
 
 /// Reads a signal, telling a running binding it depends on it.
 fn track(state: &mut ReactiveState, id: SignalId) -> Option<IpcValue> {
-    if let Some(active) = &mut state.active {
+    if let Some(active) = state.tracking_mut().capture() {
         active.reads.insert(id);
     }
-    state.reactive.values.get(&id).cloned()
+    state.reactive().value(id).cloned()
 }
 
 fn host(state: &mut ReactiveState) -> &mut AudioHost {
     state
-        .audio
+        .audio_mut()
         .as_mut()
         .expect("morf.audio is installed with the runtime")
 }
@@ -158,8 +158,8 @@ fn list_model_userdata<'gc>(
     model: &Rc<RefCell<ListModel>>,
 ) -> Result<UserData<'gc>, HostError> {
     let metatable = state
-        .model_metatable
-        .clone()
+        .metatables()
+        .model()
         .ok_or_else(|| HostError("list models are not installed".into()))?;
     let userdata = UserData::new_static(
         &ctx,
@@ -173,26 +173,21 @@ fn list_model_userdata<'gc>(
 
 pub(crate) fn install_audio_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     {
         let mut state = state.borrow_mut();
-        let graph = state
-            .reactive
-            .graph
-            .as_mut()
-            .expect("the graph is not running at install");
-        let available = graph.signal("audio.available", IpcValue::Boolean(false));
-        let revision = graph.signal("audio.revision", IpcValue::Integer(0));
-        state
-            .reactive
-            .values
-            .insert(available, IpcValue::Boolean(false));
-        state.reactive.values.insert(revision, IpcValue::Integer(0));
-        state.reactive.signals.push(available);
-        state.reactive.signals.push(revision);
-        state.audio = Some(AudioHost {
+        const RUNNING: &str = "the graph is not running at install";
+        let available = state
+            .reactive_mut()
+            .signal("audio.available", IpcValue::Boolean(false))
+            .expect(RUNNING);
+        let revision = state
+            .reactive_mut()
+            .signal("audio.revision", IpcValue::Integer(0))
+            .expect(RUNNING);
+        *state.audio_mut() = Some(AudioHost {
             session: Session::default(),
             sinks: Rc::new(RefCell::new(ListModel::default())),
             sources: Rc::new(RefCell::new(ListModel::default())),
@@ -338,8 +333,8 @@ pub(crate) fn install_audio_api<'gc>(
     let metatable = Table::new(&ctx);
     metatable.set_field(ctx, "__index", index);
     audio.set_metatable(ctx, Some(metatable));
-    crate::api_audio_spectrum::install(ctx, audio);
-    crate::api_audio_equalizer::install(ctx, audio);
+    crate::api::media::audio_spectrum::install(ctx, audio);
+    crate::api::media::audio_equalizer::install(ctx, audio);
     morf.set_field(ctx, "audio", audio);
 }
 
@@ -356,7 +351,7 @@ pub(crate) fn execute_audio_handler(
         .collect::<Result<Vec<_>, _>>()?;
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(closure))
+        ctx.fetch(&crate::vm::handler_store::stashed(closure)?)
             .into(),
         Variadic(args),
     );

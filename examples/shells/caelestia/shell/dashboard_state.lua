@@ -72,4 +72,12 @@ function M.context(i)
   return contexts[i]
 end
 
+--- Opens the dashboard on the tab of `key`; its page is built as it shows.
+function M.show(key)
+  for i, t in ipairs(require("dashboard_model").tabs) do
+    if t.key == key then M.tab:set(i) end
+  end
+  require("dashboard").drawer.set(true)
+end
+
 return M

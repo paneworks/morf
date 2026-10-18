@@ -22,11 +22,12 @@ impl Timer {
         let (tx, ticks) = mpsc::sync_channel(1);
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = Arc::clone(&stop);
+        let waker = crate::waker();
         let join = thread::spawn(move || {
             while !worker_stop.load(Ordering::Acquire) {
                 thread::park_timeout(interval);
                 let _ = tx.try_send(());
-                crate::wake_all();
+                waker.wake();
             }
         });
         Ok(Self {

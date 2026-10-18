@@ -1,10 +1,9 @@
 use luna::{Callback, CallbackReturn, Context, Table, UserRef, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use morf_runtime::animation::fling;
 
-use crate::{scene_bindings::*, state::*};
+use crate::{api::ui::scene::*, runtime::state::*};
 
 /// Installs `morf.animation.fling`, which sets a property coasting.
 ///
@@ -20,7 +19,7 @@ use crate::{scene_bindings::*, state::*};
 /// to.
 pub(crate) fn install_fling_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let pushes = Rc::clone(&state);
@@ -65,10 +64,12 @@ pub(crate) fn install_fling_api<'gc>(
         let high = optional_number(ctx, table, "max")?;
         let physics = fling::decay(friction, min_velocity, gravity, restitution, low, high)
             .map_err(HostError)?;
+        crate::api::ui::scene::refuse_claimed(&state.borrow(), node, &property)
+            .map_err(HostError)?;
 
         state
             .borrow_mut()
-            .scene
+            .scene_mut()
             .fling(node, &property, velocity, physics)
             .map_err(|error| HostError(error.to_string()))?;
         stack.replace(ctx, true);
@@ -91,12 +92,15 @@ pub(crate) fn install_fling_api<'gc>(
 /// owning the motion. It computes the push at whatever rate suits it and the
 /// engine keeps integrating every frame in between; writing positions instead
 /// would make the configuration the clock.
-pub(crate) fn impulse<'gc>(ctx: Context<'gc>, state: Rc<RefCell<ReactiveState>>) -> Callback<'gc> {
+pub(crate) fn impulse<'gc>(
+    ctx: Context<'gc>,
+    state: Rc<StateCell<ReactiveState>>,
+) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (node, property, delta): (UserRef<NodeToken>, String, f64) = stack.consume(ctx)?;
         let pushed = state
             .borrow_mut()
-            .scene
+            .scene_mut()
             .impulse(node.handle, &property, delta)
             .map_err(|error| HostError(error.to_string()))?;
         stack.replace(ctx, pushed);

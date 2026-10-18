@@ -5,25 +5,31 @@
 //! `__morf_test.click(...)`, which lands here, which drives the other one
 //! through [`Headless`] -- the same code the shell's own loop runs.
 
+mod input;
+mod pixels;
+mod query;
+mod subject;
+mod values;
+
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use morf_host::morf_lua::{LogLevel, Runtime};
-use morf_host::morf_scene::NodeHandle;
+use morf_lua::{LogLevel, Runtime};
+use morf_scene::NodeHandle;
 use morf_value::{IpcTable, IpcValue};
 
 use crate::runner_args::RunnerArgs;
-use crate::test_host_input::{
-    accessible, accessible_action, click, key, leave, motion, nodes, press, resize_window, text_of,
-    touch, type_text, wheel,
+use input::{click, key, leave, motion, press, touch, type_text, wheel};
+use morf_host::headless::Headless;
+use query::{accessible, accessible_action, nodes, text_of};
+use subject::{
+    approve, frames, ipc, load, logs, reload, resize_window, snapshot, stub_run, surfaces,
 };
-use morf_host::headless::{Headless, LoadOptions};
-
-const SUBJECT: &str = include_str!("test_subject.lua");
+use values::{number, optional_text};
 
 /// What a spec file shares between its tests.
 pub(crate) struct TestHost {
@@ -41,9 +47,13 @@ pub(crate) struct TestHost {
     logs_cleared: usize,
     /// Where the current test's log lines begin.
     test_logs: usize,
+    /// The subject's effect errors when the current test began.
+    test_effect_errors: u64,
     /// Why there is no GPU, once that is known, so a spec full of
     /// snapshots asks the driver once.
     no_gpu: Option<String>,
+    /// Frames `test.frame` rendered, by the number each was handed out as.
+    frames: Vec<morf_host::headless::render::Picture>,
     started: Instant,
 }
 
@@ -61,7 +71,9 @@ impl TestHost {
             notes: Vec::new(),
             logs_cleared: 0,
             test_logs: 0,
+            test_effect_errors: 0,
             no_gpu: None,
+            frames: Vec::new(),
             started: Instant::now(),
         }
     }
@@ -97,6 +109,20 @@ impl TestHost {
             .subject
             .as_ref()
             .map_or(0, |subject| subject.logs.len());
+        self.test_effect_errors = self
+            .subject
+            .as_ref()
+            .map_or(0, |subject| subject.runtime.effect_errors());
+    }
+
+    /// How many errors the subject's effects raised during the current test.
+    pub(crate) fn effect_errors(&self) -> u64 {
+        self.subject.as_ref().map_or(0, |subject| {
+            subject
+                .runtime
+                .effect_errors()
+                .saturating_sub(self.test_effect_errors)
+        })
     }
 
     /// The subject's error and warning lines, for a failed test's report.
@@ -116,253 +142,18 @@ impl TestHost {
     }
 }
 
-// ------------------------------------------------------------------ values
-
-pub(crate) fn text(value: &IpcValue) -> Option<String> {
-    match value {
-        IpcValue::String(text) => Some(text.clone()),
-        IpcValue::Integer(number) => Some(number.to_string()),
-        IpcValue::Number(number) => Some(number.to_string()),
-        _ => None,
-    }
-}
-
-pub(crate) fn number(value: Option<&IpcValue>, what: &str) -> Result<f64, String> {
-    match value {
-        Some(IpcValue::Integer(number)) => Ok(*number as f64),
-        Some(IpcValue::Number(number)) if number.is_finite() => Ok(*number),
-        other => Err(format!("{what} must be a number, not {other:?}")),
-    }
-}
-
-pub(crate) fn optional_text(value: Option<&IpcValue>) -> Option<String> {
-    value.and_then(text)
-}
-
-fn field<'a>(table: Option<&'a IpcValue>, name: &str) -> Option<&'a IpcValue> {
-    match table {
-        Some(IpcValue::Table(table)) => match &**table {
-            IpcTable::Map(fields) => fields.get(name),
-            IpcTable::List(_) => None,
-        },
-        _ => None,
-    }
-}
-
-pub(crate) fn list(value: Option<&IpcValue>) -> Vec<IpcValue> {
-    match value {
-        Some(IpcValue::Table(table)) => match &**table {
-            IpcTable::List(items) => items.clone(),
-            IpcTable::Map(fields) if fields.is_empty() => Vec::new(),
-            IpcTable::Map(_) => Vec::new(),
-        },
-        _ => Vec::new(),
-    }
-}
-
-pub(crate) fn map(fields: Vec<(&str, IpcValue)>) -> IpcValue {
-    IpcValue::Table(Arc::new(IpcTable::Map(
-        fields
-            .into_iter()
-            .map(|(key, value)| (key.to_owned(), value))
-            .collect(),
-    )))
-}
-
-pub(crate) fn string(text: impl Into<String>) -> IpcValue {
-    IpcValue::String(text.into())
-}
-
-/// A long bracket that `text` cannot end early.
-fn long_string(text: &str) -> String {
-    let mut level = 1;
-    while text.contains(&format!("]{}]", "=".repeat(level))) {
-        level += 1;
-    }
-    let equals = "=".repeat(level);
-    format!("[{equals}[{text}]{equals}]")
-}
-
-// ------------------------------------------------------------------- load
-
-fn load(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
-    let options_value = arguments.get(1);
-    let source = optional_text(field(options_value, "source"));
-    let path = match (optional_text(arguments.first()), &source) {
-        (Some(path), _) => morf_host::headless::resolve(&path, Some(&host.spec_dir)),
-        (None, Some(_)) => host.spec_dir.join("inline.lua"),
-        (None, None) => return Err("test.load wants a path or { source = ... }".to_owned()),
-    };
-    let mut options = LoadOptions::new(path.clone());
-    options.source = source.map(String::into_bytes);
-    options.size = host.defaults.size;
-    options.scale = host.defaults.scale as i32;
-    options.policy = host.defaults.policy;
-    if let Some(IpcValue::Table(size)) = field(options_value, "size")
-        && let IpcTable::List(items) = &**size
-    {
-        options.size = (
-            number(items.first(), "size[1]")?.max(1.0) as u32,
-            number(items.get(1), "size[2]")?.max(1.0) as u32,
-        );
-    }
-    if let Some(screens) = field(options_value, "screens") {
-        // Zero is every output gone: the configuration runs outputless.
-        options.screens = number(Some(screens), "screens")?.clamp(0.0, 16.0) as usize;
-    }
-    options.args = list(field(options_value, "args"))
-        .iter()
-        .filter_map(text)
-        .collect();
-    let env = match field(options_value, "env") {
-        Some(value) => value.to_json(),
-        None => serde_json::json!({}),
-    };
-    let stubs = host
-        .stubs
-        .iter()
-        .map(|(name, json)| {
-            let value = serde_json::from_str::<serde_json::Value>(json).unwrap_or_default();
-            (name.clone(), value)
-        })
-        .collect::<serde_json::Map<_, _>>();
-    let data = serde_json::json!({ "stubs": stubs, "env": env }).to_string();
-    options.prelude = Some(SUBJECT.replace("__MORF_TEST_DATA__", &long_string(&data)));
-    // The old subject goes first: its children are killed and reaped
-    // before the next configuration starts its own.
-    host.subject = None;
-    host.handles.clear();
-    host.numbers.clear();
-    host.logs_cleared = 0;
-    host.test_logs = 0;
-    let subject = Headless::load(&options).map_err(|failure| {
-        let mut message = format!("{} did not load: {}", path.display(), failure.error);
-        for entry in failure
-            .logs
-            .iter()
-            .filter(|entry| entry.level >= LogLevel::Warn)
-        {
-            message.push_str("\n    ");
-            message.push_str(&entry.message);
-        }
-        message
-    })?;
-    host.subject = Some(subject);
-    surfaces(host)
-}
-
-fn surfaces(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
-    let subject = host.subject()?;
-    let rows = subject
-        .surfaces
-        .iter()
-        .map(|surface| {
-            map(vec![
-                ("label", string(surface.label())),
-                ("kind", string(surface.kind)),
-                ("name", string(surface.name.clone())),
-                ("width", IpcValue::Integer(i64::from(surface.size.0))),
-                ("height", IpcValue::Integer(i64::from(surface.size.1))),
-                ("x", IpcValue::Integer(i64::from(surface.position.0))),
-                ("y", IpcValue::Integer(i64::from(surface.position.1))),
-                ("visible", IpcValue::Boolean(surface.visible)),
-            ])
-        })
-        .collect();
-    Ok(vec![IpcValue::Table(Arc::new(IpcTable::List(rows)))])
-}
-
-// ------------------------------------------------------------ the subject
-
-fn ipc(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
-    let verb = optional_text(arguments.first()).ok_or("test.ipc wants a verb")?;
-    let subject = host.subject()?;
-    let result = subject
-        .runtime
-        .call_ipc(&verb, &arguments[1..])
-        .map_err(|error| format!("ipc {verb}: {error}"))?;
-    // As the shell would paint after the call: effects flushed, a layout.
-    subject.frame(Duration::ZERO);
-    Ok(result)
-}
-
-fn logs(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
-    let level = optional_text(arguments.first())
-        .and_then(|name| LogLevel::parse(&name))
-        .unwrap_or(LogLevel::Debug);
-    let skip = host.logs_cleared;
-    let subject = host.subject()?;
-    let rows = subject
-        .logs
-        .iter()
-        .skip(skip)
-        .filter(|entry| entry.level >= level)
-        .map(|entry| {
-            map(vec![
-                ("level", string(entry.level.name())),
-                ("message", string(entry.message.clone())),
-            ])
-        })
-        .collect();
-    Ok(vec![IpcValue::Table(Arc::new(IpcTable::List(rows)))])
-}
-
-fn stub_run(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
-    let program = optional_text(arguments.first()).ok_or("test.stub_run wants a program")?;
-    let answer = arguments
-        .get(1)
-        .map(IpcValue::to_json)
-        .unwrap_or(serde_json::Value::Null)
-        .to_string();
-    host.stubs.insert(program.clone(), answer.clone());
-    if let Some(subject) = &mut host.subject {
-        subject
-            .runtime
-            .call_ipc("__morf_test.stub", &[string(program), string(answer)])
-            .map_err(|error| error.to_string())?;
-    }
-    Ok(Vec::new())
-}
-
-fn snapshot(host: &mut TestHost, arguments: &[IpcValue]) -> Result<Vec<IpcValue>, String> {
-    let name = optional_text(arguments.first()).ok_or("test.snapshot wants a file name")?;
-    if let Some(reason) = &host.no_gpu {
-        let note = format!("snapshot {name} skipped: {reason}");
-        host.notes.push(note.clone());
-        return Ok(vec![IpcValue::Boolean(false), string(note)]);
-    }
-    let directory = host
-        .defaults
-        .snapshots
-        .clone()
-        .unwrap_or_else(|| host.spec_dir.join("snapshots"));
-    let path = if Path::new(&name).is_absolute() {
-        PathBuf::from(&name)
-    } else {
-        directory.join(&name)
-    };
-    let scale = host.defaults.scale;
-    let wanted = optional_text(arguments.get(1));
-    let subject = host.subject()?;
-    match morf_host::headless_render::render_to(subject, wanted.as_deref(), scale, &path) {
-        Ok(_) => Ok(vec![
-            IpcValue::Boolean(true),
-            string(path.display().to_string()),
-        ]),
-        Err(error) if error.starts_with("no GPU") => {
-            host.notes.push(format!("snapshot {name} skipped: {error}"));
-            host.no_gpu = Some(error.clone());
-            Ok(vec![IpcValue::Boolean(false), string(error)])
-        }
-        Err(error) => Err(error),
-    }
-}
-
 /// Installs every host function into the spec's runtime.
 pub(crate) fn install(runtime: &mut Runtime, host: &Shared) {
     type Handler = fn(&mut TestHost, &[IpcValue]) -> Result<Vec<IpcValue>, String>;
-    let handlers: [(&'static str, Handler); 30] = [
+    let handlers: [(&'static str, Handler); 38] = [
         ("load", load),
+        ("approve", approve),
+        ("reload", reload),
+        ("problems", |host, _| {
+            let problems = host.subject()?.problems.iter().cloned();
+            let list = problems.map(IpcValue::String).collect();
+            Ok(vec![IpcValue::Table(Arc::new(IpcTable::List(list)))])
+        }),
         ("surfaces", |host, _| surfaces(host)),
         ("now", |host, _| {
             let now = host.subject()?.now();
@@ -407,6 +198,7 @@ pub(crate) fn install(runtime: &mut Runtime, host: &Shared) {
         ("key", key),
         ("type", type_text),
         ("ipc", ipc),
+        ("frames", frames),
         ("ipc_verbs", |host, _| {
             let verbs = host
                 .subject()?
@@ -421,6 +213,8 @@ pub(crate) fn install(runtime: &mut Runtime, host: &Shared) {
         ("logs", logs),
         ("clear_logs", |host, _| {
             host.logs_cleared = host.subject()?.logs.len();
+            // A spec that clears the log has read what it expected there.
+            host.test_effect_errors = host.subject()?.runtime.effect_errors();
             Ok(Vec::new())
         }),
         ("stub_run", stub_run),
@@ -441,11 +235,15 @@ pub(crate) fn install(runtime: &mut Runtime, host: &Shared) {
                 .map_err(|error| error.to_string())
         }),
         ("snapshot", snapshot),
+        ("frame", pixels::frame),
+        ("pixel", pixels::pixel),
+        ("region", pixels::region),
         ("note", |host, arguments| {
             host.notes
                 .push(optional_text(arguments.first()).unwrap_or_default());
             Ok(Vec::new())
         }),
+        ("resources", |host, _| resources(host)),
         ("screen", |host, _| {
             let (width, height) = host.subject()?.screen;
             Ok(vec![
@@ -462,4 +260,19 @@ pub(crate) fn install(runtime: &mut Runtime, host: &Shared) {
             Rc::new(move |arguments| handler(&mut host.borrow_mut(), &arguments)),
         );
     }
+}
+
+/// What the configuration under test holds open: `test.resources()`.
+fn resources(host: &mut TestHost) -> Result<Vec<IpcValue>, String> {
+    let counts = host.subject()?.runtime.resource_counts();
+    let count = |n: usize| IpcValue::Integer(i64::try_from(n).unwrap_or(i64::MAX));
+    Ok(vec![values::map(vec![
+        ("dbus_subscriptions", count(counts.dbus_subscriptions)),
+        ("dbus_calls", count(counts.dbus_calls)),
+        ("timers", count(counts.timers)),
+        ("processes", count(counts.processes)),
+        ("connections", count(counts.connections)),
+        ("file_watches", count(counts.file_watches)),
+        ("owned_hooks", count(counts.owned_hooks)),
+    ])])
 }

@@ -6,13 +6,14 @@ use morf_app::{
 };
 use morf_layout::{Hit, Layout};
 use morf_lua::{LayerSurfaceConfig, PopupSurfaceConfig, Runtime, ToplevelSurfaceConfig};
-use morf_render::{RenderEngine, WgpuBackend};
+use morf_paint::RenderEngine;
+use morf_render::WgpuBackend;
 use morf_scene::NodeHandle;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use crate::host::windows::Windows;
-use crate::{pacing::*, paint::*, surface_layers::*};
+use crate::{host::layers::*, paint::pacing::*, paint::*};
 
 pub use sync::sync_window_surfaces;
 
@@ -83,7 +84,7 @@ pub struct PointerInput {
     /// it has travelled, which is what tells a tap from a swipe.
     pub touches: HashMap<i32, (WindowId, Hit, f64, f64, f64)>,
     /// Pinches and edge swipes the touches are making.
-    pub gestures: crate::surface_gesture::TouchGestures,
+    pub gestures: crate::input::gesture::TouchGestures,
     pub pan: Option<crate::input::pan::TouchPan>,
     pub two_finger: Option<crate::input::two_finger::TwoFingerPan>,
     pub touch_origins: HashMap<i32, (f64, f64)>,
@@ -160,7 +161,7 @@ pub struct SurfaceEventState {
     /// Where the pointer, the buttons and the fingers are.
     pub input: PointerInput,
     /// A drag from another application over one of these surfaces.
-    pub drag: Option<crate::surface_drag::DragFollow>,
+    pub drag: Option<crate::input::drag::DragFollow>,
     /// Whether the shell's own surface owes a paint it could not make
     /// because its last frame callback had not come back yet; the callback
     /// makes it.
@@ -177,7 +178,19 @@ pub struct SurfaceEventState {
     pub forced_paint: Option<std::time::Instant>,
     /// What the shell's own surface is painted with, and what tells every
     /// window whether it is drawn or only laid out.
-    pub painter: crate::painter::Painter,
+    pub painter: crate::paint::painter::Painter,
+    /// The output's transform as this surface last knew it.
+    pub transform: Option<&'static str>,
+    /// The shell's own surface turning with its output, while it does.
+    pub turning: Option<crate::paint::cover::Turning>,
+}
+
+impl SurfaceEventState {
+    /// Whether something the configuration did not start moves every frame:
+    /// a shader reading the clock, or the surface turning.
+    pub fn animating(&self) -> bool {
+        self.animating_shaders || self.turning.is_some()
+    }
 }
 
 /// Whether a paint the shell's own surface owes -- deferred until its frame
@@ -230,7 +243,9 @@ pub fn surface_root(surface: WindowId, layer: NodeHandle, windows: &Windows) -> 
 }
 
 pub fn primary_surface_root(runtime: &Runtime) -> Result<NodeHandle, String> {
-    let roots = runtime.scene().roots();
+    let engine_roots = [runtime.reload_band_root(), runtime.cover_root()];
+    let mut roots = runtime.scene().roots();
+    roots.retain(|root| !engine_roots.contains(&Some(*root)));
     let mut window_roots = HashSet::new();
     for surface in runtime.window_surface_configs() {
         if !window_roots.insert(surface.root) {
@@ -406,7 +421,7 @@ pub fn connect_runtime_surface(runtime: &Runtime, output: &str) -> Result<LayerC
     let mut client =
         LayerClient::connect(runtime_bar_config(&config, output)?).map_err(|e| e.to_string())?;
     open_reserve_layers(&mut client, &config, output)?;
-    crate::backdrop::open_backdrop_layer(&mut client, &config, output)?;
+    crate::paint::backdrop::open_backdrop_layer(&mut client, &config, output)?;
     loop {
         client
             .blocking_dispatch()
@@ -415,7 +430,7 @@ pub fn connect_runtime_surface(runtime: &Runtime, output: &str) -> Result<LayerC
             match event {
                 Event::Configure { id, .. } if id == PRIMARY_LAYER => return Ok(client),
                 Event::Closed { id } if id == PRIMARY_LAYER => {
-                    return Err(crate::supervisor::SURFACE_CLOSED.to_owned());
+                    return Err(crate::process::supervisor::SURFACE_CLOSED.to_owned());
                 }
                 _ => {}
             }

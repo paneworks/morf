@@ -8,7 +8,7 @@
 
 use std::io;
 
-use crate::{FileDocument, FileEvent, FileView};
+use crate::{Error, FileDocument, FileEvent, FileView};
 
 /// The most one read or write of a [`FileView`] moves.
 pub const MAX_VIEW_BYTES: usize = 1024 * 1024;
@@ -19,11 +19,11 @@ pub const MAX_BUFFER: usize = 16 * 1024 * 1024;
 
 /// A buffer size as a script gives it, 1..=[`MAX_BUFFER`]; `what` names
 /// the call.
-pub fn buffer_limit(maximum: i64, what: &str) -> Result<usize, String> {
+pub fn buffer_limit(maximum: i64, what: &str) -> Result<usize, Error> {
     usize::try_from(maximum)
         .ok()
         .filter(|maximum| (1..=MAX_BUFFER).contains(maximum))
-        .ok_or_else(|| format!("{what} maximum_bytes must be 1..{MAX_BUFFER}"))
+        .ok_or_else(|| Error::Invalid(format!("{what} maximum_bytes must be 1..{MAX_BUFFER}")))
 }
 
 impl FileEvent {
@@ -39,11 +39,11 @@ impl FileEvent {
 
 impl FileView {
     /// Writes `bytes`, refused past [`MAX_VIEW_BYTES`].
-    pub fn write_bounded(&self, bytes: &[u8]) -> Result<(), String> {
+    pub fn write_bounded(&self, bytes: &[u8]) -> Result<(), Error> {
         if bytes.len() > MAX_VIEW_BYTES {
-            return Err("file write exceeds 1 MiB".to_owned());
+            return Err(Error::invalid("file write exceeds 1 MiB"));
         }
-        self.write(bytes).map_err(|error| error.to_string())
+        Ok(self.write(bytes)?)
     }
 }
 

@@ -13,7 +13,7 @@
 --       collapsed = false,                     -- icon-only; a binding, or the toggle's
 --       on_collapsed = function(collapsed) end,
 --     }
---     side.select("sent") ; side.collapse(true) ; side.current() ; side.toggle_section(2)
+--     side.select("sent") ; side.collapse(true) ; side.current() ; side.expanded(2)
 --
 -- Each section is a kit `collapsible_section` (a Disclosure: a press,
 -- Space or Return folds it, Left and Right close and open) holding a kit

@@ -9,17 +9,17 @@
 use std::io::ErrorKind;
 use std::time::Duration;
 
-use crate::{Socket, SocketServer};
+use crate::{Error, Socket, SocketServer};
 
 /// The most one send or one receive moves.
 pub const MAX_SOCKET_CHUNK: usize = 64 * 1024;
 
 /// A receive limit as a script gives it, 1..=[`MAX_SOCKET_CHUNK`].
-pub fn receive_limit(maximum: i64) -> Result<usize, String> {
+pub fn receive_limit(maximum: i64) -> Result<usize, Error> {
     usize::try_from(maximum)
         .ok()
         .filter(|maximum| (1..=MAX_SOCKET_CHUNK).contains(maximum))
-        .ok_or_else(|| "socket receive limit must be 1..65536".to_owned())
+        .ok_or_else(|| Error::invalid("socket receive limit must be 1..65536"))
 }
 
 /// A path, and the connection to it while open.
@@ -30,8 +30,8 @@ pub struct SocketView {
 
 impl SocketView {
     /// Connects to `path`.
-    pub fn connect(path: String) -> Result<Self, String> {
-        let socket = Socket::connect(&path).map_err(|error| error.to_string())?;
+    pub fn connect(path: String) -> Result<Self, Error> {
+        let socket = Socket::connect(&path)?;
         Ok(Self {
             path,
             socket: Some(socket),
@@ -55,30 +55,26 @@ impl SocketView {
     }
 
     /// Sends `bytes`; nothing while closed.
-    pub fn send(&mut self, bytes: &[u8]) -> Result<(), String> {
+    pub fn send(&mut self, bytes: &[u8]) -> Result<(), Error> {
         if bytes.len() > MAX_SOCKET_CHUNK {
-            return Err("socket send exceeds 64 KiB".to_owned());
+            return Err(Error::invalid("socket send exceeds 64 KiB"));
         }
         match self.socket.as_mut() {
-            Some(stream) => stream.send(bytes).map_err(|error| error.to_string()),
+            Some(stream) => Ok(stream.send(bytes)?),
             None => Ok(()),
         }
     }
 
-    pub fn flush(&mut self) -> Result<(), String> {
+    pub fn flush(&mut self) -> Result<(), Error> {
         match self.socket.as_mut() {
-            Some(stream) => stream.flush().map_err(|error| error.to_string()),
+            Some(stream) => Ok(stream.flush()?),
             None => Ok(()),
         }
     }
 
     /// Up to `maximum` bytes within `timeout`: `None` when closed or when
     /// nothing came in time.
-    pub fn receive(
-        &mut self,
-        maximum: usize,
-        timeout: Duration,
-    ) -> Result<Option<Vec<u8>>, String> {
+    pub fn receive(&mut self, maximum: usize, timeout: Duration) -> Result<Option<Vec<u8>>, Error> {
         let maximum = receive_limit(maximum as i64)?;
         let Some(stream) = self.socket.as_mut() else {
             return Ok(None);
@@ -92,18 +88,18 @@ impl SocketView {
             Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
                 Ok(None)
             }
-            Err(error) => Err(error.to_string()),
+            Err(error) => Err(error.into()),
         }
     }
 
     /// Connects or disconnects; whether it is connected after. Without a
     /// path there is nothing to connect to.
-    pub fn set_connected(&mut self, connected: bool) -> Result<bool, String> {
+    pub fn set_connected(&mut self, connected: bool) -> Result<bool, Error> {
         if connected && self.socket.is_none() {
             if self.path.is_empty() {
                 return Ok(false);
             }
-            self.socket = Some(Socket::connect(&self.path).map_err(|error| error.to_string())?);
+            self.socket = Some(Socket::connect(&self.path)?);
         } else if !connected {
             self.close();
         }
@@ -134,8 +130,8 @@ pub struct ServerView {
 
 impl ServerView {
     /// Listens on `path`.
-    pub fn bind(path: String) -> Result<Self, String> {
-        let server = SocketServer::bind(&path).map_err(|error| error.to_string())?;
+    pub fn bind(path: String) -> Result<Self, Error> {
+        let server = SocketServer::bind(&path)?;
         Ok(Self {
             path,
             server: Some(server),
@@ -151,23 +147,20 @@ impl ServerView {
     }
 
     /// A waiting connection, if one is waiting and the view is active.
-    pub fn accept(&self) -> Result<Option<SocketView>, String> {
+    pub fn accept(&self) -> Result<Option<SocketView>, Error> {
         let Some(listener) = self.server.as_ref() else {
             return Ok(None);
         };
-        Ok(listener
-            .try_accept()
-            .map_err(|error| error.to_string())?
-            .map(SocketView::accepted))
+        Ok(listener.try_accept()?.map(SocketView::accepted))
     }
 
     /// Starts or stops listening; whether it is listening after.
-    pub fn set_active(&mut self, active: bool) -> Result<bool, String> {
+    pub fn set_active(&mut self, active: bool) -> Result<bool, Error> {
         if active && self.server.is_none() {
             if self.path.is_empty() {
                 return Ok(false);
             }
-            self.server = Some(SocketServer::bind(&self.path).map_err(|error| error.to_string())?);
+            self.server = Some(SocketServer::bind(&self.path)?);
         } else if !active {
             self.server = None;
         }

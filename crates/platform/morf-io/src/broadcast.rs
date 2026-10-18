@@ -38,11 +38,11 @@ pub fn set_shell_socket(path: PathBuf) {
 }
 
 /// Refuses more than [`MAX_BROADCAST_ARGUMENTS`] arguments.
-pub fn check_broadcast_arguments(count: usize) -> Result<(), String> {
+pub fn check_broadcast_arguments(count: usize) -> Result<(), crate::Error> {
     if count > MAX_BROADCAST_ARGUMENTS {
-        return Err(format!(
+        return Err(crate::Error::Invalid(format!(
             "broadcast takes at most {MAX_BROADCAST_ARGUMENTS} arguments"
-        ));
+        )));
     }
     Ok(())
 }

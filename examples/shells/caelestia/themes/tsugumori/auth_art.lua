@@ -82,23 +82,27 @@ return function(ctx)
     -- once on entry; there is no time uniform or idle animation afterward.
     if W>=s(1400) then
       local phase=require("themes.tsugumori.phase")
-      local progress=ui.Item {opacity=0}
-      ui.reparent(progress,node)
+      -- Entry progress from the clock, eased out-cubic over 650 ms: the
+      -- phase timer reads it each frame, so no binding follows an animation.
+      local started
+      local function progress()
+        if not started then return 0 end
+        local t=math.min(1,(morf.time.now_ms()-started)/650)
+        return 1-(1-t)^3
+      end
       local refresh={}
       for i,x in ipairs {math.floor(W*.16),math.floor(W*.80)} do
-        local field,update=phase.field(C,function() return progress.opacity end,
+        local field,update=phase.field(C,progress,
           {id=role.."-phase-"..i,x=x,y=math.floor(H*.33),width=s(84),height=math.floor(H*.35),opacity=.22})
         ui.reparent(field,node) refresh[#refresh+1]=update
       end
-      local running,was=nil,false
+      local was=false
       morf.effect(role..".phase-entry."..(ctx.output_name or ""),function()
         local on=shown()
         if on==was then return end
         was=on
-        if running then running:stop() running=nil end
-        if not on then progress.opacity=0 return end
-        running=morf.animation.play {{node=progress,property="opacity",from=0,to=1,duration=650,easing="out_cubic"}}
-        for _,update in ipairs(refresh) do update(650) end
+        started=on and morf.time.now_ms() or nil
+        for _,update in ipairs(refresh) do update(on and 650 or 0) end
       end,{owner=node})
     end
     -- Edge register is deliberately sparse. Hide side inscriptions on phones.

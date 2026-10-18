@@ -51,6 +51,9 @@ impl Service {
         let mut buffer = [MaybeUninit::<u8>::uninit(); 16 * 1024];
         let mut raw = Vec::new();
         loop {
+            if self.stop.load(Ordering::Acquire) {
+                return;
+            }
             // The attributes as they are now: a watch added or dropped rings
             // `wake`, and the next turn polls the new set.
             let attributes = lock(&self.attributes).clone();
@@ -74,12 +77,14 @@ impl Service {
                 .map(|((id, fd), _)| (*id, Arc::clone(fd)))
                 .collect::<Vec<_>>();
             drop(fds);
-            if self.stop.load(Ordering::Acquire) {
-                return;
-            }
+            // Drained before `stop` is read: a shutdown whose ring this read
+            // swallows has set `stop` already, so it is seen here.
             if woken {
                 let mut count = [0u8; 8];
                 let _ = rustix::io::read(&self.wake, &mut count);
+            }
+            if self.stop.load(Ordering::Acquire) {
+                return;
             }
             if !changed.is_empty() {
                 let mut inner = lock(&self.inner);
@@ -93,9 +98,9 @@ impl Service {
                         });
                     }
                 }
+                ring_fresh(&mut inner);
                 drop(inner);
                 self.ready.notify_all();
-                crate::wake_all();
             }
             raw.clear();
             let mut reader = inotify::Reader::new(&self.inotify, &mut buffer);
@@ -117,8 +122,8 @@ impl Service {
             }
             let queued = self.dispatch(&raw);
             if queued {
+                ring_fresh(&mut lock(&self.inner));
                 self.ready.notify_all();
-                crate::wake_all();
             }
         }
     }
@@ -134,6 +139,7 @@ impl Service {
                 // The kernel lost events: everyone looks again.
                 for subscription in inner.subscriptions.values_mut() {
                     subscription.pending.overflowed = true;
+                    subscription.pending.fresh = true;
                     queued = true;
                 }
                 continue;
@@ -284,6 +290,7 @@ impl Service {
                 recursive: options.recursive,
                 armed: HashMap::new(),
                 pending: Pending::default(),
+                waker: crate::waker(),
             },
         );
         let target = inner.subscriptions[&id].target.clone();
@@ -337,6 +344,22 @@ impl Service {
         {
             let _ = join.join();
         }
+    }
+}
+
+/// Rings the loop of every subscription with news since it was last rung,
+/// once per loop, and no other.
+fn ring_fresh(inner: &mut Inner) {
+    let mut woken: Vec<crate::Waker> = Vec::new();
+    for subscription in inner.subscriptions.values_mut() {
+        if std::mem::take(&mut subscription.pending.fresh)
+            && !woken.iter().any(|held| held.same_loop(&subscription.waker))
+        {
+            woken.push(subscription.waker.clone());
+        }
+    }
+    for waker in woken {
+        waker.wake();
     }
 }
 

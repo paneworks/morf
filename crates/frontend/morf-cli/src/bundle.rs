@@ -24,11 +24,11 @@ use std::path::{Path, PathBuf};
 use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use morf_host::morf_lua::Runtime;
-use morf_host::morf_scene::Scene;
+use morf_lua::Runtime;
+use morf_scene::Scene;
 
 use crate::config::LoadPolicy;
-use morf_host::supervisor::execute_config;
+use morf_host::process::supervisor::execute_config;
 
 /// The last bytes of a bundle: the payload's length, then this.
 const MAGIC: &[u8; 8] = b"MORFBNDL";
@@ -96,7 +96,7 @@ pub(crate) fn write(config: &Path, output: &Path, extras: &[PathBuf]) -> Result<
     // under `fonts/` by its own name. A family the machine has not got is an
     // error here rather than a fallback on some other machine.
     for family in families_named_by(&config)? {
-        let files = morf_host::morf_text::family_files(&family);
+        let files = morf_text::family_files(&family);
         if files.is_empty() {
             return Err(format!(
                 "{} names the font family `{family}`, which is not installed here",

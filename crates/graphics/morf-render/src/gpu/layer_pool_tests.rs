@@ -37,6 +37,7 @@ fn animated_target_sizes_do_not_accumulate_unbounded_spare_memory() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn the_texture_pool_bounds_spares_and_preserves_the_current_frame() {
+    require_gpu!();
     let mut backend = pollster::block_on(WgpuBackend::new(64, 64)).unwrap();
     let budget = 8 * 1024 * 1024;
     for width in (1024..1184).step_by(4) {

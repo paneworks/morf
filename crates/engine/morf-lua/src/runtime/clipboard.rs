@@ -3,9 +3,9 @@
 use luna::{Context, Executor, Value as LuaValue, Variadic};
 use morf_scene::{NodeHandle, Value as SceneValue};
 
-use crate::api_clipboard::offer_table;
-use crate::reactive_execute::drive_executor;
-use crate::{events::*, surface_types::*, types::*};
+use crate::api::desktop::clipboard::offer_table;
+use crate::vm::execute::drive_executor;
+use crate::{runtime::events::*, runtime::host_types::*, vm::types::*};
 use morf_runtime::Handler;
 
 /// Runs one callback with arguments built inside the Lua context.
@@ -17,7 +17,7 @@ fn execute_with<'gc>(
 ) -> Result<(), String> {
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(closure))
+        ctx.fetch(&crate::vm::handler_store::stashed(closure)?)
             .into(),
         Variadic(args),
     );
@@ -34,7 +34,7 @@ impl Runtime {
     pub fn take_clipboard_requests(&mut self) -> Vec<ClipboardRequest> {
         self.reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .take_clipboard_requests()
     }
 
@@ -43,7 +43,7 @@ impl Runtime {
         !self
             .reactive
             .borrow()
-            .requests
+            .requests()
             .clipboard_watchers
             .is_empty()
     }
@@ -55,7 +55,7 @@ impl Runtime {
         let watchers = self
             .reactive
             .borrow()
-            .requests
+            .requests()
             .clipboard_watchers
             .iter()
             .filter(|(_, wants_primary)| !primary || *wants_primary)
@@ -78,9 +78,37 @@ impl Runtime {
         !watchers.is_empty()
     }
 
+    /// Dispatches a compositor clipboard selection to registered Lua callbacks.
+    pub fn dispatch_clipboard(&mut self, text: Option<String>) -> bool {
+        // Kept for a text input to paste, whether or not anybody subscribed.
+        self.reactive.borrow_mut().requests_mut().clipboard_text = text.clone();
+        let callbacks = self
+            .reactive
+            .borrow()
+            .requests()
+            .clipboard_callbacks
+            .clone();
+        let value = text.map_or(IpcValue::Nil, IpcValue::String);
+        for callback in &callbacks {
+            if let Err(message) = self.run_handler(|ctx, limits| {
+                crate::vm::execute::execute_handler_args(
+                    ctx,
+                    callback,
+                    std::slice::from_ref(&value),
+                    limits,
+                )
+            }) {
+                self.reactive
+                    .borrow_mut()
+                    .log(LogLevel::Warn, format!("clipboard callback: {message}"));
+            }
+        }
+        !callbacks.is_empty()
+    }
+
     /// Takes the offer reads the configuration asked for.
     pub fn take_offer_reads(&mut self) -> Vec<OfferReadRequest> {
-        self.reactive.borrow_mut().requests.take_offer_reads()
+        self.reactive.borrow_mut().requests_mut().take_offer_reads()
     }
 
     /// Hands a finished read to its callback as `(bytes, nil)` or `(nil, error)`.
@@ -92,7 +120,7 @@ impl Runtime {
         let Some(callback) = self
             .reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .offer_read_callbacks
             .remove(&request_id)
         else {
@@ -118,12 +146,16 @@ impl Runtime {
 
     /// Takes the drags out the configuration asked to start.
     pub fn take_drag_requests(&mut self) -> Vec<DragRequest> {
-        self.reactive.borrow_mut().requests.take_drag_requests()
+        self.reactive
+            .borrow_mut()
+            .requests_mut()
+            .take_drag_requests()
     }
 
     /// Tells whoever started a drag out how it ended.
     pub fn dispatch_drag_ended(&mut self, dropped: bool) -> bool {
-        let callbacks = std::mem::take(&mut self.reactive.borrow_mut().requests.drag_end_callbacks);
+        let callbacks =
+            std::mem::take(&mut self.reactive.borrow_mut().requests_mut().drag_end_callbacks);
         for callback in &callbacks {
             if let Err(message) = self.run_handler(|ctx, limits| {
                 execute_with(ctx, callback, vec![LuaValue::Boolean(dropped)], limits)
@@ -140,7 +172,7 @@ impl Runtime {
     /// or nothing for anything at all.
     pub fn drop_area_keys(&self, node: NodeHandle) -> Vec<String> {
         let state = self.reactive.borrow();
-        match state.scene.current(node, "keys") {
+        match state.scene().current(node, "keys") {
             Ok(SceneValue::List(values)) => values
                 .iter()
                 .filter_map(|value| match value {
@@ -159,7 +191,7 @@ impl Runtime {
         event: UiEvent,
         build: impl for<'gc> FnOnce(Context<'gc>) -> Vec<LuaValue<'gc>>,
     ) -> bool {
-        let handler = self.reactive.borrow().events.handler(node, event);
+        let handler = self.reactive.borrow().events().handler(node, event);
         let Some(handler) = handler else {
             return false;
         };

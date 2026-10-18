@@ -7,7 +7,7 @@
 //! no Lua at all; the loop repaints only when a channel such a path shows
 //! has moved.
 
-use std::cell::RefCell;
+use crate::runtime::state::StateCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -16,10 +16,10 @@ use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
 use morf_scene::reactive::SignalId;
 use morf_scene::{Channel, NodeHandle, Value as SceneValue};
 
-use crate::scene_bindings::HostError;
-use crate::state::ReactiveState;
-use crate::surface_types::IpcValue;
-use crate::types::Runtime;
+use crate::api::ui::scene::HostError;
+use crate::runtime::host_types::IpcValue;
+use crate::runtime::state::ReactiveState;
+use crate::vm::types::Runtime;
 
 /// One runtime's view of the channels.
 #[derive(Default)]
@@ -59,32 +59,27 @@ impl Runtime {
         let generation = morf_scene::channels_generation();
         let flush = {
             let mut guard = self.reactive.borrow_mut();
-            let state = &mut *guard;
-            if generation == state.channels.seen {
+            let (channels, engine) = guard.channels_and_engine();
+            if generation == channels.seen {
                 return false;
             }
-            state.channels.seen = generation;
+            channels.seen = generation;
             let mut flush = false;
             let mut writes = Vec::new();
-            for (channel, signal, last) in state.channels.watched.values_mut() {
+            for (channel, signal, last) in channels.watched.values_mut() {
                 let revision = channel.revision();
                 if revision != *last {
                     *last = revision;
                     writes.push((*signal, IpcValue::Integer(revision as i64)));
                 }
             }
-            if let Some(graph) = state.engine.reactive.graph.as_mut() {
-                for (signal, value) in writes {
-                    if graph.write(signal, value.clone()).is_ok() {
-                        state.engine.reactive.values.insert(signal, value);
-                        flush = true;
-                    }
-                }
+            for (signal, value) in writes {
+                flush |= engine.reactive_mut().try_write(signal, value);
             }
             // A path on show whose channel moved: a frame.
             let mut shown = false;
-            let scene = &state.engine.scene;
-            state.channels.series_nodes.retain(|node, drawn| {
+            let scene = engine.scene();
+            channels.series_nodes.retain(|node, drawn| {
                 if !scene.contains(*node) {
                     return false;
                 }
@@ -104,7 +99,7 @@ impl Runtime {
                 true
             });
             if shown {
-                state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
+                engine.revisions_mut().bump_scene();
             }
             (flush, shown)
         };
@@ -114,7 +109,7 @@ impl Runtime {
             let reactive = Rc::clone(&self.reactive);
             self.lua.enter(|ctx| {
                 if let Err(message) =
-                    crate::reactive_bindings::flush_reactive(&reactive, ctx, limits)
+                    crate::api::ui::bindings::flush_reactive(&reactive, ctx, limits)
                 {
                     reactive
                         .borrow_mut()
@@ -128,28 +123,26 @@ impl Runtime {
 
 /// The signal reads of `channel` depend on, made on first use.
 fn watch(state: &mut ReactiveState, channel: &Arc<Channel>) -> Result<SignalId, HostError> {
-    if let Some((_, signal, _)) = state.channels.watched.get(&channel.id()) {
+    if let Some((_, signal, _)) = state.channels().watched.get(&channel.id()) {
         return Ok(*signal);
     }
     let revision = channel.revision();
-    let value = IpcValue::Integer(revision as i64);
     let signal = state
-        .reactive
-        .graph
-        .as_mut()
-        .ok_or_else(|| HostError("reactive graph is already running".to_owned()))?
-        .signal(format!("channel.{}", channel.id()), value.clone());
-    state.reactive.values.insert(signal, value);
-    state.reactive.signals.push(signal);
+        .reactive_mut()
+        .signal(
+            format!("channel.{}", channel.id()),
+            IpcValue::Integer(revision as i64),
+        )
+        .ok_or_else(|| HostError(morf_runtime::reactive::GRAPH_RUNNING.to_owned()))?;
     state
-        .channels
+        .channels_mut()
         .watched
         .insert(channel.id(), (Arc::clone(channel), signal, revision));
     Ok(signal)
 }
 
-fn track(state: &Rc<RefCell<ReactiveState>>, signal: SignalId) {
-    if let Some(active) = &mut state.borrow_mut().active {
+fn track(state: &Rc<StateCell<ReactiveState>>, signal: SignalId) {
+    if let Some(active) = state.borrow_mut().tracking_mut().capture() {
         active.reads.insert(signal);
     }
 }
@@ -163,7 +156,11 @@ fn number(value: LuaValue<'_>) -> f32 {
 }
 
 /// Installs `morf.channel { name, size = 60, mode = "ring" | "frame" }`.
-pub(crate) fn install<'gc>(ctx: Context<'gc>, state: Rc<RefCell<ReactiveState>>, morf: Table<'gc>) {
+pub(crate) fn install<'gc>(
+    ctx: Context<'gc>,
+    state: Rc<StateCell<ReactiveState>>,
+    morf: Table<'gc>,
+) {
     let make = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let options: Option<Table> = stack.consume(ctx)?;
         let field = |key: &str| options.map_or(LuaValue::Nil, |o| o.get_value(ctx, key));

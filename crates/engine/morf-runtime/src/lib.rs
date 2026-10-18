@@ -11,12 +11,16 @@
 //! (animation) so far.
 
 pub mod animation;
+pub mod destroy;
+pub mod display;
 pub mod editing;
+pub mod effect_errors;
 pub mod engine;
 pub mod events;
 pub mod focus;
 pub mod gestures;
 pub mod handler;
+pub mod ipc;
 pub mod keys;
 pub mod layout;
 pub mod log;
@@ -25,12 +29,14 @@ pub mod overlays;
 pub mod reactive;
 pub mod requests;
 pub mod retention;
+pub mod revisions;
 pub mod screens;
 pub mod session;
 pub mod shared;
 pub mod shortcuts;
 pub mod states;
 pub mod timers;
+pub mod tracking;
 pub mod views;
 pub mod wake;
 pub mod windows;

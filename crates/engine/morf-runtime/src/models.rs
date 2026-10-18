@@ -54,12 +54,9 @@ impl ModelRevisions {
             return Ok(signal);
         }
         let key = key(model);
-        let value = IpcValue::Integer(0);
         let signal = reactive
-            .graph
-            .as_mut()
-            .ok_or("reactive graph unavailable")?
-            .signal(format!("list_model@{key:x}"), value.clone());
+            .signal(format!("list_model@{key:x}"), IpcValue::Integer(0))
+            .ok_or("reactive graph unavailable")?;
         self.entries.insert(
             key,
             ModelRevision {
@@ -68,7 +65,6 @@ impl ModelRevisions {
                 revision: 0,
             },
         );
-        reactive.values.insert(signal, value);
         Ok(signal)
     }
 
@@ -82,14 +78,15 @@ impl ModelRevisions {
 
     /// Forgets the revision signals of models nothing holds any more.
     pub fn collect_dead(&mut self, reactive: &mut Reactive) {
+        let mut dead = std::collections::HashSet::new();
         self.entries.retain(|_, entry| {
             let alive = entry.model.strong_count() > 0;
             if !alive {
-                reactive.values.remove(&entry.signal);
-                reactive.dead_signals.push(entry.signal);
+                dead.insert(entry.signal);
             }
             alive
         });
+        reactive.forget_signals(dead);
     }
 
     pub fn len(&self) -> usize {
@@ -107,10 +104,7 @@ mod tests {
     use morf_scene::reactive::Graph;
 
     fn reactive() -> Reactive {
-        Reactive {
-            graph: Some(Graph::default()),
-            ..Reactive::default()
-        }
+        Reactive::new(Graph::default())
     }
 
     #[test]
@@ -124,7 +118,7 @@ mod tests {
             models.signal_or_make(&mut reactive, &model).unwrap(),
             signal
         );
-        assert_eq!(reactive.values[&signal], IpcValue::Integer(0));
+        assert_eq!(reactive.value(signal), Some(&IpcValue::Integer(0)));
         assert_eq!(models.bump(&model), Some((signal, IpcValue::Integer(1))));
         assert_eq!(models.bump(&model), Some((signal, IpcValue::Integer(2))));
     }
@@ -140,7 +134,7 @@ mod tests {
         drop(model);
         models.collect_dead(&mut reactive);
         assert!(models.is_empty());
-        assert!(!reactive.values.contains_key(&signal));
-        assert_eq!(reactive.dead_signals, vec![signal]);
+        assert!(reactive.value(signal).is_none());
+        assert_eq!(reactive.dead_signals(), [signal]);
     }
 }

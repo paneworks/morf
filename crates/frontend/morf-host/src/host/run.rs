@@ -1,13 +1,16 @@
 use morf_app::{LayerClient, Output};
 use morf_lua::{Limits, Runtime, Screen};
-use morf_render::{RenderEngine, ShaderRegistration, WgpuBackend};
+use morf_paint::RenderEngine;
+use morf_render::{ShaderRegistration, WgpuBackend};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use crate::desktop::desktop_for;
-use crate::{lock::*, supervisor::*, surfaces::*, wake_plan::*, workers::*};
+use crate::host::desktop::desktop_for;
+use crate::{
+    host::surfaces::*, lock::*, paint::wake_plan::*, process::supervisor::*, process::workers::*,
+};
 
 use crate::host::turn::{Host, Links, StartOptions, Turn};
 use std::os::fd::AsFd;
@@ -74,6 +77,14 @@ fn drive_surface(
         runtime.set_capabilities(&[("desktop_canvas".to_owned(), "true".to_owned())]);
     }
     let loading = Instant::now();
+    let runtime_directory =
+        std::env::var_os("XDG_RUNTIME_DIR").ok_or("XDG_RUNTIME_DIR is unset")?;
+    let gate = crate::host::provider::handoff::Gate::open_at(Path::new(&runtime_directory), &name)
+        .map_err(|error| error.to_string())?;
+    let recognizer_policy = gate.clone();
+    runtime
+        .set_recognizer_gate(std::sync::Arc::new(move || recognizer_policy.enabled()))
+        .map_err(|error| error.to_string())?;
     execute_config(runtime, path, source, policy)?;
     slow(&name, "loading the configuration", loading);
     // A configuration that asks to lock the session is one client for every
@@ -96,6 +107,7 @@ fn drive_surface(
         bar_config.output = None;
     }
     let client = LayerClient::connect(bar_config).map_err(|error| error.to_string())?;
+    let pending_provider = native_shell_provider(&client, &name, gate.clone());
     let desktop = desktop_for(&client)?;
     tx.send(SupervisorMessage::Worker(WorkerMessage::Screens {
         output: name.clone(),
@@ -105,7 +117,7 @@ fn drive_surface(
     let mut host = Host::start(
         runtime,
         Box::new(client),
-        Some(desktop),
+        desktop,
         StartOptions {
             name: name.clone(),
             gpu: true,
@@ -114,6 +126,12 @@ fn drive_surface(
             report_slow: true,
         },
     )?;
+    // Retire evidence before the backend on every exit, including errors.
+    let mut native_provider = pending_provider;
+    if let Some(provider) = &native_provider {
+        provider.configured();
+        provider.observe_rendered(&host, runtime);
+    }
     let links = Links {
         policy,
         tx,
@@ -127,19 +145,68 @@ fn drive_surface(
         }
         host.wait(runtime, Some(wake.as_fd()))?;
         wake.drain();
-        match host.turn(runtime, Some(&links))? {
-            Turn::Again => {}
+        host.rang(wake.rings());
+        if let Some(provider) = &native_provider {
+            provider.begin_turn();
+        }
+        let turn = host.turn(runtime, Some(&links))?;
+        if host.primary_configured
+            && let Some(provider) = &native_provider
+        {
+            provider.configured();
+        }
+        match turn {
+            Turn::Again => {
+                if host.primary_configured
+                    && let Some(provider) = native_provider.as_mut()
+                    && provider.dispatch_at_boundary(
+                        runtime,
+                        host.runtime_generation,
+                        host.native_contacts.snapshot(),
+                    )
+                {
+                    host.request_paint();
+                }
+                if let Some(provider) = &native_provider {
+                    provider.observe_rendered(&host, runtime);
+                }
+            }
             Turn::Stop => return Ok(()),
             Turn::Recreate => {
+                drop(native_provider.take());
                 let replacement = connect_runtime_surface(runtime, &name)?;
+                let replacement_provider = native_shell_provider(&replacement, &name, gate.clone());
                 let desktop = desktop_for(&replacement)?;
                 tx.send(SupervisorMessage::Worker(WorkerMessage::Screens {
                     output: name.clone(),
                     screens: replacement.screens().to_vec(),
                 }))
                 .map_err(|_| "output supervisor stopped".to_owned())?;
-                host.replace_backend(runtime, Box::new(replacement), Some(desktop))?;
+                host.replace_backend(runtime, Box::new(replacement), desktop)?;
+                native_provider = replacement_provider;
             }
+        }
+    }
+}
+
+fn native_shell_provider(
+    client: &LayerClient,
+    name: &str,
+    gate: std::sync::Arc<crate::host::provider::handoff::Gate>,
+) -> Option<crate::host::provider::Provider> {
+    let output = client.own_output()?.name?;
+    if output != name {
+        return None;
+    }
+    match crate::host::provider::Provider::bind_with_gate(
+        client.connection().backend().poll_fd(),
+        &output,
+        gate,
+    ) {
+        Ok(provider) => Some(provider),
+        Err(error) => {
+            eprintln!("morf: native shell provider unavailable for {name}: {error}");
+            None
         }
     }
 }

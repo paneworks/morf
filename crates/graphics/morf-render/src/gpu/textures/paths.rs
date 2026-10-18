@@ -24,7 +24,7 @@ pub(crate) const MAX_PATH_TEXTURES: usize = 256;
 /// its pixels, so one that is not changing is drawn once.
 pub(crate) fn push_path_textures(
     context: TextureBatchContext<'_>,
-    outlines: &mut crate::path::PathOutlines,
+    outlines: &mut morf_paint::path::PathOutlines,
     textures: &mut HashMap<u64, TextureImage>,
     list: &DrawList,
     scale_120: u32,
@@ -50,7 +50,7 @@ pub(crate) fn push_path_textures(
         // Only where the outline is: a few ticks along the edge of a
         // fullscreen node are a strip, not a fullscreen image.
         let Some(region) =
-            crate::path::drawn_extent(outlines, paint, (bounds.width, bounds.height), margin)
+            morf_paint::path::drawn_extent(outlines, paint, (bounds.width, bounds.height), margin)
         else {
             continue;
         };
@@ -78,7 +78,7 @@ pub(crate) fn push_path_textures(
             Some(image) => image.clone(),
             None => {
                 let started = std::time::Instant::now();
-                let Some(drawn) = crate::path::rasterize_region(
+                let Some(drawn) = morf_paint::path::rasterize_region(
                     outlines,
                     paint,
                     (bounds.width, bounds.height),
@@ -109,6 +109,7 @@ pub(crate) fn push_path_textures(
                 distance_field: false,
                 field: DistanceFieldStyle::default(),
                 spread: 1.0,
+                drawn: false,
             },
             context.target_size,
             scale,
@@ -122,7 +123,7 @@ pub(crate) fn push_path_textures(
 /// `MORF_FRAME_LOG=2`: a path that took 20 ms or more to rasterize, with what
 /// identifies it -- the start of its data -- and whatever makes it change
 /// every frame (a morph, a trim).
-fn slow_path(paint: &crate::path::PathPaint, pixels: (u32, u32), started: std::time::Instant) {
+fn slow_path(paint: &morf_paint::path::PathPaint, pixels: (u32, u32), started: std::time::Instant) {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     if !*ON.get_or_init(|| std::env::var("MORF_FRAME_LOG").is_ok_and(|value| value == "2")) {
         return;

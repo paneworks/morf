@@ -22,9 +22,9 @@ use morf_image::ImageCache;
 use morf_layout::Layout;
 use morf_scene::{NodeHandle, Scene, Value as SceneValue};
 
-use crate::scene_bindings::assign_scene_property;
-use crate::state::ReactiveState;
-use crate::surface_types::IpcValue;
+use crate::api::ui::scene::assign_scene_property;
+use crate::runtime::host_types::IpcValue;
+use crate::runtime::state::ReactiveState;
 use morf_runtime::Handler;
 
 /// A picture not drawn for this long stops playing, whatever the flag the
@@ -125,16 +125,24 @@ pub(crate) fn sync(
 ) -> Vec<StatusCall> {
     let mut calls = Vec::new();
     let now = Instant::now();
-    let nodes: Vec<NodeHandle> = state.images.entries.keys().copied().collect();
+    let nodes: Vec<NodeHandle> = state.images().entries.keys().copied().collect();
     for node in nodes {
         let Some(geometry) = layout.geometry(node) else {
             continue;
         };
-        let Ok(source) = state.scene.string_value(node, "source").map(str::to_owned) else {
+        let Ok(source) = state
+            .scene()
+            .string_value(node, "source")
+            .map(str::to_owned)
+        else {
             continue;
         };
-        let visible = geometry.width > 0.0 && geometry.height > 0.0 && shown(&state.scene, node);
-        let entry = state.images.entries.get_mut(&node).expect("listed above");
+        let visible = geometry.width > 0.0 && geometry.height > 0.0 && shown(state.scene(), node);
+        let entry = state
+            .images_mut()
+            .entries
+            .get_mut(&node)
+            .expect("listed above");
         entry.visible = visible;
         entry.seen = Some(now);
         let changed_source = entry.source.as_deref() != Some(source.as_str());
@@ -175,10 +183,10 @@ pub(crate) fn sync(
         // A moving picture just drawn is looked at on the next turn, which
         // works out when its frame changes; until then nothing would wake
         // the loop for it.
-        if visible && frames > 1 && state.images.due.is_none() {
-            state.images.due = Some(now);
-        }
         let callback = entry.on_status.clone();
+        if visible && frames > 1 && state.images().due.is_none() {
+            state.images_mut().due = Some(now);
+        }
         if changed_source {
             set(state, node, "frame", SceneValue::Number(0.0));
         }
@@ -223,29 +231,33 @@ fn passes(scene: &Scene, node: NodeHandle) -> Option<u32> {
 /// Moves every playing, drawn picture on by the time since the last call;
 /// returns whether any frame changed.
 pub(crate) fn advance(state: &mut ReactiveState, now: Instant) -> bool {
-    if state.images.entries.is_empty() {
-        state.images.due = None;
-        state.images.last_advance = None;
+    if state.images().entries.is_empty() {
+        state.images_mut().due = None;
+        state.images_mut().last_advance = None;
         return false;
     }
     let delta = state
-        .images
+        .images()
         .last_advance
         .map_or(Duration::ZERO, |last| now.saturating_duration_since(last))
         .min(Duration::from_secs(1));
-    state.images.last_advance = Some(now);
+    state.images_mut().last_advance = Some(now);
     let mut changed = false;
     let mut quickest: Option<Duration> = None;
-    let nodes: Vec<NodeHandle> = state.images.entries.keys().copied().collect();
+    let nodes: Vec<NodeHandle> = state.images().entries.keys().copied().collect();
     for node in nodes {
-        let scene = &state.scene;
+        let scene = state.scene();
         let Ok(playing) = scene.bool_value(node, "playing") else {
             continue;
         };
         let speed = scene.number(node, "speed").unwrap_or(1.0);
         let frame = scene.number(node, "frame").unwrap_or(0.0);
         let loops = passes(scene, node);
-        let entry = state.images.entries.get_mut(&node).expect("listed above");
+        let entry = state
+            .images_mut()
+            .entries
+            .get_mut(&node)
+            .expect("listed above");
         let lately = entry
             .seen
             .is_some_and(|seen| now.saturating_duration_since(seen) < SEEN_FOR);
@@ -299,6 +311,7 @@ pub(crate) fn advance(state: &mut ReactiveState, now: Instant) -> bool {
     }
     // One deadline for all of them, at the pace of the quickest frame;
     // none while nothing plays.
-    state.images.due = quickest.map(|next| now + next.clamp(FASTEST_WAKE, Duration::from_secs(1)));
+    state.images_mut().due =
+        quickest.map(|next| now + next.clamp(FASTEST_WAKE, Duration::from_secs(1)));
     changed
 }

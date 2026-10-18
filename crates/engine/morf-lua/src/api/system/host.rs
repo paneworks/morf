@@ -2,16 +2,15 @@
 //! focus, the backdrop, IPC handlers, the screens and the primary runtime.
 
 use luna::{Callback, CallbackReturn, Closure, Context, Function, Table, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::{scene_bindings::*, state::*, surface_types::*, types::*};
+use crate::{api::ui::scene::*, runtime::host_types::*, runtime::state::*, vm::types::*};
 
 mod text_entry;
 
 pub(crate) fn install_host_service_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     screen: Option<&Screen>,
 ) {
@@ -28,7 +27,7 @@ pub(crate) fn install_host_service_api<'gc>(
         let key = (milliseconds, input_only.unwrap_or(false));
         let mut state = idle_state.borrow_mut();
         let callback_count = state
-            .requests
+            .requests_mut()
             .idle_callbacks
             .values()
             .map(Vec::len)
@@ -36,17 +35,18 @@ pub(crate) fn install_host_service_api<'gc>(
         if callback_count >= 256 {
             return Err(HostError("idle callback limit reached".into()).into());
         }
-        if !state.requests.idle_callbacks.contains_key(&key)
-            && state.requests.idle_callbacks.len() >= 64
+        if !state.requests().idle_callbacks.contains_key(&key)
+            && state.requests().idle_callbacks.len() >= 64
         {
             return Err(HostError("idle timeout limit reached".into()).into());
         }
-        let id = state.requests.next_idle_subscription;
-        state.requests.next_idle_subscription += 1;
+        let id = state.requests().next_idle_subscription;
+        state.requests_mut().next_idle_subscription += 1;
         // A threshold the compositor has not been asked for yet.
-        state.requests.idle_timeouts_changed |= !state.requests.idle_callbacks.contains_key(&key);
+        state.requests_mut().idle_timeouts_changed |=
+            !state.requests().idle_callbacks.contains_key(&key);
         state
-            .requests
+            .requests_mut()
             .idle_callbacks
             .entry(key)
             .or_default()
@@ -57,11 +57,11 @@ pub(crate) fn install_host_service_api<'gc>(
         let cancel_state = Rc::clone(&idle_state);
         let cancel = Callback::from_fn(&ctx, move |_, _, _| {
             let mut state = cancel_state.borrow_mut();
-            if let Some(callbacks) = state.requests.idle_callbacks.get_mut(&key) {
+            if let Some(callbacks) = state.requests_mut().idle_callbacks.get_mut(&key) {
                 callbacks.retain(|(held, _)| *held != id);
                 if callbacks.is_empty() {
-                    state.requests.idle_callbacks.remove(&key);
-                    state.requests.idle_timeouts_changed = true;
+                    state.requests_mut().idle_callbacks.remove(&key);
+                    state.requests_mut().idle_timeouts_changed = true;
                 }
             }
             Ok(CallbackReturn::Return)
@@ -79,7 +79,7 @@ pub(crate) fn install_host_service_api<'gc>(
         let inhibited: bool = stack.consume(ctx)?;
         inhibit_state
             .borrow_mut()
-            .requests
+            .requests_mut()
             .set_idle_inhibited(inhibited);
         Ok(CallbackReturn::Return)
     });
@@ -87,7 +87,7 @@ pub(crate) fn install_host_service_api<'gc>(
     // awake. Whether the compositor can is `morf.capabilities.idle_inhibit`.
     let inhibited_state = Rc::clone(&state);
     let idle_inhibited = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        stack.replace(ctx, inhibited_state.borrow().requests.idle_inhibited);
+        stack.replace(ctx, inhibited_state.borrow().requests().idle_inhibited);
         Ok(CallbackReturn::Return)
     });
     let idle = Table::new(&ctx);
@@ -104,14 +104,17 @@ pub(crate) fn install_host_service_api<'gc>(
             _ => return Err(HostError("output power mode must be `on` or `off`".into()).into()),
         };
         let mut state = output_power_state.borrow_mut();
-        state.requests.queue_output_power(on).map_err(HostError)?;
+        state
+            .requests_mut()
+            .queue_output_power(on)
+            .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
     let output_power = Table::new(&ctx);
     output_power.set_field(ctx, "set", output_power_set);
     morf.set_field(ctx, "output_power", output_power);
-    crate::api_gamma::install_gamma_api(ctx, Rc::clone(&state), morf);
-    crate::api_clipboard::install_clipboard_api(ctx, Rc::clone(&state), morf);
+    crate::api::desktop::gamma::install_gamma_api(ctx, Rc::clone(&state), morf);
+    crate::api::desktop::clipboard::install_clipboard_api(ctx, Rc::clone(&state), morf);
     // `morf.on_keyboard_focus(function(active) end)`: the keyboard came to
     // the shell's surface, or left it. With `keyboard_focus = "on_demand"`
     // a click anywhere else is what takes it away.
@@ -119,11 +122,11 @@ pub(crate) fn install_host_service_api<'gc>(
     let on_keyboard_focus = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
         let mut state = keyboard_focus_state.borrow_mut();
-        if state.requests.keyboard_focus_callbacks.len() >= 64 {
+        if state.requests().keyboard_focus_callbacks.len() >= 64 {
             return Err(HostError("keyboard focus callback limit reached".into()).into());
         }
         state
-            .requests
+            .requests_mut()
             .keyboard_focus_callbacks
             .push(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
@@ -135,19 +138,19 @@ pub(crate) fn install_host_service_api<'gc>(
     let on_backdrop_click = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
         let mut state = backdrop_state.borrow_mut();
-        if state.requests.backdrop_callbacks.len() >= 64 {
+        if state.requests().backdrop_callbacks.len() >= 64 {
             return Err(HostError("backdrop callback limit reached".into()).into());
         }
         state
-            .requests
+            .requests_mut()
             .backdrop_callbacks
             .push(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "on_backdrop_click", on_backdrop_click);
-    crate::api_screencopy::install_screencopy_api(ctx, Rc::clone(&state), morf);
+    crate::api::desktop::screencopy::install_screencopy_api(ctx, Rc::clone(&state), morf);
     text_entry::install_text_entry(ctx, Rc::clone(&state), morf);
-    crate::api_time::install_timer_api(ctx, Rc::clone(&state), morf);
+    crate::api::time::timer::install_timer_api(ctx, Rc::clone(&state), morf);
     let ipc_register = Callback::from_fn(&ctx, {
         let state = Rc::clone(&state);
         move |ctx, _, mut stack| {
@@ -156,11 +159,11 @@ pub(crate) fn install_host_service_api<'gc>(
                 LuaValue::Function(Function::Closure(closure)) => {
                     state
                         .borrow_mut()
-                        .ipc_handlers
-                        .insert(name, crate::vm::handler_store::register(ctx.stash(closure)));
+                        .ipc_mut()
+                        .set(name, crate::vm::handler_store::register(ctx.stash(closure)));
                 }
                 LuaValue::Nil => {
-                    state.borrow_mut().ipc_handlers.remove(&name);
+                    state.borrow_mut().ipc_mut().remove(&name);
                 }
                 _ => {
                     return Err(
@@ -182,7 +185,11 @@ pub(crate) fn install_host_service_api<'gc>(
     // compositor's remaining outputs after it.
     if let Some(screen) = screen {
         screens
-            .set(ctx, 1, screen_entry(ctx, screen, state.borrow().density))
+            .set(
+                ctx,
+                1,
+                screen_entry(ctx, screen, state.borrow().display().density()),
+            )
             .expect("screen table accepts integer keys");
     }
     morf.set_field(ctx, "screens", screens);
@@ -192,15 +199,11 @@ pub(crate) fn install_host_service_api<'gc>(
     {
         let mut state = state.borrow_mut();
         let revision = state
-            .reactive
-            .graph
-            .as_mut()
-            .expect("the graph is not running at install")
-            .signal("screens.revision", IpcValue::Integer(0));
-        state.reactive.values.insert(revision, IpcValue::Integer(0));
-        state.reactive.signals.push(revision);
-        state.session.screens_revision = Some((revision, 0));
-        state.session.screens_signature = screen
+            .reactive_mut()
+            .signal("screens.revision", IpcValue::Integer(0))
+            .expect("the graph is not running at install");
+        state.session_mut().screens_revision = Some((revision, 0));
+        state.session_mut().screens_signature = screen
             .map(morf_runtime::session::screen_signature)
             .unwrap_or_default();
     }
@@ -210,11 +213,11 @@ pub(crate) fn install_host_service_api<'gc>(
         "screens_revision",
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let mut state = revision_state.borrow_mut();
-            let Some((signal, count)) = state.session.screens_revision else {
+            let Some((signal, count)) = state.session().screens_revision else {
                 stack.replace(ctx, 0);
                 return Ok(CallbackReturn::Return);
             };
-            if let Some(active) = &mut state.active {
+            if let Some(active) = state.tracking_mut().capture() {
                 active.reads.insert(signal);
             }
             stack.replace(ctx, count);
@@ -229,17 +232,10 @@ pub(crate) fn install_host_service_api<'gc>(
     {
         let mut state = state.borrow_mut();
         let signal = state
-            .reactive
-            .graph
-            .as_mut()
-            .expect("the graph is not running at install")
-            .signal("primary", IpcValue::Boolean(true));
-        state
-            .reactive
-            .values
-            .insert(signal, IpcValue::Boolean(true));
-        state.reactive.signals.push(signal);
-        state.session.primary = Some((signal, true));
+            .reactive_mut()
+            .signal("primary", IpcValue::Boolean(true))
+            .expect("the graph is not running at install");
+        state.session_mut().primary = Some((signal, true));
     }
     let primary_state = Rc::clone(&state);
     morf.set_field(
@@ -247,11 +243,11 @@ pub(crate) fn install_host_service_api<'gc>(
         "primary",
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let mut state = primary_state.borrow_mut();
-            let Some((signal, primary)) = state.session.primary else {
+            let Some((signal, primary)) = state.session().primary else {
                 stack.replace(ctx, true);
                 return Ok(CallbackReturn::Return);
             };
-            if let Some(active) = &mut state.active {
+            if let Some(active) = state.tracking_mut().capture() {
                 active.reads.insert(signal);
             }
             stack.replace(ctx, primary);
@@ -265,11 +261,11 @@ pub(crate) fn install_host_service_api<'gc>(
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let callback: Closure = stack.consume(ctx)?;
             let mut state = on_primary_state.borrow_mut();
-            if state.session.primary_callbacks.len() >= 64 {
+            if state.session().primary_callbacks.len() >= 64 {
                 return Err(HostError("primary callback limit reached".into()).into());
             }
             state
-                .session
+                .session_mut()
                 .primary_callbacks
                 .push(crate::vm::handler_store::register(ctx.stash(callback)));
             Ok(CallbackReturn::Return)
@@ -286,7 +282,7 @@ pub(crate) fn install_host_service_api<'gc>(
     // Filled once the compositor connection is up; empty rather than absent so
     // a configuration can index it from its first line.
     morf.set_field(ctx, "capabilities", Table::new(&ctx));
-    crate::api_compositor::install_compositor_api(ctx, Rc::clone(&state), morf);
+    crate::api::desktop::compositor::install_compositor_api(ctx, Rc::clone(&state), morf);
 
     // Empty rather than absent, so a configuration can hold it and watch it
     // from its first line — and so `#morf.workspaces` is a number rather than

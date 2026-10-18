@@ -75,13 +75,53 @@ pub(crate) struct PendingStatusNotifier {
 /// A JSON file a theme takes its tokens from, watched for rewrites.
 pub(crate) use morf_runtime::animation::ThemeFade;
 
-pub(crate) struct ThemeSource {
-    pub(crate) path: PathBuf,
+struct ThemeSource {
+    path: PathBuf,
     /// Absent when the directory could not be watched; the file is then read
     /// once and never again.
-    pub(crate) watcher: Option<FileWatcher>,
+    watcher: Option<FileWatcher>,
     /// The token each leaf key of the file writes.
-    pub(crate) fields: HashMap<String, SignalId>,
+    fields: HashMap<String, SignalId>,
+}
+
+/// Theme token files being watched.
+#[derive(Default)]
+pub(crate) struct ThemeSources {
+    sources: Vec<ThemeSource>,
+}
+
+impl ThemeSources {
+    /// Watches `path`, whose leaf keys write `fields`.
+    pub(crate) fn watch(
+        &mut self,
+        path: PathBuf,
+        watcher: Option<FileWatcher>,
+        fields: HashMap<String, SignalId>,
+    ) {
+        self.sources.push(ThemeSource {
+            path,
+            watcher,
+            fields,
+        });
+    }
+
+    /// Each file rewritten since the last turn, with the tokens it writes.
+    pub(crate) fn rewritten(&self) -> Vec<(PathBuf, HashMap<String, SignalId>)> {
+        let mut rewritten = Vec::new();
+        for source in &self.sources {
+            let Some(watcher) = &source.watcher else {
+                continue;
+            };
+            let mut touched = false;
+            while watcher.next_event(std::time::Duration::ZERO).is_some() {
+                touched = true;
+            }
+            if touched {
+                rewritten.push((source.path.clone(), source.fields.clone()));
+            }
+        }
+        rewritten
+    }
 }
 
 /// The signals behind `morf.prefers`, and the settings portal they follow.

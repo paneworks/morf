@@ -1,0 +1,5 @@
+# hdr-opaque.steps: with MORF_CONFIG=tools/sandbox/hdr-opaque.lua and MORF_HDR=1
+# (scRGB), pq (PQ) or unset; compare the shot against the run without.
+wait 8
+hc -j monitors > $OUT/monitors.json
+shot opaque

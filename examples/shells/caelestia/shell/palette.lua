@@ -1,6 +1,6 @@
 -- Wallpaper-derived colors, independent of the selected visual theme.
 --
--- Colours are a Material 3 scheme (lib/material.lua): every role --
+-- Colours are a Material 3 scheme (lib/util/material.lua): every role --
 -- primary, onSurfaceVariant, surfaceContainerHigh, ... -- is a token of one
 -- `morf.theme`, so a binding that reads `theme.color.primary` follows a new
 -- wallpaper with no wiring. The scheme comes from the wallpaper (tonal_spot,

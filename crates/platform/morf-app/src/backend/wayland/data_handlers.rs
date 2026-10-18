@@ -58,7 +58,7 @@ impl LayerState {
             reader,
             tag,
             self.read_tx.clone(),
-            self.waker,
+            self.waker.clone(),
             Arc::clone(&self.clipboard_reads),
         );
         Ok(())
@@ -206,7 +206,7 @@ impl DataDeviceHandler for LayerState {
         }
         let tx = self.clipboard_tx.clone();
         let active = Arc::clone(&self.clipboard_reads);
-        let waker = self.waker;
+        let waker = self.waker.clone();
         thread::spawn(move || {
             let mut bytes = Vec::new();
             let text = pipe

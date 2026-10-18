@@ -154,7 +154,9 @@ local function submit()
     return
   end
   say("")
-  door:submit(password)
+  local secret = password
+  password = ""
+  door:submit(secret)
 end
 
 local MAX_DOTS = 18

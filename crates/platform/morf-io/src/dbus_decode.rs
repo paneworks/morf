@@ -105,7 +105,7 @@ pub struct DbusSignalEvent {
     pub interface: String,
     pub member: String,
     /// The body, decoded as a reply is.
-    pub arguments: Result<DbusValue, String>,
+    pub arguments: Result<DbusValue, crate::Error>,
 }
 
 impl DbusSignalEvent {
@@ -120,7 +120,7 @@ impl DbusSignalEvent {
                 .map(ToString::to_string)
                 .unwrap_or_default(),
             member: header.member().map(ToString::to_string).unwrap_or_default(),
-            arguments: decode_message_value(message),
+            arguments: decode_message_value(message).map_err(crate::Error::Bus),
         }
     }
 }
@@ -160,9 +160,9 @@ impl DbusSignal {
     }
 
     /// Waits for and decodes the next scalar signal body.
-    pub fn next_value(&self, timeout: Duration) -> Option<Result<DbusValue, String>> {
+    pub fn next_value(&self, timeout: Duration) -> Option<Result<DbusValue, crate::Error>> {
         self.next(timeout)
-            .map(|message| decode_message_value(&message))
+            .map(|message| decode_message_value(&message).map_err(crate::Error::Bus))
     }
 }
 

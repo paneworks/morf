@@ -28,10 +28,10 @@ fn unchanged_polls_preserve_timer_deadlines_and_native_changes_rearm_them() {
     assert_eq!(runtime.next_deadline().unwrap().0, deadline);
     runtime.scene_mut().assign(timer, "running", false).unwrap();
     runtime.poll_services();
-    assert!(runtime.reactive.borrow().timers.is_empty());
+    assert!(runtime.reactive.borrow().timers().is_empty());
     runtime.scene_mut().assign(timer, "running", true).unwrap();
     runtime.poll_services();
-    assert_eq!(runtime.reactive.borrow().timers.len(), 1);
+    assert_eq!(runtime.reactive.borrow().timers().len(), 1);
 }
 
 #[test]
@@ -74,7 +74,7 @@ fn a_hidden_timers_animated_interval_reconciles_on_its_final_tick() {
         runtime
             .reactive
             .borrow()
-            .timers
+            .timers()
             .iter()
             .next()
             .unwrap()

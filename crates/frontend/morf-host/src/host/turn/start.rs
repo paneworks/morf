@@ -4,16 +4,20 @@
 use morf_app::{Backend, Event, PRIMARY_LAYER, WindowId, WindowKind};
 use morf_desktop::Desktop;
 use morf_lua::Runtime;
-use morf_render::RenderEngine;
+use morf_paint::RenderEngine;
 use morf_text::TextSystem;
 use std::time::{Duration, Instant};
 
+use crate::host::desktop::apply_service_requests;
 use crate::host::windows::Windows;
-use crate::painter::Painter;
-use crate::render_target::surface_backend;
-use crate::{backdrop::*, pacing::*, paint::*, surface_actions::*, surface_layers::*, surfaces::*};
+use crate::paint::painter::Painter;
+use crate::paint::render_target::surface_backend;
+use crate::{
+    host::actions::*, host::layers::*, host::surfaces::*, paint::backdrop::*, paint::pacing::*,
+    paint::*, process::services::refresh_idle_timeouts,
+};
 
-use super::{Host, slow};
+use super::{FrameAccounting, Host, slow};
 
 /// How a host starts.
 pub struct StartOptions {
@@ -46,7 +50,7 @@ impl Host {
     pub fn start(
         runtime: &mut Runtime,
         backend: Box<dyn Backend>,
-        mut desktop: Option<Desktop>,
+        mut desktop: Box<dyn Desktop>,
         options: StartOptions,
     ) -> Result<Self, String> {
         let name = options.name;
@@ -54,10 +58,10 @@ impl Host {
         let options_report = options.report_slow;
         primary_surface_root(runtime)?;
         let layer_config = runtime.layer_surface_config();
-        // A clipboard or drop read finishing on its thread rings every loop,
-        // so this one wakes for its answer rather than sleeping past it. Set
+        // A clipboard or drop read finishing on its thread rings this loop,
+        // so it wakes for its answer rather than sleeping past it. Set
         // before the first configure, since a read can start before it.
-        backend.set_waker(morf_io::wake_all);
+        backend.set_waker(crate::host::desktop::loop_wakeup());
         let mut config = runtime_bar_config(&layer_config, &name)?;
         if options.desktop_canvas {
             config.output = None;
@@ -74,9 +78,7 @@ impl Host {
         }
         open_reserve_layers(&mut *backend, &layer_config, &name)?;
         open_backdrop_layer(&mut *backend, &layer_config, &name)?;
-        if let Some(desktop) = desktop.as_mut() {
-            desktop.set_idle_timeouts(&runtime.idle_timeouts());
-        }
+        refresh_idle_timeouts(runtime, &mut *desktop);
         let configuring = Instant::now();
         let first = wait_for_configure(&mut *backend)?;
         slow(
@@ -102,7 +104,7 @@ impl Host {
             // Known only now: the protocols came with the connection, the GPU
             // with the renderer. Everything a configuration or `morf info`
             // might ask.
-            let mut capabilities = capabilities_of(&*backend, desktop.as_ref(), &mut painter);
+            let mut capabilities = capabilities_of(&*backend, &*desktop, &mut painter);
             if options.desktop_canvas {
                 for (key, value) in &mut capabilities {
                     if key == "desktop_canvas" {
@@ -115,7 +117,7 @@ impl Host {
         slow(options_report, &name, "starting the GPU", gpu);
         if let Some(renderer) = painter.gpu() {
             let shaders = Instant::now();
-            crate::surface_run::register_shaders(runtime, renderer)?;
+            crate::host::run::register_shaders(runtime, renderer)?;
             slow(options_report, &name, "building shaders", shaders);
         }
         let animating_shaders = runtime.shaders_animate();
@@ -127,7 +129,7 @@ impl Host {
         apply_parent_transitions(runtime, &mut painter, &*backend)?;
         let primary_root = primary_surface_root(runtime)?;
         let painting = Instant::now();
-        let layout = paint(runtime, &mut painter, &*backend, primary_root, None)?;
+        let layout = paint(runtime, &mut painter, &*backend, primary_root, None, None)?;
         slow(options_report, &name, "the first frame", painting);
         let windows_opening = Instant::now();
         let mut windows = Windows::default();
@@ -135,7 +137,7 @@ impl Host {
         runtime.take_layer_surface_change();
         apply_backdrop(&mut *backend, &runtime.layer_surface_config(), &name);
         let _ = sync_window_surfaces(runtime, &mut *backend, &mut windows, &name)?;
-        apply_service_requests(runtime, &mut *backend, desktop.as_mut());
+        apply_service_requests(runtime, &mut *backend, &mut *desktop);
         slow(
             options_report,
             &name,
@@ -161,9 +163,13 @@ impl Host {
             keyboard_changes: Vec::new(),
             fallback_tick: None,
             forced_paint: None,
+            transform: crate::paint::cover::transform_of(backend.outputs(), &name),
+            turning: None,
             painter,
         };
         Ok(Self {
+            native_contacts: Default::default(),
+            primary_configured: true,
             name,
             backend,
             desktop,
@@ -171,14 +177,20 @@ impl Host {
             reserve: layer_config.reserve,
             clock,
             started,
-            a11y: crate::surface_a11y::A11ySurfaces::default(),
+            a11y: crate::a11y::surface::A11ySurfaces::default(),
             layout_complaint: None,
+            frame_accounting: FrameAccounting::default(),
             motion_reported: None,
             jit_logged: None,
             follow_up: true,
+            runtime_generation: 1,
             pending_streak: 0,
+            services_rang: false,
+            alarm_rings: 0,
             containment_repaint: false,
             report_slow: options_report,
+            retired: None,
+            last_input: None,
         })
     }
 
@@ -188,8 +200,10 @@ impl Host {
         &mut self,
         runtime: &mut Runtime,
         backend: Box<dyn Backend>,
-        desktop: Option<Desktop>,
+        desktop: Box<dyn Desktop>,
     ) -> Result<(), String> {
+        self.primary_configured = false;
+        self.native_contacts.new_connection();
         let mut backend = dense(runtime, backend);
         let config = runtime_bar_config(&runtime.layer_surface_config(), &self.name)?;
         if runtime.density() != morf_value::density::Density::Compositor {
@@ -208,16 +222,14 @@ impl Host {
             self.state.painter = Painter::Gpu(Box::new(RenderEngine::new(renderer)));
             // The adapter is new, so every pipeline it held is gone with it.
             if let Some(renderer) = self.state.painter.gpu() {
-                crate::surface_run::register_shaders(runtime, renderer)?;
+                crate::host::run::register_shaders(runtime, renderer)?;
             }
         }
         self.state.windows.clear();
-        backend.set_waker(morf_io::wake_all);
+        backend.set_waker(crate::host::desktop::loop_wakeup());
         self.backend = backend;
         self.desktop = desktop;
-        if let Some(desktop) = self.desktop.as_mut() {
-            desktop.set_idle_timeouts(&runtime.idle_timeouts());
-        }
+        refresh_idle_timeouts(runtime, &mut *self.desktop);
         self.reserve = runtime.layer_surface_config().reserve;
         Ok(())
     }
@@ -237,7 +249,7 @@ fn wait_for_configure(backend: &mut dyn Backend) -> Result<FirstFrame, String> {
                     return Ok(FirstFrame { early_pointer });
                 }
                 Event::Closed { id } if id == PRIMARY_LAYER => {
-                    return Err(crate::supervisor::SURFACE_CLOSED.to_owned());
+                    return Err(crate::process::supervisor::SURFACE_CLOSED.to_owned());
                 }
                 Event::PointerMotion { surface, x, y } => {
                     early_pointer = Some((surface, x, y));
@@ -264,9 +276,10 @@ fn wait_for_configure(backend: &mut dyn Backend) -> Result<FirstFrame, String> {
 /// question; strings for the GPU, because "which one" is.
 fn capabilities_of(
     client: &dyn Backend,
-    desktop: Option<&Desktop>,
+    desktop: &dyn Desktop,
     painter: &mut Painter,
 ) -> Vec<(String, String)> {
+    let can = desktop.capabilities();
     let info = painter
         .gpu()
         .map(|renderer| renderer.backend_mut().info().clone());
@@ -286,34 +299,35 @@ fn capabilities_of(
             client.primary_scale_120().to_string(),
         ),
     ];
-    let has = |test: fn(&Desktop) -> bool| desktop.is_some_and(test);
     for (name, supported) in [
         ("desktop_canvas", false),
         ("layer_shell", client.supports_layer_shell()),
         ("layer_surfaces", client.supports_layer_surfaces()),
         ("clipboard", client.supports_clipboard()),
-        ("data_control", has(Desktop::supports_data_control)),
-        (
-            "primary_selection",
-            has(Desktop::supports_primary_selection),
-        ),
         ("drag_and_drop", client.supports_drag_and_drop()),
         ("virtual_keyboard", client.supports_virtual_keyboard()),
         ("input_method", client.supports_input_method()),
         ("text_input", client.supports_text_input()),
-        ("screencopy", has(Desktop::supports_screencopy)),
-        ("image_capture", has(Desktop::supports_image_capture)),
-        ("window_capture", has(Desktop::supports_window_capture)),
-        (
-            "dmabuf_capture",
-            has(Desktop::supports_dmabuf_capture) && info.as_ref().is_some_and(|info| info.dmabuf),
-        ),
         ("backdrop_blur", client.supports_backdrop_blur()),
-        ("toplevels", has(Desktop::supports_toplevels)),
-        ("toplevel_control", has(Desktop::supports_toplevel_control)),
-        ("gamma_control", has(Desktop::supports_gamma_control)),
         ("idle_inhibit", client.supports_idle_inhibit()),
     ] {
+        list.push((name.to_owned(), supported.to_string()));
+    }
+    // HDR: whether the compositor can be told a frame is PQ or scRGB, and
+    // which of the two (`MORF_HDR=1` uses them).
+    let color = client.color_support();
+    list.push(("hdr".to_owned(), color.hdr().to_string()));
+    let transfers = color.transfer_names().join(",");
+    let transfers = if transfers.is_empty() {
+        "none".to_owned()
+    } else {
+        transfers
+    };
+    list.push(("hdr_transfer".to_owned(), transfers));
+    // A dmabuf capture needs the GPU's half too.
+    let gpu_dmabuf = info.as_ref().is_some_and(|info| info.dmabuf);
+    for (name, supported) in can.named() {
+        let supported = supported && (name != "dmabuf_capture" || gpu_dmabuf);
         list.push((name.to_owned(), supported.to_string()));
     }
     list

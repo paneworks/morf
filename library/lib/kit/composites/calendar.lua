@@ -138,7 +138,8 @@ function M.make(spec)
     local y, m = M.month_of(index)
     local out, blanks, at = {}, {}, {}
     for _ = 1, (M.weekday(y, m, 1) - first) % 7 do
-      out[#out + 1] = { label = "" }
+      -- (Padding, not a day: nothing a screen reader lands on.)
+      out[#out + 1] = { label = "", accessible_role = "generic" }
       blanks[#blanks + 1] = #out
     end
     for d = 1, M.days_in(y, m) do

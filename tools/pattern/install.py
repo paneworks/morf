@@ -12,11 +12,15 @@ END = "# morf-pattern end"
 HELPER = "/usr/local/libexec/morf-pattern-check"
 
 
-def pam_with_pattern(text, helper=HELPER):
+def pam_with_pattern(text, helper=HELPER, reset=False):
     # Remove only our own previous insertion, preserving required checks.
     text = re.sub(r"(?m)^# morf-pattern begin\n.*?^# morf-pattern end\n", "", text, flags=re.S)
     lines = [line for line in text.splitlines(keepends=True)
-             if not (re.match(r"^\s*auth\s+", line) and "morf-pattern-check" in line)]
+             if not (re.match(r"^\s*(?:auth|account)\s+", line) and "morf-pattern-check" in line)]
+    # A login that passed the account stack clears pattern lockouts.
+    if reset:
+        if lines and not lines[-1].endswith("\n"): lines[-1] += "\n"
+        lines.append(f"{BEGIN}\naccount optional pam_exec.so quiet quiet_log {helper} --reset\n{END}\n")
     insertion = next((i for i, line in enumerate(lines)
         if re.match(r"^\s*auth\s+(?:include|substack)\s+", line)
         or re.match(r"^\s*auth\s+.*\bpam_unix\.so\b", line)), None)
@@ -57,7 +61,7 @@ def main():
         raise SystemExit("No supported password fallback; no changes made")
     updates = {lock: pam_with_pattern(lock_text).encode()}
     greet = pam / "greetd"
-    if greet.exists(): updates[greet] = pam_with_pattern(greet.read_text()).encode()
+    if greet.exists(): updates[greet] = pam_with_pattern(greet.read_text(), reset=True).encode()
     # Validate all PAM edits before installing anything. The binary is compiled
     # before invocation; an executable script must never be made setuid.
     binary = Path(sys.argv[1]).read_bytes()

@@ -6,6 +6,7 @@ use std::ffi::{c_char, c_int, c_void};
 use crate::beat::BeatEvent;
 use crate::{Beat, Level, Tempo, Update};
 
+use super::control::native_f32;
 use super::ffi::*;
 use super::pod::{self, Pod};
 use super::{Listener, Message, Monitor, Outcome, Session};
@@ -244,8 +245,17 @@ unsafe extern "C" fn on_stream_param(data: *mut c_void, id: u32, value: *const S
         return;
     }
     let Some(format) = value else {
+        monitor.float = false;
         return;
     };
+    let sample = format
+        .property(pod::FORMAT_AUDIO_FORMAT)
+        .and_then(Pod::as_id);
+    monitor.float = sample == Some(native_f32());
+    if !monitor.float && !monitor.warned {
+        monitor.warned = true;
+        eprintln!("morf-audio: monitor format {sample:?} is not f32; levels stay silent");
+    }
     let rate = format
         .property(pod::FORMAT_AUDIO_RATE)
         .and_then(Pod::as_int)
@@ -288,7 +298,7 @@ unsafe extern "C" fn on_stream_process(data: *mut c_void) {
             return;
         }
         let spa = (*buffer).buffer;
-        if !spa.is_null() && (*spa).n_datas > 0 && !(*spa).datas.is_null() {
+        if monitor.float && !spa.is_null() && (*spa).n_datas > 0 && !(*spa).datas.is_null() {
             let first = &*(*spa).datas;
             if !first.data.is_null() && !first.chunk.is_null() && first.maxsize > 0 {
                 let chunk = &*first.chunk;

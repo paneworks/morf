@@ -7,11 +7,18 @@ use std::fmt;
 use super::{glyphs::*, targets::*, textures::*};
 
 /// Adapter selected for the wgpu renderer.
-/// A published GPU texture: the image it wraps, and its view and bind group,
-/// made once because the texture never changes size or format.
+/// A published GPU texture: the texture, its size, and its bind group, made
+/// once because the texture never changes size or format.
 pub(crate) struct ExternalTexture {
-    pub(crate) image: crate::gpu::dmabuf::DmabufImage,
+    pub(crate) texture: wgpu::Texture,
+    pub(crate) size: (u32, u32),
     pub(crate) bind_group: wgpu::BindGroup,
+    /// A frame this renderer drew (`WgpuBackend::snapshot`): premultiplied
+    /// and in the target's own space, so composited as a layer is rather
+    /// than decoded as a picture.
+    pub(crate) drawn: bool,
+    /// The exported image behind a capture, kept for as long as it shows.
+    pub(crate) _export: Option<crate::gpu::dmabuf::DmabufImage>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -29,13 +36,40 @@ pub struct GpuInfo {
     pub dmabuf: bool,
 }
 
-/// wgpu initialization or submission failure.
+/// wgpu initialization or submission failure, each kind with its message.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GpuError(pub(crate) String);
+pub enum GpuError {
+    /// The driver lost the device; the backend has to be opened again.
+    DeviceLost(String),
+    /// A shader or pipeline was refused or could not be built.
+    Pipeline(String),
+    /// The window surface could not be made or would not hand out a frame.
+    Surface(String),
+    /// No adapter, format or mode this renderer can use.
+    Unsupported(String),
+    /// Anything else.
+    Other(String),
+}
+
+impl GpuError {
+    pub fn message(&self) -> &str {
+        match self {
+            Self::DeviceLost(message)
+            | Self::Pipeline(message)
+            | Self::Surface(message)
+            | Self::Unsupported(message)
+            | Self::Other(message) => message,
+        }
+    }
+
+    pub fn is_device_lost(&self) -> bool {
+        matches!(self, Self::DeviceLost(_))
+    }
+}
 
 impl fmt::Display for GpuError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(self.message())
     }
 }
 
@@ -109,8 +143,21 @@ pub(crate) struct ShaderInstanceKey {
 pub struct WgpuBackend {
     pub(crate) device: wgpu::Device,
     pub(crate) queue: wgpu::Queue,
-    /// The space this surface blends in; every target and pipeline follows it.
-    pub(crate) blend: crate::BlendSpace,
+    /// The space this surface blends in and how deep its targets are; every
+    /// target and pipeline follows it.
+    pub(crate) space: super::Space,
+    /// The depth asked for, which `space` follows when it can be presented.
+    pub(crate) depth: super::depth::OutputDepth,
+    /// What the frames are presented as: the swapchain's or the ring's
+    /// buffers' format.
+    pub(crate) present: super::depth::PresentFormat,
+    /// Whether HDR is asked for (`hdr`), and how the frames are encoded
+    /// for it now: sRGB wherever it could not be had.
+    pub(crate) hdr: super::hdr::HdrRequest,
+    pub(crate) encoding: morf_value::present::Encoding,
+    /// Every shader registered, kept to build its pipeline again when the
+    /// space changes.
+    pub(crate) registered: Vec<super::shader_registry::KeptShader>,
     pub(crate) clear_pipeline: wgpu::RenderPipeline,
     /// What the clear pipeline is built from, kept to rebuild it when the
     /// blend space changes.
@@ -138,6 +185,10 @@ pub struct WgpuBackend {
     pub(crate) nearest_sampler: wgpu::Sampler,
     pub(crate) glyph_mask_atlas: GlyphAtlas,
     pub(crate) glyph_color_atlas: GlyphAtlas,
+    /// The last frame's laid-out text, for the commands the next copies.
+    pub(crate) kept_text: super::glyph_batch::KeptText,
+    /// The last frame's fields, for the commands the next copies.
+    pub(crate) kept_fields: super::batches::KeptFields,
     /// Hidden text already warmed, by what it looked like then: a node is
     /// warmed again only when its text or style moved (`warm_hidden_text`).
     pub(crate) warmed_text: std::collections::HashMap<morf_scene::NodeHandle, u64>,
@@ -150,12 +201,7 @@ pub struct WgpuBackend {
     pub(crate) texture_buffer: wgpu::Buffer,
     pub(crate) texture_capacity: usize,
     pub(crate) field_pipeline: wgpu::RenderPipeline,
-    pub(crate) field_analytic: wgpu::RenderPipeline,
-    pub(crate) field_opaque: wgpu::RenderPipeline,
-    pub(crate) field_boxes: wgpu::RenderPipeline,
-    pub(crate) field_boxes_opaque: wgpu::RenderPipeline,
-    pub(crate) field_quad: wgpu::RenderPipeline,
-    pub(crate) field_boxes_uniform: wgpu::RenderPipeline,
+    pub(crate) field_variants: super::field_variants::FieldVariants,
     pub(crate) field_layout: wgpu::BindGroupLayout,
     pub(crate) field_buffer: wgpu::Buffer,
     pub(crate) field_capacity: usize,
@@ -197,7 +243,7 @@ pub struct WgpuBackend {
     /// `Path` outlines already drawn, by everything that shaped their pixels,
     /// and the path data already parsed.
     pub(crate) path_textures: HashMap<u64, TextureImage>,
-    pub(crate) path_outlines: crate::path::PathOutlines,
+    pub(crate) path_outlines: morf_paint::path::PathOutlines,
     /// Offscreen layer targets, kept between frames and handed to whichever
     /// layer fits: each layer is rendered only over what is read of it, into
     /// a texture about that size. See `layer_pool`.
@@ -235,4 +281,12 @@ pub struct WgpuBackend {
     pub(crate) width: u32,
     pub(crate) height: u32,
     pub(crate) info: GpuInfo,
+    /// Raised by the driver when the device is lost; see `device_lost`.
+    pub(crate) lost: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+impl WgpuBackend {
+    /// Observes a skipped submission without consuming the host's repaint debt.
+    pub fn last_frame_skipped(&self) -> bool {
+        self.skipped
+    }
 }

@@ -20,7 +20,7 @@ fn a_closed_watch_calls_back_no_more() {
     runtime
         .execute("check.lua", b"assert(#seen == 0, #seen)")
         .unwrap();
-    assert_eq!(runtime.reactive.borrow().watches.len(), 0);
+    assert_eq!(runtime.reactive.borrow().watches().len(), 0);
 }
 
 #[test]
@@ -30,10 +30,10 @@ fn a_forgotten_handle_is_closed_when_collected() {
     let mut runtime = start(&format!(
         "{RECORD}\nlost = 0\ndo morf.fs.watch({file:?}, function() lost = lost + 1 end) end\nkept = morf.fs.watch({file:?}, record)"
     ));
-    assert_eq!(runtime.reactive.borrow().watches.len(), 2);
+    assert_eq!(runtime.reactive.borrow().watches().len(), 2);
     runtime.lua.gc_collect();
     runtime.poll_services();
-    assert_eq!(runtime.reactive.borrow().watches.len(), 1);
+    assert_eq!(runtime.reactive.borrow().watches().len(), 1);
     fs::write(&file, "x").unwrap();
     wait_for(&mut runtime, "assert(#seen >= 1)");
     pump(&mut runtime, 100);
@@ -53,7 +53,7 @@ fn twenty_idle_watches_cost_no_thread_each() {
         ));
     }
     let runtime = start(&source);
-    assert_eq!(runtime.reactive.borrow().watches.len(), 20);
+    assert_eq!(runtime.reactive.borrow().watches().len(), 20);
     assert!(morf_io::watcher_threads() <= 2);
 }
 

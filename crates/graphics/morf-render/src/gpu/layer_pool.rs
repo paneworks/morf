@@ -17,7 +17,9 @@
 //!
 //! A layer that reads its own neighbourhood — a blur, a drop shadow, an effect
 //! shader — is the exception: whatever part of it is read, the whole of it
-//! contributes, so it is rendered whole, into a texture exactly its size.
+//! contributes, so it is rendered whole, into a texture exactly its size --
+//! or, with others blurred by the same radius, into one such texture they
+//! share with a single blur chain (`layer_share`).
 //!
 //! The rest are packed side by side into shared atlases, one render pass per
 //! atlas rather than one per layer. A render pass is not free on an integrated
@@ -29,8 +31,8 @@
 
 use morf_layout::Geometry;
 
-use crate::effects::physical_damage;
 use crate::{DamageRect, DrawList, Layer};
+use morf_paint::effects::physical_damage;
 
 use super::targets::{intersect_damage, union_damage as union};
 
@@ -92,7 +94,11 @@ fn grow(rect: DamageRect, by: u32, surface: DamageRect) -> DamageRect {
 ///
 /// An effect shader is given the whole surface, as it always was: it sees the
 /// layer in surface coordinates and may sample anywhere in them.
-fn layer_extent(layer: &Layer, scale_120: u32, surface: DamageRect) -> Option<DamageRect> {
+pub(crate) fn layer_extent(
+    layer: &Layer,
+    scale_120: u32,
+    surface: DamageRect,
+) -> Option<DamageRect> {
     if layer.shader.is_some() {
         return Some(surface);
     }
@@ -218,7 +224,7 @@ pub(crate) fn layer_regions(
             // A pixel of margin: the composite samples texel centres, and a
             // rounding error must find the neighbour it would have found in a
             // full-surface target rather than a cleared one.
-            let reads = crate::effects::merge_damage(
+            let reads = morf_paint::effects::merge_damage(
                 std::mem::take(&mut wanted[index])
                     .into_iter()
                     .filter_map(|read| intersect_damage(grow(read, 1, surface), extent))
@@ -248,9 +254,7 @@ pub(crate) fn layer_regions(
     regions
 }
 
-/// Gap left between layers in an atlas, so filtering never reaches a
-/// neighbour.
-const GUTTER: u32 = 2;
+pub(crate) use super::layer_share::pack;
 
 /// One piece of offscreen work, in the order it is done.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -261,6 +265,9 @@ pub(crate) enum Stage {
     Atlas(Vec<usize>),
     /// A layer that reads its own neighbourhood, into a texture of its own.
     Solo(usize),
+    /// Layers blurred by the same radius, side by side in one target that
+    /// one chain blurs (`layer_share`).
+    Shared(Vec<usize>),
 }
 
 /// Groups the offscreen work so layers that do not depend on each other share
@@ -293,6 +300,8 @@ pub(crate) fn schedule(
             if !shared.is_empty() {
                 stages.push(Stage::Atlas(shared));
             }
+            let (blurred, solo) = super::layer_share::group(list, solo);
+            stages.extend(blurred.into_iter().map(Stage::Shared));
             stages.extend(solo.into_iter().map(Stage::Solo));
         }
         // What is done is done: a parent in a later stretch waits for
@@ -331,45 +340,6 @@ pub(crate) fn schedule(
     }
     flush(&mut segment, &mut height, &mut stages);
     stages
-}
-
-/// One packed atlas: its size, and where each rectangle — by index into what
-/// was packed — went.
-pub(crate) type Atlas = ((u32, u32), Vec<(usize, (u32, u32))>);
-
-/// Places rectangles of `sizes` on shelves no wider than `width`, starting a
-/// new atlas whenever one would grow past `height`. Returns, per atlas, its
-/// size and where each rectangle — by index into `sizes` — went.
-pub(crate) fn pack(sizes: &[(u32, u32)], (width, height): (u32, u32)) -> Vec<Atlas> {
-    let mut indices: Vec<usize> = (0..sizes.len()).collect();
-    indices.sort_by_key(|index| std::cmp::Reverse(sizes[*index].1));
-    let mut atlases = Vec::new();
-    let mut placed: Vec<(usize, (u32, u32))> = Vec::new();
-    let (mut x, mut y, mut shelf, mut used_width) = (0u32, 0u32, 0u32, 0u32);
-    for index in indices {
-        // Every place starts on an even texel; see `layer_regions`.
-        let (w, h) = (
-            sizes[index].0.next_multiple_of(2),
-            sizes[index].1.next_multiple_of(2),
-        );
-        if x > 0 && x + w > width {
-            x = 0;
-            y += shelf + GUTTER;
-            shelf = 0;
-        }
-        if y > 0 && y + h > height {
-            atlases.push(((used_width, y + shelf), std::mem::take(&mut placed)));
-            (x, y, shelf, used_width) = (0, 0, 0, 0);
-        }
-        placed.push((index, (x, y)));
-        used_width = used_width.max(x + w);
-        shelf = shelf.max(h);
-        x += w + GUTTER;
-    }
-    if !placed.is_empty() {
-        atlases.push(((used_width, y + shelf), placed));
-    }
-    atlases
 }
 
 struct Pooled {

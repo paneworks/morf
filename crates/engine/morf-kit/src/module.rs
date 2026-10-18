@@ -4,7 +4,8 @@
 //!   behaviour, and what making it did to others (its group).
 //! - `send(id, event, ...) -> effects`: an event (`"pressed"`, `"key"`, ...).
 //! - `configure(id, field, value) -> effects`: a setting written.
-//! - `state(id) -> state`, `drop(id)`.
+//! - `state(id) -> state`, `drop(id)`; the scripting layer adds
+//!   `own(id, node)`, which drops it when the node is removed.
 //! - `slots(archetype) -> { names }`, `archetypes() -> { names }`.
 //! - `implicit_size(bw, bh, cw, ch, padding, insets) -> w, h`.
 //! - `merge_tokens(parent, overrides) -> tokens`.
@@ -207,7 +208,34 @@ pub type NativeFunction = Rc<dyn Fn(Vec<IpcValue>) -> Result<Vec<IpcValue>, Stri
 /// The functions of `morf.kit.native`, each by its name. The scripting
 /// layer makes them a module.
 pub fn native_module() -> Vec<(&'static str, NativeFunction)> {
-    let registry = Rc::new(RefCell::new(Registry::default()));
+    NativeKit::default().functions()
+}
+
+/// One runtime's controls, reached by the module's functions and by the
+/// scripting layer, which drops a control when the node it belongs to goes.
+#[derive(Clone, Default)]
+pub struct NativeKit {
+    registry: Rc<RefCell<Registry>>,
+}
+
+impl NativeKit {
+    /// Drops control `id`, if it is still there.
+    pub fn drop_control(&self, id: i64) {
+        self.registry.borrow_mut().controls.remove(&id);
+    }
+
+    /// Whether control `id` is still there.
+    pub fn alive(&self, id: i64) -> bool {
+        self.registry.borrow().controls.contains_key(&id)
+    }
+
+    /// The functions of `morf.kit.native` over these controls.
+    pub fn functions(&self) -> Vec<(&'static str, NativeFunction)> {
+        functions(Rc::clone(&self.registry))
+    }
+}
+
+fn functions(registry: Rc<RefCell<Registry>>) -> Vec<(&'static str, NativeFunction)> {
     let id_of = |arguments: &[IpcValue]| match arguments.first() {
         Some(IpcValue::Integer(id)) => Ok(*id),
         Some(IpcValue::Number(id)) => Ok(*id as i64),
@@ -381,4 +409,27 @@ pub fn native_module() -> Vec<(&'static str, NativeFunction)> {
         }),
     ));
     functions
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_scripting_layer_drops_a_control_the_module_made() {
+        let kit = NativeKit::default();
+        let functions = kit.functions();
+        let call = |name: &str, arguments: Vec<IpcValue>| {
+            let (_, function) = functions.iter().find(|(n, _)| *n == name).unwrap();
+            function(arguments).unwrap()
+        };
+        let made = call("new", vec![IpcValue::from("Press")]);
+        let IpcValue::Integer(id) = made[0] else {
+            panic!("an id");
+        };
+        assert!(kit.alive(id));
+        kit.drop_control(id);
+        assert!(!kit.alive(id));
+        assert_eq!(call("count", Vec::new()), vec![IpcValue::Integer(0)]);
+    }
 }

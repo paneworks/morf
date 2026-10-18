@@ -8,7 +8,7 @@
 //! of a configuration's time takes no second of its own, and fires the same
 //! handlers every run.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -110,10 +110,14 @@ pub struct DueTimer {
     pub origin: Rc<str>,
 }
 
-/// Every timer, and the clock they run on.
+/// Every timer and `Timer` node, and the clock they run on.
 #[derive(Default)]
 pub struct Timers {
     timers: Vec<Timer>,
+    /// Each `ui.Timer`'s `on_triggered`.
+    node_handlers: HashMap<NodeHandle, Handler>,
+    /// Where each `ui.Timer` was built, for `MORF_WAKE_LOG`.
+    origins: HashMap<NodeHandle, Rc<str>>,
     /// One-shot timers that came due this turn and have not yet fired: a
     /// cancel before their turn in the batch takes them out, so it holds.
     due_one_shots: HashSet<u64>,
@@ -190,6 +194,43 @@ impl Timers {
     /// no node).
     pub fn retain_nodes(&mut self, keep: impl Fn(NodeHandle) -> bool) {
         self.timers.retain(|timer| timer.node.is_none_or(&keep));
+        self.node_handlers.retain(|node, _| keep(*node));
+        self.origins.retain(|node, _| keep(*node));
+    }
+
+    /// Gives the `Timer` node `node` its handler.
+    pub fn set_node_handler(&mut self, node: NodeHandle, handler: Handler) {
+        self.node_handlers.insert(node, handler);
+    }
+
+    /// Whether `node` is a `Timer` node with a handler.
+    pub fn has_node_handler(&self, node: NodeHandle) -> bool {
+        self.node_handlers.contains_key(&node)
+    }
+
+    /// Every `Timer` node with its handler.
+    pub fn node_handlers(&self) -> Vec<(NodeHandle, Handler)> {
+        self.node_handlers
+            .iter()
+            .map(|(node, handler)| (*node, handler.clone()))
+            .collect()
+    }
+
+    /// Records where the `Timer` node `node` was built.
+    pub fn set_origin(&mut self, node: NodeHandle, origin: Rc<str>) {
+        self.origins.insert(node, origin);
+    }
+
+    /// Where the `Timer` node `node` was built.
+    pub fn origin_of(&self, node: NodeHandle) -> Option<Rc<str>> {
+        self.origins.get(&node).cloned()
+    }
+
+    /// Forgets a `Timer` node that is gone, and its timer.
+    pub fn forget_node(&mut self, node: NodeHandle) {
+        self.node_handlers.remove(&node);
+        self.origins.remove(&node);
+        self.remove_node(node);
     }
 
     /// Every timer that came due, rescheduled; a one-shot is taken out and

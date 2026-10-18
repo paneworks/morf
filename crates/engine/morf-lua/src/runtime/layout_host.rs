@@ -5,18 +5,16 @@
 //! not write to nodes or signals -- a write from inside layout is refused
 //! with a message rather than allowed to corrupt the pass it is part of.
 
-use std::collections::HashMap;
-
 use luna::{Context, Executor, Lua, Table, Value as LuaValue, Variadic};
 use morf_layout::{CustomLayout, Geometry, Layout, Size, TextMeasurer};
 use morf_scene::NodeHandle;
 
-use crate::{reactive_execute::*, state::*, types::*};
+use crate::{vm::execute::*, vm::types::*};
 use morf_runtime::Handler;
 
 pub(crate) struct LuaLayoutHost<'a> {
     pub(crate) lua: &'a mut Lua,
-    pub(crate) layouts: &'a HashMap<NodeHandle, CustomLayoutFns>,
+    pub(crate) layouts: &'a morf_runtime::layout::LayoutHooks,
     pub(crate) limits: Limits,
 }
 
@@ -54,7 +52,7 @@ fn call<'gc>(
 ) -> Result<Vec<LuaValue<'gc>>, String> {
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(function))
+        ctx.fetch(&crate::vm::handler_store::stashed(function)?)
             .into(),
         Variadic(args),
     );
@@ -75,7 +73,7 @@ impl CustomLayout for LuaLayoutHost<'_> {
     ) -> Result<Size, String> {
         let functions = self
             .layouts
-            .get(&node)
+            .custom(node)
             .ok_or("Layout node has no functions")?
             .clone();
         let limits = self.limits;
@@ -105,7 +103,7 @@ impl CustomLayout for LuaLayoutHost<'_> {
     ) -> Result<Vec<Geometry>, String> {
         let functions = self
             .layouts
-            .get(&node)
+            .custom(node)
             .ok_or("Layout node has no functions")?
             .clone();
         let limits = self.limits;
@@ -162,10 +160,10 @@ impl Runtime {
         let reactive = self.reactive.borrow();
         let mut host = LuaLayoutHost {
             lua: &mut self.lua,
-            layouts: &reactive.custom_layouts,
+            layouts: reactive.layout_hooks(),
             limits: self.limits,
         };
-        Layout::compute_with(&reactive.scene, root, available, text, &mut host)
+        Layout::compute_with(reactive.scene(), root, available, text, &mut host)
             .map_err(|error| error.to_string())
     }
 
@@ -182,11 +180,11 @@ impl Runtime {
         let reactive = self.reactive.borrow();
         let mut host = LuaLayoutHost {
             lua: &mut self.lua,
-            layouts: &reactive.custom_layouts,
+            layouts: reactive.layout_hooks(),
             limits: self.limits,
         };
         layout
-            .update_with(&reactive.scene, root, available, text, &mut host)
+            .update_with(reactive.scene(), root, available, text, &mut host)
             .map_err(|error| error.to_string())
     }
 }

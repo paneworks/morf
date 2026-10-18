@@ -6,16 +6,22 @@
 //!
 //! The queue is its own because every protocol handler of smithay's toolkit
 //! is implemented on one state type, and a state type of another crate
-//! cannot be given them: this crate's [`Desktop`] has its own registry and
+//! cannot be given them: the Wayland [`Desktop`] has its own registry and
 //! its own outputs, and the host dispatches it after each wake of its loop
 //! (any read of the socket fills this queue too).
+//!
+//! A host sees only the [`Desktop`] trait: [`connect`] gives the
+//! compositor's, [`HeadlessDesktop`] a stand-in with no compositor.
 
 mod capture;
 mod data_control;
+mod desktop;
 mod gamma;
+mod headless;
 mod idle;
 mod output_power;
 mod toplevels;
+mod wayland;
 mod workspaces;
 
 use std::collections::{HashMap, VecDeque};
@@ -47,12 +53,15 @@ use wayland_protocols_wlr::foreign_toplevel::v1::client::{
 use wayland_protocols_wlr::screencopy::v1::client::zwlr_screencopy_manager_v1::ZwlrScreencopyManagerV1;
 
 pub use capture::{CaptureBuffer, ScreencopyFormat, ScreencopyFrame};
+pub use desktop::{Desktop, DesktopCapabilities, IdleTimeout};
 pub use gamma::{
     GammaSettings, NEUTRAL as NEUTRAL_TEMPERATURE, TEMPERATURE_RANGE, ramps as gamma_ramps,
     white_point,
 };
+pub use headless::{DesktopRequest, HeadlessDesktop};
 pub use output_power::OutputPowerMode;
 pub use toplevels::{ToplevelAction, ToplevelInfo};
+pub use wayland::connect;
 pub use workspaces::WorkspaceInfo;
 
 /// What the desktop protocols tell the host.
@@ -164,15 +173,15 @@ pub struct DesktopState {
 }
 
 /// The desktop protocols, on a connection a window backend opened.
-pub struct Desktop {
+pub(crate) struct WaylandDesktop {
     connection: Connection,
     queue: EventQueue<DesktopState>,
     state: DesktopState,
 }
 
-impl Desktop {
+impl WaylandDesktop {
     /// Binds the desktop protocols the compositor offers on `connection`.
-    pub fn new(connection: Connection) -> Result<Self, String> {
+    pub(crate) fn new(connection: Connection) -> Result<Self, String> {
         let (globals, mut queue) = registry_queue_init::<DesktopState>(&connection)
             .map_err(|error| format!("could not read the Wayland globals: {error}"))?;
         let qh = queue.handle();

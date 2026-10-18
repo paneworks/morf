@@ -41,9 +41,18 @@ pub fn apply_idle_inhibit(runtime: &mut Runtime, client: &mut dyn Backend) {
 
 /// A threshold subscribed, or cancelled, since the last frame reaches the
 /// compositor now, not at the next reload.
-pub fn apply_idle_timeouts(runtime: &mut Runtime, desktop: &mut Desktop) {
-    if let Some(timeouts) = runtime.take_idle_timeouts_change() {
+pub fn apply_idle_timeouts(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
+    if let Some(timeouts) = runtime.take_idle_timeouts_change()
+        && desktop.capabilities().idle_notify
+    {
         desktop.update_idle_timeouts(&timeouts);
+    }
+}
+
+/// Every idle threshold the configuration holds, subscribed afresh.
+pub fn refresh_idle_timeouts(runtime: &Runtime, desktop: &mut dyn Desktop) {
+    if desktop.capabilities().idle_notify {
+        desktop.set_idle_timeouts(&runtime.idle_timeouts());
     }
 }
 
@@ -53,8 +62,12 @@ pub fn apply_shortcuts_inhibit(runtime: &mut Runtime, client: &mut dyn Backend) 
     }
 }
 
-pub fn apply_output_power_requests(runtime: &mut Runtime, desktop: &mut Desktop) {
-    for on in runtime.take_output_power_requests() {
+pub fn apply_output_power_requests(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
+    let requests = runtime.take_output_power_requests();
+    if !desktop.capabilities().output_power {
+        return;
+    }
+    for on in requests {
         desktop.set_output_power(if on {
             OutputPowerMode::On
         } else {
@@ -63,8 +76,15 @@ pub fn apply_output_power_requests(runtime: &mut Runtime, desktop: &mut Desktop)
     }
 }
 
-pub fn apply_gamma_requests(runtime: &mut Runtime, desktop: &mut Desktop) {
-    for request in runtime.take_gamma_requests() {
+pub fn apply_gamma_requests(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
+    let requests = runtime.take_gamma_requests();
+    if !desktop.capabilities().gamma_control {
+        if !requests.is_empty() {
+            runtime.warn("morf.gamma: this compositor has no gamma control".to_owned());
+        }
+        return;
+    }
+    for request in requests {
         let output = request.output.as_deref();
         let result = match request.set {
             Some((temperature, brightness, gamma)) => desktop.set_gamma(
@@ -91,17 +111,19 @@ pub fn apply_gamma_requests(runtime: &mut Runtime, desktop: &mut Desktop) {
 pub fn apply_clipboard_requests(
     runtime: &mut Runtime,
     client: &mut dyn Backend,
-    desktop: Option<&mut Desktop>,
+    desktop: &mut dyn Desktop,
 ) {
     // Data control first: no focus, no serial, any type. Without it only text
     // can be set, and only once an input serial exists to set it with, so the
     // requests wait for one.
-    if let Some(desktop) = desktop
-        && desktop.supports_data_control()
-    {
+    let can = desktop.capabilities();
+    if can.data_control {
         for request in runtime.take_clipboard_requests() {
             let primary = request.primary;
-            desktop.set_selection(crate::surface_drag::clipboard_payload(request), primary);
+            if primary && !can.primary_selection {
+                continue;
+            }
+            desktop.set_selection(crate::input::drag::clipboard_payload(request), primary);
         }
         return;
     }

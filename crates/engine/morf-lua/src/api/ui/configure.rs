@@ -1,30 +1,30 @@
 //! A node configured from its constructor table: its properties, handlers,
 //! engine relations, `enter`, `exit` and `behaviors`.
 
-use crate::api_shader::attach_shader;
-use crate::configure_states::configure_states;
+use crate::api::media::shader::attach_shader;
+use crate::api::ui::configure_states::configure_states;
 use luna::{Context, Function, Table, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use morf_scene::{Behavior, NodeHandle, Repeat, RotationDirection};
+use morf_scene::{Behavior, Motion, NodeHandle, Repeat, RotationDirection};
 
 use crate::{
-    events::*, lua_values::*, reactive_bindings::*, scene_bindings::*, state::*, table_menu::*,
-    types::*,
+    api::ui::bindings::*, api::ui::scene::*, runtime::events::*, runtime::state::*, value::lua::*,
+    value::table::*, vm::types::*,
 };
 
 mod behaviors;
 mod entrance;
 
 pub(crate) use behaviors::{
-    configure_behaviors, parse_color_space, parse_hue, parse_repeat, parse_rotation_direction,
+    configure_behaviors, parse_color_space, parse_hue, parse_motion, parse_repeat,
+    parse_rotation_direction,
 };
 use entrance::{configure_exit, enter_values};
 
 pub(crate) fn configure_element<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     limits: Limits,
     node: NodeHandle,
@@ -124,8 +124,8 @@ pub(crate) fn configure_element<'gc>(
             };
             state
                 .borrow_mut()
-                .destroy_hooks
-                .insert(node, crate::vm::handler_store::register(ctx.stash(closure)));
+                .destroy_hooks_mut()
+                .set(node, crate::vm::handler_store::register(ctx.stash(closure)));
             continue;
         }
         if matches!(property.as_str(), "stretch" | "track" | "shortcuts")
@@ -139,7 +139,7 @@ pub(crate) fn configure_element<'gc>(
             let LuaValue::Function(Function::Closure(closure)) = value else {
                 return Err(format!("{property} must be a function"));
             };
-            state.borrow_mut().events.set(
+            state.borrow_mut().events_mut().set(
                 node,
                 event,
                 Some(crate::vm::handler_store::register(ctx.stash(closure))),
@@ -148,8 +148,8 @@ pub(crate) fn configure_element<'gc>(
         }
         // A table holding bindings among its fields is bound as a whole.
         let value = match value {
-            LuaValue::Table(table) if crate::configure_states::binds_inside(&property) => {
-                match crate::configure_states::table_binding(ctx, table, limits)? {
+            LuaValue::Table(table) if crate::api::ui::configure_states::binds_inside(&property) => {
+                match crate::api::ui::configure_states::table_binding(ctx, table, limits)? {
                     Some(closure) => LuaValue::Function(Function::Closure(closure)),
                     None => value,
                 }
@@ -159,13 +159,13 @@ pub(crate) fn configure_element<'gc>(
         if let LuaValue::Function(Function::Closure(closure)) = value {
             if !state
                 .borrow()
-                .scene
+                .scene()
                 .has_property(node, &property)
                 .map_err(|error| error.to_string())?
             {
                 let element = state
                     .borrow()
-                    .scene
+                    .scene()
                     .element(node)
                     .map_err(|error| error.to_string())?;
                 return Err(format!("unknown {element:?} property `{property}`"));
@@ -200,12 +200,12 @@ pub(crate) fn configure_element<'gc>(
             Some(timing) => {
                 let mut state = state.borrow_mut();
                 let start = state
-                    .scene
+                    .scene()
                     .current(node, &property)
                     .map_err(|error| error.to_string())?
                     .clone();
                 state
-                    .scene
+                    .scene_mut()
                     .animate_from(node, &property, start, settled, timing)
                     .map_err(|error| error.to_string())?;
             }
@@ -220,7 +220,7 @@ pub(crate) fn configure_element<'gc>(
     if let Some(value) = named_loop {
         match value {
             LuaValue::Function(Function::Closure(closure)) => {
-                crate::reactive_bindings::register_loop_binding(state, ctx, limits, node, closure);
+                crate::api::ui::bindings::register_loop_binding(state, ctx, limits, node, closure);
             }
             value => {
                 let value = lua_to_scene(ctx, value, 0)?;
@@ -236,7 +236,7 @@ pub(crate) fn configure_element<'gc>(
     for (_, child) in children {
         state
             .borrow_mut()
-            .scene
+            .scene_mut()
             .reparent(child, Some(node))
             .map_err(|error| error.to_string())?;
     }
@@ -280,21 +280,17 @@ pub(crate) fn assign_engine_relation<'gc>(
     value: LuaValue<'gc>,
 ) -> Result<(), String> {
     match property {
-        "shortcuts" => match crate::shortcut::read_table(ctx, value)? {
-            Some(shortcuts) => {
-                state.shortcuts.insert(node, shortcuts);
-            }
-            None => {
-                state.shortcuts.remove(&node);
-            }
-        },
+        "shortcuts" => {
+            let shortcuts = crate::runtime::shortcut::read_table(ctx, value)?;
+            state.shortcuts_mut().set(node, shortcuts);
+        }
         "stretch" => {
             if matches!(value, LuaValue::Function(_)) {
                 return Err("stretch is a setting, not a binding: give it a table or true".into());
             }
             let spec = morf_scene::Stretch::from_value(&lua_to_scene(ctx, value, 0)?)?;
             state
-                .scene
+                .scene_mut()
                 .set_stretch(node, spec)
                 .map_err(|error| error.to_string())?;
         }
@@ -307,26 +303,26 @@ pub(crate) fn assign_engine_relation<'gc>(
                     .map_err(|_| "mask must be a morf node, a table or nil".to_owned())?
                     .handle;
                 state
-                    .scene
+                    .scene_mut()
                     .set_mask(node, Some(mask))
                     .map_err(|error| error.to_string())?;
             }
             LuaValue::Nil | LuaValue::Boolean(false) | LuaValue::Table(_) => {
                 state
-                    .scene
+                    .scene_mut()
                     .set_mask(node, None)
                     .map_err(|error| error.to_string())?;
                 let value = match value {
                     LuaValue::Table(_) => lua_to_scene(ctx, value, 0)?,
                     _ => morf_scene::Value::Nil,
                 };
-                crate::scene_bindings::assign_scene_property(state, node, "mask", value)?;
+                crate::api::ui::scene::assign_scene_property(state, node, "mask", value)?;
             }
             _ => return Err("mask must be a morf node, a table or nil".to_owned()),
         },
         _ => {
             let element = state
-                .scene
+                .scene()
                 .element(node)
                 .map_err(|error| error.to_string())?;
             if element != morf_scene::Element::SdfShape {
@@ -343,13 +339,13 @@ pub(crate) fn assign_engine_relation<'gc>(
                 _ => return Err("track must be a morf node or nil".to_owned()),
             };
             state
-                .scene
+                .scene_mut()
                 .set_track(node, target)
                 .map_err(|error| error.to_string())?;
         }
     }
-    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
-    state.flush_pending = true;
+    state.revisions_mut().bump_scene();
+    state.tracking_mut().defer_flush();
     Ok(())
 }
 

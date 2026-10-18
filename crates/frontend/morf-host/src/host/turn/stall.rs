@@ -7,7 +7,7 @@ use morf_lua::Runtime;
 use std::time::{Duration, Instant};
 
 use crate::host::windows::Kind;
-use crate::{paint::*, surfaces::*};
+use crate::{host::surfaces::*, paint::*};
 
 /// Advances motion from the wall clock while the shell's own surface gets no
 /// frame callbacks.
@@ -41,7 +41,7 @@ pub(crate) fn advance_without_callbacks(
     let frame = runtime
         .tick_frame_animations(delta)
         .map_err(|error| error.to_string())?;
-    if frame.active || frame.changed > 0 || state.animating_shaders {
+    if frame.active || frame.changed > 0 || state.animating() {
         state.primary_deferred = true;
         for surface in state
             .windows
@@ -69,7 +69,7 @@ pub(crate) fn motion_deadline(
 ) -> Option<Instant> {
     let waiting = client.layer_frame_wait(PRIMARY_LAYER)?;
     let now = Instant::now();
-    if !(state.animating_shaders || runtime.has_motion()) {
+    if !(state.animating() || runtime.has_motion()) {
         // Still, a paint owed and waiting on the callback comes due once
         // the callback is overdue (`owed_paint_due`).
         if !state.primary_deferred {

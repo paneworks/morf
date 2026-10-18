@@ -16,13 +16,7 @@ impl Scene {
         behavior: Option<Behavior>,
     ) -> Result<(), SceneError> {
         let id = self.live(node)?;
-        let (name, _) = self.nodes[id]
-            .properties
-            .get_key_value(property)
-            .ok_or_else(|| SceneError::UnknownProperty {
-                element: self.nodes[id].element.name(),
-                property: property.to_owned(),
-            })?;
+        let (name, _) = self.lookup(id, property)?;
         let key = PropertyKey {
             node: id,
             property: name,
@@ -53,14 +47,7 @@ impl Scene {
     ) -> Result<(), SceneError> {
         let id = self.live(node)?;
         let element = self.nodes[id].element;
-        let (name, slot) = self.nodes[id]
-            .properties
-            .get_key_value(property)
-            .map(|(name, slot)| (*name, *slot))
-            .ok_or_else(|| SceneError::UnknownProperty {
-                element: element.name(),
-                property: property.to_owned(),
-            })?;
+        let (name, slot) = self.owned(id, property)?;
         let from = coerce(element, property, slot.kind, from.into())?;
         let to = coerce(element, property, slot.kind, to.into())?;
         if !interpolatable(&from, &to) {
@@ -110,13 +97,7 @@ impl Scene {
         physics: Option<Physics>,
     ) -> Result<(), SceneError> {
         let id = self.live(node)?;
-        let (name, slot) = self.nodes[id]
-            .properties
-            .get_key_value(property)
-            .ok_or_else(|| SceneError::UnknownProperty {
-                element: self.nodes[id].element.name(),
-                property: property.to_owned(),
-            })?;
+        let (name, slot) = self.lookup(id, property)?;
         if !matches!(slot.kind, PropertyType::Number | PropertyType::Color) {
             return Err(SceneError::InvalidPropertyType {
                 element: self.nodes[id].element.name(),

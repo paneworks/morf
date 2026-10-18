@@ -21,8 +21,8 @@ from the defaults in `services/settings.lua`).
 ## The compositor
 
 What upstream pushed through CompositorService, MonitorService and
-ShortcutService goes through `lib/hyprland_config.lua` (on top of
-`lib/hyprland.lua`), for a Lua-configured Hyprland (`eval` of `hl.*` chunks)
+ShortcutService goes through `lib/integrations/hyprland_config.lua` (on top
+of `lib/integrations/hyprland.lua`), for a Lua-configured Hyprland (`eval` of `hl.*` chunks)
 or a hyprlang one (`keyword`s); the configuration files are never written,
 and whatever is pushed is pushed again after every reload. Under any other
 compositor the three services say so, the settings pages lock their

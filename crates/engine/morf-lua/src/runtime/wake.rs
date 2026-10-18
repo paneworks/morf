@@ -10,7 +10,7 @@
 
 use std::time::Instant;
 
-use crate::{Error, reactive_bindings::flush_reactive, types::Runtime};
+use crate::{Error, api::ui::bindings::flush_reactive, vm::types::Runtime};
 
 pub use morf_runtime::wake::{ClockPrecision, DeadlineCause};
 
@@ -23,44 +23,24 @@ impl Runtime {
     /// whether the scene actually changed: a repaint of a shell that shows
     /// no time is pure cost.
     pub fn update_clock(&mut self, value: impl Into<String>) -> Result<bool, Error> {
-        let (revision_before, hidden_before) = {
-            let state = self.reactive.borrow();
-            (
-                state.engine.revisions.scene_revision,
-                state.engine.revisions.hidden_revisions,
-            )
-        };
-        let changed = {
-            let mut state = self.reactive.borrow_mut();
-            let state = &mut *state;
-            state
-                .engine
-                .clocks
-                .update(&mut state.engine.reactive, value.into())
-                .map_err(Error::Runtime)?
-        };
+        let before = self.reactive.borrow().revisions().mark();
+        let changed = self
+            .reactive
+            .borrow_mut()
+            .update_clocks(value.into())
+            .map_err(Error::Runtime)?;
         if changed {
             self.lua
                 .enter(|ctx| flush_reactive(&self.reactive, ctx, self.limits))
                 .map_err(Error::Runtime)?;
         }
-        let state = self.reactive.borrow();
-        Ok(state
-            .engine
-            .revisions
-            .scene_revision
-            .wrapping_sub(revision_before)
-            > state
-                .engine
-                .revisions
-                .hidden_revisions
-                .wrapping_sub(hidden_before))
+        Ok(self.reactive.borrow().revisions().shown_since(before))
     }
 
     /// The finest clock anything currently reads, or nothing when no binding
     /// shows the time: the grain the loop has to wake at for the clock.
     pub fn clock_precision(&self) -> Option<ClockPrecision> {
-        self.reactive.borrow().engine.clock_precision()
+        self.reactive.borrow().clock_precision()
     }
 
     /// The earliest moment something in this runtime comes due on the wall
@@ -70,26 +50,23 @@ impl Runtime {
     /// grain it is read at, and the loop owns the wall-clock text.
     pub fn next_deadline(&self) -> Option<(Instant, DeadlineCause)> {
         let state = self.reactive.borrow();
-        let caret = crate::text_inputs::next_blink(&*state).map(|at| (at, DeadlineCause::Caret));
-        let image = state.images.due().map(|at| (at, DeadlineCause::Image));
+        let caret =
+            crate::runtime::text_inputs::next_blink(&*state).map(|at| (at, DeadlineCause::Caret));
+        let image = state.images().due().map(|at| (at, DeadlineCause::Image));
         let dbus = state
-            .dbus_replies
-            .iter()
-            .filter_map(|entry| entry.reply.deadline())
-            .min()
+            .dbus()
+            .next_reply_deadline()
             .map(|at| (at, DeadlineCause::DbusTimeout));
         let terminal = state
-            .terminals
+            .terminals()
             .next_deadline()
             .map(|at| (at, DeadlineCause::Terminal));
         let tray = state
-            .status_notifiers
-            .iter()
-            .filter_map(|subscription| subscription.host.next_deadline())
-            .min()
+            .feeds()
+            .next_tray_deadline()
             .map(|at| (at, DeadlineCause::TrayRetry));
         morf_runtime::wake::earliest([
-            state.engine.next_deadline(),
+            state.engine().next_deadline(),
             caret,
             image,
             dbus,
@@ -105,10 +82,6 @@ impl Runtime {
     /// the shell.
     pub fn has_pending_work(&self) -> bool {
         let state = self.reactive.borrow();
-        state.engine.has_pending_work()
-            || state
-                .transform_watchers
-                .values()
-                .any(|watcher| watcher.pending && watcher.callback.is_some())
+        state.engine().has_pending_work() || state.transform_watchers().has_pending_callback()
     }
 }

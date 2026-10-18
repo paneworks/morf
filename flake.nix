@@ -40,6 +40,8 @@
           };
         };
 
+        # NVIDIA wrappers only under `--impure` with NVIDIA_VERSION set; a pure
+        # evaluation reads "" and gets the Mesa ones.
         nvidiaVersion = builtins.getEnv "NVIDIA_VERSION";
         hasNvidia = nvidiaVersion != "";
 
@@ -177,10 +179,21 @@
           cargoBuildFlags = [ "--package" "morf-cli" ];
           nativeBuildInputs = with pkgs; [ pkg-config makeWrapper ];
           buildInputs = with pkgs; [ wayland libxkbcommon ];
-          doCheck = false;
+          # The crates whose tests need no GPU, display, fonts or PAM stack;
+          # the rest run in CI and the sandbox.
+          doCheck = true;
+          cargoTestFlags = [
+            "--package" "morf-value"
+            "--package" "morf-scene"
+            "--package" "morf-layout"
+            "--package" "morf-shader"
+          ];
           postInstall = ''
             mkdir -p $library/share/morf/library $out/share/morf
             cp -r library/lib library/README.md library/luarc.template.json $library/share/morf/library/
+            mkdir -p $library/share/morf/library/docs
+            cp docs/UI.md docs/IO.md $library/share/morf/library/docs/
+            $out/bin/morf --version | cut -d' ' -f2 > $library/share/morf/library/docs/VERSION
             substituteInPlace $library/share/morf/library/luarc.template.json \
               --replace-fail '~/.local/share/morf/library' "$library/share/morf/library"
             $out/bin/morf types $library/share/morf/library/types

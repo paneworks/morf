@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use morf_lua::{ClockPrecision, DeadlineCause, Runtime};
 
 use morf_host::lock::{WorkerCommand, WorkerSender};
-use morf_host::wake_plan::{Reason, Sleep};
+use morf_host::paint::wake_plan::{Reason, Sleep};
 
 fn runtime_with(source: &str) -> Runtime {
     let mut runtime = Runtime::default();
@@ -95,14 +95,23 @@ fn a_command_for_an_output_rings_its_loop() {
     // out first.
     let wake = morf_io::Wake::new().unwrap();
     wake.drain();
+    let alarm = morf_host::lock::WorkerAlarm::default();
+    alarm.claim();
+    let other = std::thread::spawn(morf_io::Wake::new)
+        .join()
+        .unwrap()
+        .unwrap();
+    let before = other.rings();
     let (sender, receiver) = mpsc::channel();
-    let sender = WorkerSender::new(sender);
+    let sender = WorkerSender::new(sender, alarm);
     let (reply, _answer) = mpsc::sync_channel(1);
     sender.send(WorkerCommand::Logs(reply)).unwrap();
     assert!(
         wake.wait(Duration::from_secs(1)),
         "the command rang the loop"
     );
+    assert_eq!(wake.rings(), 1, "once");
+    assert_eq!(other.rings(), before, "and no other output's");
     assert!(receiver.try_recv().is_ok());
 }
 
@@ -112,7 +121,7 @@ fn a_paint_owed_on_an_overdue_frame_callback_is_made_once_a_stall() {
     // empty commit asked for; the change the shell owes a paint for then
     // showed only after the next unrelated event. Past a stall it is painted
     // anyway -- and not again until another stall has passed.
-    use morf_host::surfaces::{frame_stall, owed_paint_due};
+    use morf_host::host::surfaces::{frame_stall, owed_paint_due};
     let refresh = Duration::from_millis(16);
     let stall = frame_stall(refresh);
     let now = Instant::now();

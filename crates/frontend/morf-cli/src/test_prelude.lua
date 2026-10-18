@@ -167,6 +167,15 @@ function test.source(source, options)
   return host.load(nil, options)
 end
 
+-- `test.reload()` reloads the configuration from its file in place, as the
+-- shell does when the file changes; `test.reload { source = [[...]] }` from
+-- that source. Returns `true`, or `false` and the reload's error.
+function test.reload(options) return host.reload(options or {}) end
+
+-- What the runner itself found wrong since load: a frame that failed, a
+-- layout that could not be made, a surface that could not be worked out.
+function test.problems() return host.problems() end
+
 function test.surfaces() return host.surfaces() end
 function test.now() return host.now() end
 --- Whether the configuration holds the compositor's shortcuts off it now
@@ -188,6 +197,33 @@ function test.wait(predicate, timeout_ms, message)
       fail("timed out after " .. tostring(timeout_ms or 2000) .. " ms", message)
     end
     host.advance(16, 5)
+  end
+end
+
+-- What the configuration waits on from outside: `pending`, the
+-- `morf.request_socket` answers and `morf.connect` connects under way, and
+-- `synced`, by path, the last `__morf_test.sync>>` line each connection read.
+function test.io() return host.ipc("__morf_test.io") end
+
+-- What the configuration holds open, counted by the engine:
+-- `dbus_subscriptions`, `dbus_calls`, `timers`, `processes`, `connections`,
+-- `file_watches` and `owned_hooks`.
+function test.resources() return host.resources() end
+
+-- Holds the clock while the outside answers: calls `serve` (a fake living
+-- in the spec) until nothing is pending and `predicate(test.io())`, if
+-- given, holds. Fails after `timeout_ms` of wall time.
+function test.drain(serve, predicate, timeout_ms)
+  local deadline = host.wall_ms() + (timeout_ms or 30000)
+  while true do
+    if serve then serve() end
+    local state = test.io()
+    if state.pending == 0 and (predicate == nil or predicate(state)) then return end
+    if host.wall_ms() > deadline then
+      fail("still waiting on the outside after " .. tostring(timeout_ms or 30000) .. " ms",
+        tostring(state.pending) .. " pending")
+    end
+    host.advance(0, 2)
   end
 end
 
@@ -363,6 +399,9 @@ end
 
 function test.ipc_verbs() return host.ipc_verbs() end
 
+-- The host's frame accounting since the last call, and a new window begun.
+function test.frames() return host.frames() end
+
 -- `level` is the least that counts: "debug", "info", "warn" or "error".
 function test.logs(level) return host.logs(level or "debug") end
 function test.clear_logs() host.clear_logs() end
@@ -376,6 +415,10 @@ end
 
 function test.clear_stubs() host.clear_stubs() end
 
+-- Approves an imported module the configuration loaded, by its `require`
+-- name, in the run's own approvals; the next `test.load` runs it approved.
+function test.approve(name) return host.approve(name) end
+
 -- Every command the configuration asked `morf.run` for, stubbed or not.
 function test.runs() return host.runs() end
 
@@ -384,6 +427,24 @@ function test.runs() return host.runs() end
 function test.snapshot(name, options)
   options = options or {}
   return host.snapshot(name, options.surface)
+end
+
+-- The surface as it is drawn now, to read its pixels back (default the
+-- primary; "screen" for all of them), when there is a GPU: a frame, or nil
+-- and why not. `frame.width` and `frame.height` are in pixels at the
+-- runner's scale; `frame.pixel(x, y)` is the colour there as "#rrggbbaa";
+-- `frame.region { x, y, width, height }` sums one up: its `mean` colour,
+-- and the `luma`, `variance`, `min` and `max` of its luma, from 0 to 1.
+function test.frame(options)
+  options = options or {}
+  local drawn, id, width, height = host.frame(options.surface)
+  if not drawn then return nil, id end
+  local frame = { width = width, height = height }
+  function frame.pixel(x, y) return host.pixel(id, x, y) end
+  function frame.region(box)
+    return host.region(id, box.x or box[1], box.y or box[2], box.width or box[3], box.height or box[4])
+  end
+  return frame
 end
 
 function test.note(message) host.note(tostring(message)) end

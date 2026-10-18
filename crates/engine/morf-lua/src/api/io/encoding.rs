@@ -8,7 +8,7 @@ use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
 use morf_io::archive::{self, DEFAULT_MAX_ENTRIES, DEFAULT_MAX_OUTPUT, MAX_ENTRIES, MAX_OUTPUT};
 use morf_io::codec;
 
-use crate::scene_bindings::*;
+use crate::api::ui::scene::*;
 
 const MAX_INPUT: usize = 64 * 1024 * 1024;
 
@@ -127,7 +127,7 @@ pub(crate) fn install_archive_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
                     }
                     stack.replace(ctx, list);
                 }
-                Err(error) => stack.replace(ctx, (LuaValue::Nil, error)),
+                Err(error) => stack.replace(ctx, (LuaValue::Nil, error.into_message())),
             }
             Ok(CallbackReturn::Return)
         }),
@@ -160,7 +160,7 @@ pub(crate) fn install_archive_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
             });
             match found {
                 Ok(data) => stack.replace(ctx, luna::String::from_slice(&ctx, data)),
-                Err(error) => stack.replace(ctx, (LuaValue::Nil, error)),
+                Err(error) => stack.replace(ctx, (LuaValue::Nil, error.into_message())),
             }
             Ok(CallbackReturn::Return)
         }),
@@ -192,7 +192,7 @@ pub(crate) fn install_encoding_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
             let input: LuaValue = stack.consume(ctx)?;
             match codec::base64_decode(bytes(input, "base64_decode")?) {
                 Ok(out) => stack.replace(ctx, luna::String::from_slice(&ctx, out)),
-                Err(error) => stack.replace(ctx, (LuaValue::Nil, error)),
+                Err(error) => stack.replace(ctx, (LuaValue::Nil, error.into_message())),
             }
             Ok(CallbackReturn::Return)
         }),
@@ -219,7 +219,7 @@ pub(crate) fn install_encoding_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
             let input: LuaValue = stack.consume(ctx)?;
             match codec::hex_decode(bytes(input, "hex_decode")?) {
                 Ok(out) => stack.replace(ctx, luna::String::from_slice(&ctx, out)),
-                Err(error) => stack.replace(ctx, (LuaValue::Nil, error)),
+                Err(error) => stack.replace(ctx, (LuaValue::Nil, error.into_message())),
             }
             Ok(CallbackReturn::Return)
         }),
@@ -328,7 +328,7 @@ pub(crate) fn install_encoding_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
                 count_option(ctx, options, "max_size", DEFAULT_MAX_OUTPUT, MAX_OUTPUT)?;
             match archive::inflate(input, format.as_deref(), max_output) {
                 Ok(out) => stack.replace(ctx, luna::String::from_slice(&ctx, out)),
-                Err(error) => stack.replace(ctx, (LuaValue::Nil, error)),
+                Err(error) => stack.replace(ctx, (LuaValue::Nil, error.into_message())),
             }
             Ok(CallbackReturn::Return)
         }),

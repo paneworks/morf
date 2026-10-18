@@ -1,11 +1,11 @@
 use crate::BlendSpace;
 use std::mem;
 
-use super::{glyphs::*, shaders::*};
+use super::{Space, glyphs::*, shaders::*};
 
 pub(crate) fn create_blur_pipeline(
     device: &wgpu::Device,
-    blend: BlendSpace,
+    space: Space,
 ) -> (wgpu::RenderPipeline, wgpu::BindGroupLayout, wgpu::Sampler) {
     let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("morf blur layout"),
@@ -44,7 +44,7 @@ pub(crate) fn create_blur_pipeline(
         min_filter: wgpu::FilterMode::Linear,
         ..Default::default()
     });
-    let pipeline = build_blur_pipeline(device, &layout, blend);
+    let pipeline = build_blur_pipeline(device, &layout, space);
     (pipeline, layout, sampler)
 }
 
@@ -53,7 +53,7 @@ pub(crate) fn create_blur_pipeline(
 pub(crate) fn build_blur_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
-    blend: BlendSpace,
+    space: Space,
 ) -> wgpu::RenderPipeline {
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("morf blur pipeline layout"),
@@ -80,7 +80,7 @@ pub(crate) fn build_blur_pipeline(
             module: &shader,
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
-                format: super::target_format(blend),
+                format: super::target_format(space),
                 blend: None,
                 write_mask: wgpu::ColorWrites::ALL,
             })],
@@ -93,7 +93,7 @@ pub(crate) fn build_blur_pipeline(
 
 pub(crate) fn create_glyph_pipeline(
     device: &wgpu::Device,
-    blend: BlendSpace,
+    space: Space,
 ) -> (wgpu::RenderPipeline, wgpu::BindGroupLayout, wgpu::Sampler) {
     let texture_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("morf glyph texture layout"),
@@ -122,7 +122,7 @@ pub(crate) fn create_glyph_pipeline(
         min_filter: wgpu::FilterMode::Linear,
         ..Default::default()
     });
-    let pipeline = build_glyph_pipeline(device, &texture_layout, None, None, None, None, blend)
+    let pipeline = build_glyph_pipeline(device, &texture_layout, None, None, None, None, space)
         .expect("the glyph shader carries its own hook");
     (pipeline, texture_layout, sampler)
 }
@@ -140,7 +140,7 @@ pub(crate) fn build_glyph_pipeline(
     user: Option<&str>,
     textures: Option<&wgpu::BindGroupLayout>,
     data: Option<&wgpu::BindGroupLayout>,
-    blend: BlendSpace,
+    space: Space,
 ) -> Option<wgpu::RenderPipeline> {
     // The same group numbers the field pipeline uses, because the compiler
     // emits the same numbers whatever mode a shader is in: one for its
@@ -185,12 +185,12 @@ pub(crate) fn build_glyph_pipeline(
             module: &shader,
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
-                format: super::target_format(blend),
+                format: super::target_format(space),
                 blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
             compilation_options: wgpu::PipelineCompilationOptions {
-                constants: super::blend_constants(blend),
+                constants: super::blend_constants(space),
                 ..Default::default()
             },
         }),
@@ -206,7 +206,7 @@ pub(crate) fn build_glyph_pipeline(
 pub(crate) fn build_mask_pipeline(
     device: &wgpu::Device,
     texture_layout: &wgpu::BindGroupLayout,
-    blend: BlendSpace,
+    space: Space,
 ) -> wgpu::RenderPipeline {
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("morf mask composite pipeline layout"),
@@ -239,7 +239,7 @@ pub(crate) fn build_mask_pipeline(
             module: &shader,
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
-                format: super::target_format(blend),
+                format: super::target_format(space),
                 blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
@@ -259,7 +259,7 @@ pub(crate) fn build_mask_pipeline(
 pub(crate) fn build_lcd_pipeline(
     device: &wgpu::Device,
     texture_layout: &wgpu::BindGroupLayout,
-    blend: BlendSpace,
+    space: Space,
     text: crate::SubpixelText,
 ) -> wgpu::RenderPipeline {
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -283,7 +283,7 @@ pub(crate) fn build_lcd_pipeline(
         step_mode: wgpu::VertexStepMode::Instance,
         attributes: &attributes,
     })];
-    let gamma = match blend {
+    let gamma = match space.blend {
         BlendSpace::Linear => 0.0,
         BlendSpace::Srgb => 1.0,
     };
@@ -308,7 +308,7 @@ pub(crate) fn build_lcd_pipeline(
             module: &shader,
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
-                format: super::target_format(blend),
+                format: super::target_format(space),
                 blend: Some(wgpu::BlendState {
                     color: wgpu::BlendComponent {
                         src_factor: wgpu::BlendFactor::One,

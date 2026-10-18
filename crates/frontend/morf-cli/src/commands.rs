@@ -8,11 +8,11 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-use morf_host::morf_io::{IpcRequest, IpcValue as WireValue, ipc_call};
-use morf_host::morf_lua::{LogEntry, LogLevel};
+use morf_io::{IpcRequest, IpcValue as WireValue, ipc_call};
+use morf_lua::{LogEntry, LogLevel};
 
 use crate::config::config_root;
-use morf_host::socket_path::{socket_dir, socket_path};
+use morf_host::process::socket_path::{socket_dir, socket_path};
 
 /// Prints the shell's log, once or until interrupted.
 ///
@@ -35,7 +35,7 @@ pub(crate) fn follow_logs(follow: bool, level: LogLevel) -> Result<(), String> {
             if entry.level < level {
                 continue;
             }
-            println!("{:<5} {}", entry.level.name(), entry.message);
+            outln!("{:<5} {}", entry.level.name(), entry.message);
         }
         if !follow {
             return Ok(());
@@ -47,7 +47,7 @@ pub(crate) fn follow_logs(follow: bool, level: LogLevel) -> Result<(), String> {
 }
 
 /// The `.sock` files in one directory; none if it does not exist.
-fn sockets_in(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>, String> {
+pub(crate) fn sockets_in(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>, String> {
     match fs::read_dir(dir) {
         Ok(entries) => Ok(entries
             .filter_map(Result::ok)
@@ -55,6 +55,11 @@ fn sockets_in(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>, String> 
             .filter(|path| {
                 path.extension()
                     .is_some_and(|extension| extension == "sock")
+                    && !path.file_name().is_some_and(|name| {
+                        let name = name.to_string_lossy();
+                        name.ends_with("-lock-provider.sock")
+                            || name.ends_with("-shell-provider.sock")
+                    })
             })
             .collect()),
         // No directory is no instances, not an error: nothing has run yet.
@@ -72,7 +77,7 @@ pub(crate) fn list_instances(json: bool, show_dead: bool) -> Result<(), String> 
     let dir = socket_dir()?;
     let mut entries = sockets_in(&dir)?;
     // Sockets whose proper path was too long to bind live here instead.
-    let fallback = morf_host::socket_path::fallback_dir();
+    let fallback = morf_host::process::socket_path::fallback_dir();
     if fallback != dir {
         entries.extend(sockets_in(&fallback)?);
     }
@@ -113,7 +118,7 @@ pub(crate) fn list_instances(json: bool, show_dead: bool) -> Result<(), String> 
                 None => serde_json::json!({ "display": display, "dead": true }),
             })
             .collect::<Vec<_>>();
-        println!(
+        outln!(
             "{}",
             serde_json::to_string(&items).map_err(|error| error.to_string())?
         );
@@ -121,8 +126,8 @@ pub(crate) fn list_instances(json: bool, show_dead: bool) -> Result<(), String> 
     }
     for (display, alive) in rows {
         match alive {
-            Some((pid, config, uptime)) => println!("{display}\t{pid}\t{uptime}s\t{config}"),
-            None => println!("{display}\t-\t-\t(dead socket)"),
+            Some((pid, config, uptime)) => outln!("{display}\t{pid}\t{uptime}s\t{config}"),
+            None => outln!("{display}\t-\t-\t(dead socket)"),
         }
     }
     Ok(())
@@ -134,7 +139,7 @@ pub(crate) fn list_instances(json: bool, show_dead: bool) -> Result<(), String> 
 /// running instance -- which GPU, which protocols -- is asked of it, and a
 /// display with no instance says so rather than failing.
 pub(crate) fn print_info() -> Result<(), String> {
-    println!("morf {}", env!("CARGO_PKG_VERSION"));
+    outln!("{}", crate::docs::version_line());
     for name in [
         "WAYLAND_DISPLAY",
         "XDG_RUNTIME_DIR",
@@ -144,21 +149,21 @@ pub(crate) fn print_info() -> Result<(), String> {
         "MORF_CONFIG",
         "MORF_PAM_LIBRARY",
     ] {
-        println!(
+        outln!(
             "{name}={}",
             env::var(name).unwrap_or_else(|_| "(unset)".to_owned())
         );
     }
-    println!(
+    outln!(
         "config_root={}",
         config_root()
             .map(|p| p.display().to_string())
             .unwrap_or_default()
     );
     let socket = socket_path()?;
-    println!("socket={}", socket.display());
+    outln!("socket={}", socket.display());
     let Ok(reply) = ipc_call(&socket, &IpcRequest::Info) else {
-        println!("instance=none (nothing is listening on that socket)");
+        outln!("instance=none (nothing is listening on that socket)");
         return Ok(());
     };
     if let [
@@ -167,12 +172,12 @@ pub(crate) fn print_info() -> Result<(), String> {
         WireValue::Integer(uptime),
     ] = reply.result.as_slice()
     {
-        println!("instance_pid={pid}\ninstance_config={config}\ninstance_uptime_s={uptime}");
+        outln!("instance_pid={pid}\ninstance_config={config}\ninstance_uptime_s={uptime}");
     }
     if let Ok(reply) = ipc_call(&socket, &IpcRequest::Capabilities) {
         for value in &reply.result {
             if let WireValue::String(line) = value {
-                println!("{line}");
+                outln!("{line}");
             }
         }
     }

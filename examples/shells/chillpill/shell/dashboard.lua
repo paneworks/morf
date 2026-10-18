@@ -491,7 +491,7 @@ function dashboard.build(top)
     direction = "column",
     align = "center",
     gap = S(20),
-    anchors = { left = true, right = true, top = true, top_margin = top },
+    anchors = { left = true, right = true, top = true, bottom = true, top_margin = top },
     ui.Item(theme.reveal(dashboard.shown, {
       from_y = -S(60),
       from_scale = 0.9,

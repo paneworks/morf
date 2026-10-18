@@ -1,4 +1,3 @@
-use crate::states::Capture;
 use luna::{Context, Executor, Fuel, Table, Value as LuaValue, Variadic};
 
 use crate::vm::handler_store::stashed;
@@ -6,7 +5,6 @@ use morf_io::{DbusCall, DbusValue};
 use morf_runtime::Handler;
 use morf_scene::Value as SceneValue;
 use morf_scene::reactive::EffectCapture;
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
@@ -24,7 +22,8 @@ pub(crate) use system::{
 };
 
 use crate::{
-    reactive_bindings::*, scene_bindings::*, serialization::*, state::*, surface_types::*, types::*,
+    api::ui::bindings::*, api::ui::scene::*, runtime::host_types::*, runtime::state::*,
+    vm::loader::*, vm::types::*,
 };
 
 /// Runs one Lua executor to completion, or stops it when its fuel runs out.
@@ -45,32 +44,48 @@ pub(crate) fn drive_executor<'gc>(
     budget: u64,
     what: &str,
 ) -> Result<u64, String> {
+    let (result, spent) = drive_counted(ctx, executor, limits, budget, what);
+    result.map(|()| spent)
+}
+
+/// As [`drive_executor`], with the fuel spent whether or not the run
+/// finished: a run that failed part way used only what it ran.
+pub(crate) fn drive_counted<'gc>(
+    ctx: Context<'gc>,
+    executor: Executor<'gc>,
+    limits: Limits,
+    budget: u64,
+    what: &str,
+) -> (Result<(), String>, u64) {
     if budget == 0 {
-        return Err(format!("Lua {what} fuel exhausted"));
+        return (Err(format!("Lua {what} fuel exhausted")), 0);
     }
     let mut remaining = budget;
     loop {
         if remaining == 0 {
             executor.stop(&ctx);
-            return Err(format!(
-                "Lua {what} fuel exhausted after {budget} instructions"
-            ));
+            return (
+                Err(format!(
+                    "Lua {what} fuel exhausted after {budget} instructions"
+                )),
+                budget,
+            );
         }
         let allowance = remaining.min(limits.slice_fuel.max(1) as u64) as i32;
         let mut fuel = Fuel::with(allowance);
-        let finished = executor
-            .step(ctx, &mut fuel)
-            .map_err(|error| error.to_string())?;
+        let stepped = executor.step(ctx, &mut fuel);
         let consumed = allowance.saturating_sub(fuel.remaining()).max(0) as u64;
         remaining = remaining.saturating_sub(consumed.max(1));
-        if finished {
-            return Ok(budget - remaining);
+        match stepped {
+            Ok(true) => return (Ok(()), budget - remaining),
+            Ok(false) => {}
+            Err(error) => return (Err(error.to_string()), budget - remaining),
         }
     }
 }
 
 pub(crate) fn evaluate_effect(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
     frame_remaining: &mut u64,
@@ -79,16 +94,15 @@ pub(crate) fn evaluate_effect(
 ) -> Result<(), String> {
     let lua_effect = {
         let mut state = state.borrow_mut();
-        if state.active.is_some() {
+        if state.tracking().capturing() {
             return Err("reactive effects cannot run recursively".to_owned());
         }
         // A binding whose node was removed during this flush: its effect
         // is waiting to be forgotten and has nothing left to drive.
-        let Some(effect) = state.reactive.effects.get(&token).cloned() else {
+        let Some(effect) = state.reactive().effect(token).cloned() else {
             return Ok(());
         };
-        state.active = Some(Capture::default());
-        state.effect_runs = state.effect_runs.saturating_add(1);
+        state.tracking_mut().begin_capture();
         effect
     };
     let result = execute_effect(
@@ -127,38 +141,32 @@ pub(crate) fn evaluate_effect(
                     node,
                     value,
                 ),
+                EffectSink::Claim(sink) => state.borrow_mut().feed_claim(&sink, value.clone()),
                 EffectSink::State(_) => Ok(()),
             }
         } else {
             Ok(())
         }
     });
-    let capture = state.borrow_mut().active.take().unwrap_or_default();
-    for (node, property, target) in capture.property_reads {
-        let key = (node, property.clone(), target);
-        let signal = if let Some(signal) = state.borrow().property_signals.get(&key).copied() {
+    let capture = state.borrow_mut().tracking_mut().end_capture();
+    for key in capture.property_reads {
+        let (node, property, target) = (key.0, &key.1, key.2);
+        let signal = if let Some(signal) = state.borrow().tracking().property_signal(&key) {
             signal
         } else {
             let name = format!("{node:?}.{property}{}", if target { "_target" } else { "" });
-            let value = IpcValue::Integer(state.borrow().revisions.property_revision);
+            let value = IpcValue::Integer(state.borrow().revisions().property());
             let mut state = state.borrow_mut();
             let signal = state
-                .reactive
-                .graph
-                .as_mut()
-                .ok_or("reactive graph unavailable")?
-                .signal(name.clone(), value.clone());
-            state.property_signals.insert(key, signal);
-            if !target {
-                state.current_property_names.insert(name, (node, property));
-            }
-            state.reactive.values.insert(signal, value);
-            state.reactive.signals.push(signal);
+                .reactive_mut()
+                .signal(name.clone(), value)
+                .ok_or("reactive graph unavailable")?;
+            state.tracking_mut().track_property(key, signal, name);
             signal
         };
         read_signal(state, effect, signal)?;
     }
-    for signal in crate::model_revisions::model_read_signals(state, capture.model_reads)? {
+    for signal in crate::runtime::model_revisions::model_read_signals(state, capture.model_reads)? {
         read_signal(state, effect, signal)?;
     }
     for signal in capture.reads {
@@ -170,17 +178,15 @@ pub(crate) fn evaluate_effect(
             effect
                 .set(
                     state
-                        .reactive
-                        .graph
-                        .as_ref()
+                        .reactive()
+                        .graph()
                         .ok_or("reactive graph unavailable")?,
                     signal,
                     value.clone(),
                 )
                 .map_err(|error| error.to_string())?;
-            state.reactive.values.insert(signal, value);
-            state.shared.note_write(signal);
-            state.reactive.flush_writes.push(signal);
+            state.reactive_mut().mirror_flush_write(signal, value);
+            state.shared_mut().note_write(signal);
         }
     }
     state_result?;
@@ -189,15 +195,14 @@ pub(crate) fn evaluate_effect(
 
 /// Records that the effect being evaluated read `signal`.
 fn read_signal(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     effect: &mut EffectCapture<IpcValue>,
     signal: morf_scene::reactive::SignalId,
 ) -> Result<(), String> {
     let state = state.borrow();
     let graph = state
-        .reactive
-        .graph
-        .as_ref()
+        .reactive()
+        .graph()
         .ok_or("reactive graph unavailable")?;
     effect
         .get(graph, signal)
@@ -216,29 +221,23 @@ pub(crate) fn execute_effect(
     if budget == 0 {
         return Err("Lua frame fuel exhausted".to_owned());
     }
-    let executor = Executor::start(ctx, ctx.fetch(&stashed(closure)).into(), ());
-    match drive_executor(ctx, executor, limits, budget, "effect") {
-        Err(error) => {
-            *frame_remaining = frame_remaining.saturating_sub(budget);
-            Err(error)
+    let executor = Executor::start(ctx, ctx.fetch(&stashed(closure)?).into(), ());
+    let (driven, spent) = drive_counted(ctx, executor, limits, budget, "effect");
+    *frame_remaining = frame_remaining.saturating_sub(spent);
+    driven?;
+    if capture_value {
+        // Whatever a binding hands back goes to the property as it is: a
+        // table is a gradient, a decoration, an anchor set.
+        match executor.take_result::<LuaValue>(ctx) {
+            Ok(Ok(value)) => lua_to_scene(ctx, value, 0).map(Some),
+            Ok(Err(error)) => Err(error.to_string()),
+            Err(error) => Err(error.to_string()),
         }
-        Ok(spent) => {
-            *frame_remaining = frame_remaining.saturating_sub(spent);
-            if capture_value {
-                // Whatever a binding hands back goes to the property as it
-                // is: a table is a gradient, a decoration, an anchor set.
-                match executor.take_result::<LuaValue>(ctx) {
-                    Ok(Ok(value)) => lua_to_scene(ctx, value, 0).map(Some),
-                    Ok(Err(error)) => Err(error.to_string()),
-                    Err(error) => Err(error.to_string()),
-                }
-            } else {
-                match executor.take_result::<()>(ctx) {
-                    Ok(Ok(())) => Ok(None),
-                    Ok(Err(error)) => Err(error.to_string()),
-                    Err(error) => Err(error.to_string()),
-                }
-            }
+    } else {
+        match executor.take_result::<()>(ctx) {
+            Ok(Ok(())) => Ok(None),
+            Ok(Err(error)) => Err(error.to_string()),
+            Err(error) => Err(error.to_string()),
         }
     }
 }
@@ -254,9 +253,10 @@ pub(crate) fn execute_handler_args(
             .map(|value| value.to_lua(ctx))
             .collect::<Vec<_>>(),
     );
-    let function = ctx.fetch(&stashed(closure));
+    let function = ctx.fetch(&stashed(closure)?);
     let _span =
         crate::profile::span(|| format!("handler {}", crate::profile::closure_origin(function)));
+    let _stage = crate::profile::stage(crate::profile::Stage::Handlers);
     let executor = Executor::start(ctx, function.into(), args);
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
     match executor.take_result::<()>(ctx) {
@@ -290,9 +290,10 @@ pub(crate) fn execute_screencopy_handler(
             LuaValue::String(ctx.intern(error.as_bytes())),
         ]),
     };
-    let function = ctx.fetch(&stashed(closure));
+    let function = ctx.fetch(&stashed(closure)?);
     let _span =
         crate::profile::span(|| format!("handler {}", crate::profile::closure_origin(function)));
+    let _stage = crate::profile::stage(crate::profile::Stage::Handlers);
     let executor = Executor::start(ctx, function.into(), args);
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
     match executor.take_result::<()>(ctx) {
@@ -313,7 +314,7 @@ pub(crate) fn execute_ipc_handler(
             .map(|value| value.to_lua(ctx))
             .collect::<Vec<_>>(),
     );
-    let executor = Executor::start(ctx, ctx.fetch(&stashed(closure)).into(), args);
+    let executor = Executor::start(ctx, ctx.fetch(&stashed(closure)?).into(), args);
     drive_executor(ctx, executor, limits, limits.effect_fuel, "IPC handler")?;
     let values = match executor.take_result::<Variadic<Vec<LuaValue>>>(ctx) {
         Ok(Ok(values)) => values,

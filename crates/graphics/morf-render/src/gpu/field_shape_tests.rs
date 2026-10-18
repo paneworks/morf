@@ -10,6 +10,7 @@ use crate::{Operation, Shape};
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_frame_is_one_box_with_another_taken_out_of_the_middle() {
+    require_gpu!();
     // The screen border, which used to be an SVG path with four arc commands
     // in it and a tessellator to turn them into triangles. As a field it is the
     // output rectangle, minus the visible area rounded off — two layers and one
@@ -46,6 +47,7 @@ pub(crate) fn a_frame_is_one_box_with_another_taken_out_of_the_middle() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn an_oversized_corner_radius_makes_a_capsule_through_every_path() {
+    require_gpu!();
     // `radius = 9999` on a wide short box is how a configuration asks for a
     // pill. It only means that if the radius is clamped to the box's own half
     // extent — and it used to be clamped in the field shader and in the input
@@ -92,6 +94,7 @@ pub(crate) fn an_oversized_corner_radius_makes_a_capsule_through_every_path() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_rotated_layer_is_not_sliced_flat_by_its_own_quad() {
+    require_gpu!();
     // The shader rotates the sample point into each layer's frame, so a rotated
     // layer covers a different rectangle than the one it was given. The quad is
     // built from those rectangles, and taking them unrotated meant a long thin
@@ -121,6 +124,7 @@ pub(crate) fn a_rotated_layer_is_not_sliced_flat_by_its_own_quad() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_reused_layer_target_does_not_carry_the_last_frame_into_this_one() {
+    require_gpu!();
     // Offscreen layer targets are pooled and reused rather than allocated per
     // frame — a full-screen GPU texture per layer, sixty times a second, was
     // being created and thrown away. Reuse is only safe because every layer

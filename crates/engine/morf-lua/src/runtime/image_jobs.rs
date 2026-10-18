@@ -5,7 +5,7 @@
 //! producing the frames. So `morf.image` hands the work to a small pool of
 //! threads and the answer comes back the way every other service's does:
 //! through a channel the runtime drains in `poll_services`, with a poke at
-//! the loop's [`morf_io::wake_all`] so it is collected at once rather than
+//! the runtime's own loop ([`morf_io::Waker`]) so it is collected at once rather than
 //! at the next unrelated wake-up.
 //!
 //! Bounded twice. Two workers, because this is a shell and not a batch
@@ -66,12 +66,46 @@ pub(crate) struct CaptureSave {
     pub(crate) quality: u8,
 }
 
+/// Captures to be written to a file rather than handed to Lua, by request.
+#[derive(Default)]
+pub(crate) struct CaptureSaves {
+    saves: std::collections::HashMap<u64, CaptureSave>,
+}
+
+impl CaptureSaves {
+    /// Writes capture `id` to a file when it comes.
+    pub(crate) fn save(&mut self, id: u64, save: CaptureSave) {
+        self.saves.insert(id, save);
+    }
+
+    /// Whether capture `id` goes to a file.
+    pub(crate) fn is_saving(&self, id: u64) -> bool {
+        self.saves.contains_key(&id)
+    }
+
+    /// Where capture `id` goes, once it came.
+    pub(crate) fn take(&mut self, id: u64) -> Option<CaptureSave> {
+        self.saves.remove(&id)
+    }
+
+    /// The captures waiting to be written.
+    pub(crate) fn ids(&self) -> impl Iterator<Item = u64> + '_ {
+        self.saves.keys().copied()
+    }
+}
+
 pub(crate) enum ImageJob {
     Process(ProcessRequest),
     Compose(morf_image::canvas::Request),
     Preview {
         preview: Arc<morf_image::preview::Preview>,
         ops: Vec<ops::ImageOp>,
+    },
+    PreviewCover {
+        preview: Arc<morf_image::preview::Preview>,
+        width: u32,
+        height: u32,
+        scale_120: u32,
     },
     Pixel {
         source: PathBuf,
@@ -167,12 +201,14 @@ impl ImageJobs {
     fn start(&self) -> Result<Sender<(u64, ImageJob)>, String> {
         let (sender, receiver) = mpsc::channel::<(u64, ImageJob)>();
         let receiver = Arc::new(Mutex::new(receiver));
+        let waker = morf_io::waker();
         for index in 0..WORKERS {
             let receiver = Arc::clone(&receiver);
             let results = self.results_sender.clone();
+            let waker = waker.clone();
             std::thread::Builder::new()
                 .name(format!("morf-image-{index}"))
-                .spawn(move || work(&receiver, &results))
+                .spawn(move || work(&receiver, &results, &waker))
                 .map_err(|error| format!("cannot start an image worker: {error}"))?;
         }
         Ok(sender)
@@ -196,7 +232,11 @@ impl ImageJobs {
     }
 }
 
-fn work(jobs: &Mutex<Receiver<(u64, ImageJob)>>, results: &Sender<Finished>) {
+fn work(
+    jobs: &Mutex<Receiver<(u64, ImageJob)>>,
+    results: &Sender<Finished>,
+    waker: &morf_io::Waker,
+) {
     loop {
         // The lock is held only while waiting, never while working, so the
         // other worker can take the next job meanwhile.
@@ -214,7 +254,7 @@ fn work(jobs: &Mutex<Receiver<(u64, ImageJob)>>, results: &Sender<Finished>) {
         if results.send((id, result)).is_err() {
             return;
         }
-        morf_io::wake_all();
+        waker.wake();
     }
 }
 
@@ -225,6 +265,15 @@ fn run(job: ImageJob) -> Result<ImageOutcome, String> {
             .map_err(|error| error.to_string()),
         ImageJob::Preview { preview, ops } => preview
             .render(&ops)
+            .map(|image| ImageOutcome::Preview(image, preview))
+            .map_err(|error| error.to_string()),
+        ImageJob::PreviewCover {
+            preview,
+            width,
+            height,
+            scale_120,
+        } => preview
+            .cover(width, height, scale_120)
             .map(|image| ImageOutcome::Preview(image, preview))
             .map_err(|error| error.to_string()),
         ImageJob::Process(request) => ops::process(&request)

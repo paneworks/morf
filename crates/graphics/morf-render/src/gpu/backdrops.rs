@@ -55,20 +55,21 @@ pub(crate) struct BackdropEntry {
     beneath: Vec<Beneath>,
     /// How many times it has blurred, which a backdrop above it compares.
     pub(crate) generation: u64,
-    /// The region, copied out of the scratch target.
+    /// Every level as a mip: the region copied out of the scratch target at
+    /// mip 0, and its blur at mip 1, what frosted glass shows.
     pub(crate) source: wgpu::Texture,
-    /// Levels 1 and down; level 1 is what the glass shows.
-    levels: Vec<(wgpu::Texture, wgpu::TextureView)>,
+    /// One view per level, for the passes that read and write them.
+    views: Vec<wgpu::TextureView>,
     /// Each pass's parameters, and which level it writes.
     pub(crate) passes: Vec<(BlurPass, usize)>,
-    /// Samples level 1, for the quad that draws the glass.
+    /// Samples levels 0 and 1, for the quad that draws the glass.
     pub(crate) bind_group: wgpu::BindGroup,
     used: bool,
 }
 
 impl BackdropEntry {
     pub(crate) fn level_view(&self, level: usize) -> &wgpu::TextureView {
-        &self.levels[level - 1].1
+        &self.views[level]
     }
 
     pub(crate) fn region(&self) -> DamageRect {

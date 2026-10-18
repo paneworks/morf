@@ -2,21 +2,29 @@ use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as
 use morf_io::{ServerView, SocketView, SplitParser, StreamCollector};
 use std::cell::RefCell;
 
-use crate::{lua_values::*, scene_bindings::*, state::*, table_menu::*};
+use std::rc::Rc;
 
-pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
-    let socket_send = Callback::from_fn(&ctx, |ctx, _, mut stack| {
+use crate::{
+    api::ui::scene::*, runtime::state::*, value::lua::*, value::table::*, vm::permissions::gated,
+};
+
+pub(crate) fn install_socket_api<'gc>(
+    ctx: Context<'gc>,
+    state: Rc<StateCell<ReactiveState>>,
+    morf: Table<'gc>,
+) {
+    let socket_send = gated(ctx, &state, "socket", "socket:send", |ctx, _, mut stack| {
         let (socket, bytes): (UserRef<SocketToken>, String) = stack.consume(ctx)?;
         socket
             .state
             .borrow_mut()
             .send(bytes.as_bytes())
-            .map_err(HostError)?;
+            .map_err(HostError::from)?;
         Ok(CallbackReturn::Return)
     });
     let socket_flush = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let socket: UserRef<SocketToken> = stack.consume(ctx)?;
-        socket.state.borrow_mut().flush().map_err(HostError)?;
+        socket.state.borrow_mut().flush().map_err(HostError::from)?;
         Ok(CallbackReturn::Return)
     });
     let socket_connected = Callback::from_fn(&ctx, |ctx, _, mut stack| {
@@ -24,16 +32,22 @@ pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         stack.replace(ctx, socket.state.borrow().connected());
         Ok(CallbackReturn::Return)
     });
-    let socket_set_connected = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (socket, connected): (UserRef<SocketToken>, bool) = stack.consume(ctx)?;
-        let connected = socket
-            .state
-            .borrow_mut()
-            .set_connected(connected)
-            .map_err(HostError)?;
-        stack.replace(ctx, connected);
-        Ok(CallbackReturn::Return)
-    });
+    let socket_set_connected = gated(
+        ctx,
+        &state,
+        "socket",
+        "socket:set_connected",
+        |ctx, _, mut stack| {
+            let (socket, connected): (UserRef<SocketToken>, bool) = stack.consume(ctx)?;
+            let connected = socket
+                .state
+                .borrow_mut()
+                .set_connected(connected)
+                .map_err(HostError::from)?;
+            stack.replace(ctx, connected);
+            Ok(CallbackReturn::Return)
+        },
+    );
     let socket_close = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let socket: UserRef<SocketToken> = stack.consume(ctx)?;
         socket.state.borrow_mut().close();
@@ -52,13 +66,13 @@ pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     });
     let socket_receive = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (socket, maximum, timeout_ms): (UserRef<SocketToken>, i64, i64) = stack.consume(ctx)?;
-        let maximum = morf_io::receive_limit(maximum).map_err(HostError)?;
-        let timeout = bounded_timeout(timeout_ms).map_err(HostError)?;
+        let maximum = morf_io::receive_limit(maximum).map_err(HostError::from)?;
+        let timeout = bounded_timeout(timeout_ms).map_err(HostError::from)?;
         let received = socket
             .state
             .borrow_mut()
             .receive(maximum, timeout)
-            .map_err(HostError)?;
+            .map_err(HostError::from)?;
         match received {
             Some(bytes) => stack.replace(ctx, String::from_utf8_lossy(&bytes).as_ref()),
             None => stack.replace(ctx, LuaValue::Nil),
@@ -78,37 +92,49 @@ pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     socket_metatable.set_field(ctx, "__index", socket_methods);
     let socket_metatable = ctx.stash(socket_metatable);
     let accepted_socket_metatable = socket_metatable.clone();
-    let server_accept = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let server: UserRef<SocketServerToken> = stack.consume(ctx)?;
-        let Some(socket) = server.state.borrow().accept().map_err(HostError)? else {
-            stack.replace(ctx, LuaValue::Nil);
-            return Ok(CallbackReturn::Return);
-        };
-        let userdata = UserData::new_static(
-            &ctx,
-            SocketToken {
-                state: RefCell::new(socket),
-            },
-        );
-        userdata.set_metatable(ctx, Some(ctx.fetch(&accepted_socket_metatable)));
-        stack.replace(ctx, userdata);
-        Ok(CallbackReturn::Return)
-    });
+    let server_accept = gated(
+        ctx,
+        &state,
+        "socket",
+        "socket_server:accept",
+        move |ctx, _, mut stack| {
+            let server: UserRef<SocketServerToken> = stack.consume(ctx)?;
+            let Some(socket) = server.state.borrow().accept().map_err(HostError::from)? else {
+                stack.replace(ctx, LuaValue::Nil);
+                return Ok(CallbackReturn::Return);
+            };
+            let userdata = UserData::new_static(
+                &ctx,
+                SocketToken {
+                    state: RefCell::new(socket),
+                },
+            );
+            userdata.set_metatable(ctx, Some(ctx.fetch(&accepted_socket_metatable)));
+            stack.replace(ctx, userdata);
+            Ok(CallbackReturn::Return)
+        },
+    );
     let server_active = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let server: UserRef<SocketServerToken> = stack.consume(ctx)?;
         stack.replace(ctx, server.state.borrow().active());
         Ok(CallbackReturn::Return)
     });
-    let server_set_active = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (server, active): (UserRef<SocketServerToken>, bool) = stack.consume(ctx)?;
-        let active = server
-            .state
-            .borrow_mut()
-            .set_active(active)
-            .map_err(HostError)?;
-        stack.replace(ctx, active);
-        Ok(CallbackReturn::Return)
-    });
+    let server_set_active = gated(
+        ctx,
+        &state,
+        "socket",
+        "socket_server:set_active",
+        |ctx, _, mut stack| {
+            let (server, active): (UserRef<SocketServerToken>, bool) = stack.consume(ctx)?;
+            let active = server
+                .state
+                .borrow_mut()
+                .set_active(active)
+                .map_err(HostError::from)?;
+            stack.replace(ctx, active);
+            Ok(CallbackReturn::Return)
+        },
+    );
     let server_close = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let server: UserRef<SocketServerToken> = stack.consume(ctx)?;
         server.state.borrow_mut().close();
@@ -135,33 +161,45 @@ pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let server_metatable = Table::new(&ctx);
     server_metatable.set_field(ctx, "__index", server_methods);
     let server_metatable = ctx.stash(server_metatable);
-    let socket_server = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let path: String = stack.consume(ctx)?;
-        let server = ServerView::bind(path).map_err(HostError)?;
-        let userdata = UserData::new_static(
-            &ctx,
-            SocketServerToken {
-                state: RefCell::new(server),
-            },
-        );
-        userdata.set_metatable(ctx, Some(ctx.fetch(&server_metatable)));
-        stack.replace(ctx, userdata);
-        Ok(CallbackReturn::Return)
-    });
+    let socket_server = gated(
+        ctx,
+        &state,
+        "socket",
+        "morf.socket_server",
+        move |ctx, _, mut stack| {
+            let path: String = stack.consume(ctx)?;
+            let server = ServerView::bind(path).map_err(HostError::from)?;
+            let userdata = UserData::new_static(
+                &ctx,
+                SocketServerToken {
+                    state: RefCell::new(server),
+                },
+            );
+            userdata.set_metatable(ctx, Some(ctx.fetch(&server_metatable)));
+            stack.replace(ctx, userdata);
+            Ok(CallbackReturn::Return)
+        },
+    );
     morf.set_field(ctx, "socket_server", socket_server);
-    let socket = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let path: String = stack.consume(ctx)?;
-        let socket = SocketView::connect(path).map_err(HostError)?;
-        let userdata = UserData::new_static(
-            &ctx,
-            SocketToken {
-                state: RefCell::new(socket),
-            },
-        );
-        userdata.set_metatable(ctx, Some(ctx.fetch(&socket_metatable)));
-        stack.replace(ctx, userdata);
-        Ok(CallbackReturn::Return)
-    });
+    let socket = gated(
+        ctx,
+        &state,
+        "socket",
+        "morf.socket",
+        move |ctx, _, mut stack| {
+            let path: String = stack.consume(ctx)?;
+            let socket = SocketView::connect(path).map_err(HostError::from)?;
+            let userdata = UserData::new_static(
+                &ctx,
+                SocketToken {
+                    state: RefCell::new(socket),
+                },
+            );
+            userdata.set_metatable(ctx, Some(ctx.fetch(&socket_metatable)));
+            stack.replace(ctx, userdata);
+            Ok(CallbackReturn::Return)
+        },
+    );
     morf.set_field(ctx, "socket", socket);
 
     let split_push = Callback::from_fn(&ctx, |ctx, _, mut stack| {
@@ -287,7 +325,7 @@ pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         let maximum = match options.get_value(ctx, "maximum_bytes") {
             LuaValue::Nil => morf_io::DEFAULT_BUFFER,
             LuaValue::Integer(value) => {
-                morf_io::buffer_limit(value, "stream collector").map_err(HostError)?
+                morf_io::buffer_limit(value, "stream collector").map_err(HostError::from)?
             }
             _ => {
                 return Err(
@@ -295,7 +333,8 @@ pub(crate) fn install_socket_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
                 );
             }
         };
-        let wait_for_end = table_bool(ctx, options, "wait_for_end", true).map_err(HostError)?;
+        let wait_for_end =
+            table_bool(ctx, options, "wait_for_end", true).map_err(HostError::from)?;
         let collector = StreamCollector::new(maximum, wait_for_end)
             .map_err(|error| HostError(error.to_string()))?;
         let userdata = UserData::new_static(

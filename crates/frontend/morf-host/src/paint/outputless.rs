@@ -18,10 +18,11 @@ use std::os::fd::AsFd;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use crate::desktop::{desktop_for, dispatch_desktop};
+use crate::host::desktop::{apply_service_requests, desktop_for, dispatch_desktop};
 use crate::{
-    lock::*, paint::clock_text, services::apply_idle_timeouts, supervisor::execute_config_on,
-    surface_layers::apply_service_requests, wake_plan::*, workers::*,
+    lock::*, paint::clock_text, paint::wake_plan::*, process::services::apply_idle_timeouts,
+    process::services::refresh_idle_timeouts, process::supervisor::execute_config_on,
+    process::workers::*,
 };
 
 /// The name the outputless runtime goes by among the workers, in logs and in
@@ -62,6 +63,7 @@ impl Outputless {
 /// hear outputs arrive and to reach the compositor's services; a test runs
 /// without one.
 pub fn run_outputless(start: WorkerStart, connect: bool) -> Result<(), String> {
+    start.alarm.claim();
     let (limits, warnings) = Limits::from_env();
     for warning in warnings {
         eprintln!("morf: {warning}");
@@ -110,7 +112,7 @@ fn drive_outputless(
         outputless: config.outputless,
     })?;
     if config.session_lock {
-        return crate::surface_run::await_lock(
+        return crate::host::run::await_lock(
             std::mem::take(runtime),
             &start.path,
             &start.stop,
@@ -144,8 +146,8 @@ fn drive_outputless(
                 .as_ref()
                 .map(|client| desktop_for(client))
                 .transpose()?;
-            if let Some(desktop) = desktop.as_mut() {
-                desktop.set_idle_timeouts(&runtime.idle_timeouts());
+            if let Some(desktop) = desktop.as_deref_mut() {
+                refresh_idle_timeouts(runtime, desktop);
             }
         }
         let sleep = Sleep::plan_with(
@@ -164,7 +166,7 @@ fn drive_outputless(
                 let woke = client
                     .wait_for(timeout, Some(wake.as_fd()))
                     .map_err(|error| error.to_string())?;
-                if let Some(desktop) = desktop.as_mut() {
+                if let Some(desktop) = desktop.as_deref_mut() {
                     dispatch_desktop(runtime, desktop, None)?;
                 }
                 log_wake(OUTPUTLESS, woke, &sleep, slept);
@@ -190,15 +192,21 @@ fn drive_outputless(
                     output: OUTPUTLESS.to_owned(),
                     wanted: runtime.layer_surface_config().outputless,
                 })?;
-                if let Some(desktop) = desktop.as_mut() {
-                    desktop.set_idle_timeouts(&runtime.idle_timeouts());
-                    let _ = desktop.reset_gamma(None);
+                if let Some(desktop) = desktop.as_deref_mut() {
+                    refresh_idle_timeouts(runtime, desktop);
+                    if desktop.capabilities().gamma_control {
+                        let _ = desktop.reset_gamma(None);
+                    }
                 }
             }
         }
-        if let Some(hard) = runtime.take_reload_request() {
-            tx.send(SupervisorMessage::Reload { hard })
-                .map_err(|_| "output supervisor stopped".to_owned())?;
+        if let Some(asked) = runtime.take_reload_request() {
+            let output = asked.output.then(|| OUTPUTLESS.to_owned());
+            tx.send(SupervisorMessage::Reload {
+                hard: asked.hard,
+                output,
+            })
+            .map_err(|_| "output supervisor stopped".to_owned())?;
         }
         if runtime.quit_requested() {
             tx.send(SupervisorMessage::Quit)
@@ -214,10 +222,10 @@ fn drive_outputless(
         runtime.take_layer_surface_change();
         runtime.take_window_surface_change();
         runtime.take_removed_nodes();
-        let (Some(client), Some(desktop)) = (client.as_mut(), desktop.as_mut()) else {
+        let (Some(client), Some(desktop)) = (client.as_mut(), desktop.as_deref_mut()) else {
             continue;
         };
-        apply_service_requests(runtime, client, Some(&mut *desktop));
+        apply_service_requests(runtime, client, desktop);
         apply_idle_timeouts(runtime, desktop);
         while let Some(event) = client.next_event() {
             follow_up = true;
@@ -233,7 +241,7 @@ fn drive_outputless(
                 _ => {}
             }
         }
-        apply_service_requests(runtime, client, Some(&mut *desktop));
+        apply_service_requests(runtime, client, desktop);
     }
 }
 
@@ -245,7 +253,7 @@ fn connect_client(
     let Ok(mut client) = LayerClient::probe() else {
         return Ok(None);
     };
-    client.set_waker(morf_io::wake_all);
+    client.set_waker(crate::host::desktop::loop_wakeup());
     // An output may have come in the moment before this connection did.
     send(WorkerMessage::Screens {
         output: OUTPUTLESS.to_owned(),

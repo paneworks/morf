@@ -1,9 +1,8 @@
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
 use morf_shader::{Binding, ShaderKind, ShaderSpec, Type};
-use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::{scene_bindings::*, state::*};
+use crate::{api::ui::scene::*, runtime::state::*};
 
 /// A shader a configuration registered, ready for the renderer.
 pub(crate) struct RegisteredShader {
@@ -30,7 +29,7 @@ pub(crate) struct RegisteredShader {
 pub(crate) fn install_shader_api<'gc>(
     ctx: Context<'gc>,
     morf: Table<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) {
     let state_for_api = Rc::clone(&state);
     let shader = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -57,7 +56,7 @@ pub(crate) fn install_shader_api<'gc>(
 
 /// Fills one data block of the shader attached to a node.
 fn set_data<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     node: morf_scene::NodeHandle,
     block: &str,
@@ -68,12 +67,12 @@ fn set_data<'gc>(
     // on every frame.
     let index = {
         let borrowed = state.borrow();
-        let Some(shader) = borrowed.scene.node_shader(node) else {
+        let Some(shader) = borrowed.scene().node_shader(node) else {
             return Err("this node has no shader".into());
         };
         let program = shader.program;
         let Some(registered) = borrowed
-            .shaders
+            .shaders()
             .values()
             .find(|candidate| candidate.compiled.hash == program)
         else {
@@ -101,15 +100,15 @@ fn set_data<'gc>(
     numbers.sort_by_key(|(slot, _)| *slot);
     let values: Vec<f32> = numbers.into_iter().map(|(_, value)| value).collect();
     let mut state = state.borrow_mut();
-    state.scene.set_shader_data(node, index, &values);
+    state.scene_mut().set_shader_data(node, index, &values);
     // New numbers are a new picture: the frame that draws them is asked for
     // here, as any property write asks for one.
-    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
+    state.revisions_mut().bump_scene();
     Ok(())
 }
 
 fn register<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     name: &str,
     spec: Table<'gc>,
@@ -173,7 +172,7 @@ fn register<'gc>(
         _ => return Err(format!("shader {name}: `vertex` must be a string")),
     };
 
-    state.borrow_mut().shaders.insert(
+    state.borrow_mut().shaders_mut().insert(
         name.to_owned(),
         RegisteredShader {
             compiled,
@@ -299,18 +298,18 @@ fn parse_data<'gc>(
 /// rather than on every paint, and a name that does not resolve is reported
 /// where the author wrote it.
 pub(crate) fn attach_shader<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     node: morf_scene::NodeHandle,
     name: &str,
     overrides: Option<Table<'gc>>,
 ) -> Result<(), String> {
     if name.is_empty() {
-        state.borrow_mut().scene.detach_shader(node);
+        state.borrow_mut().scene_mut().detach_shader(node);
         return Ok(());
     }
     let borrowed = state.borrow();
-    let Some(shader) = borrowed.shaders.get(name) else {
+    let Some(shader) = borrowed.shaders().get(name) else {
         return Err(format!(
             "shader `{name}` was never registered; call morf.shader(\"{name}\", …) first"
         ));
@@ -347,7 +346,7 @@ pub(crate) fn attach_shader<'gc>(
             };
         }
     }
-    state.borrow_mut().scene.attach_shader(
+    state.borrow_mut().scene_mut().attach_shader(
         node,
         morf_scene::NodeShader {
             program,

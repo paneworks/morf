@@ -282,7 +282,8 @@ fn serve_ipc_connection(mut stream: UnixStream, requests: mpsc::Sender<IpcIncomi
         {
             break;
         }
-        crate::wake_all();
+        // Whoever reads `requests` rings the loop it is for, if any: a
+        // request is for one owner, not every loop in the process.
         let reply = reply_rx
             .recv_timeout(IPC_TIMEOUT)
             .unwrap_or_else(|_| IpcReply::refused("request timed out"));

@@ -11,7 +11,7 @@ use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 use std::time::Duration;
 
-use crate::{Bus, DbusCall, DbusService, NameOutcome};
+use crate::{Bus, DbusCall, DbusService, Error, NameOutcome};
 
 /// How many names one configuration may hold.
 ///
@@ -57,9 +57,9 @@ impl<C: Clone> DbusHandlers<C> {
     /// second replaces the first rather than fanning out, because two
     /// handlers answering one call means one replies to a call the other
     /// already answered.
-    pub fn set(&mut self, service: &SharedService, callback: C) -> Result<(), String> {
+    pub fn set(&mut self, service: &SharedService, callback: C) -> Result<(), Error> {
         if self.entries.len() >= MAX_DBUS_SERVICES {
-            return Err("D-Bus service limit reached".into());
+            return Err(Error::invalid("D-Bus service limit reached"));
         }
         let entry = (Rc::clone(service), callback);
         match self
@@ -104,11 +104,11 @@ pub fn remember_name(names: &mut Vec<Weak<RefCell<DbusService>>>, service: &Shar
 }
 
 /// `"session"` or `"system"`.
-pub fn bus_named(name: &str) -> Result<Bus, String> {
+pub fn bus_named(name: &str) -> Result<Bus, Error> {
     match name {
         "session" => Ok(Bus::Session),
         "system" => Ok(Bus::System),
-        _ => Err(format!("unknown D-Bus bus `{name}`")),
+        _ => Err(Error::Invalid(format!("unknown D-Bus bus `{name}`"))),
     }
 }
 
@@ -116,8 +116,8 @@ pub fn bus_named(name: &str) -> Result<Bus, String> {
 ///
 /// Ids are opaque and only ever come from a call, so anything that is not a
 /// positive integer is a configuration replying to something it invented.
-pub fn call_id(id: i64) -> Result<u64, String> {
-    u64::try_from(id).map_err(|_| format!("`{id}` is not a D-Bus call id"))
+pub fn call_id(id: i64) -> Result<u64, Error> {
+    u64::try_from(id).map_err(|_| Error::Invalid(format!("`{id}` is not a D-Bus call id")))
 }
 
 impl NameOutcome {

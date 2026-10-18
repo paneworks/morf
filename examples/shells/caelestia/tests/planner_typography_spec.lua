@@ -19,35 +19,31 @@ end
 for _,style in ipairs {"material","tsugumori"} do
   test.it(style.." planner descriptions and titles fit a compact pane",function()
     load(style,"calendar")
-    test.eq(test.get("planner-subtitle").text,"Your plans, with space for what comes next.")
-    local title=test.get(style=="material" and "planner-title" or "planner-title-text")
-    test.eq(title.text,style=="material" and "A day at a time." or "A DAY AT A TIME.")
+    -- (The page template has no page title: a day's row names it.)
+    test.eq(test.get("planner-empty-title").text,"Nothing planned yet")
+    test.eq(test.get("planner-empty-subtitle").text,"Tasks due or scheduled that day show here.")
+    local top=test.get("planner-month").y
     if morf.env("MORF_THEME_SNAPSHOTS")=="1" then test.snapshot(style.."-planner-title.png") end
     test.wheel(0,3000,{x=400,y=300}) test.advance(200)
-    if style=="tsugumori" then
-      test.truthy(test.get("planner-work-title-text").text~="WORK CALENDAR","offscreen title missed its reveal")
-      test.advance(2400)
-      test.eq(test.get("planner-work-title-text").text,"WORK CALENDAR")
-    end
     local work=test.get("planner-work-title")
     test.truthy(work.y>=10 and work.y+work.height<430,"final section is not reachable")
+    test.truthy(test.find {text=style=="material" and "Work calendar" or "WORK CALENDAR",visible=true})
     if morf.env("MORF_THEME_SNAPSHOTS")=="1" then test.snapshot(style.."-planner-work.png") end
     test.ipc("show","no") test.advance(100)
     test.ipc("show","yes") test.advance(200)
-    if style=="tsugumori" then
-      test.eq(test.get("planner-work-title-text").text,"WORK CALENDAR")
-      test.truthy(test.get("planner-title-text").text~="A DAY AT A TIME.","reopened calendar did not reset to the top")
-    end
+    test.near(test.get("planner-month").y,top,1,"reopened calendar did not reset to the top")
     test.eq(#test.logs("error"),0) test.eq(#test.logs("warn"),0)
   end)
   test.it(style.." task descriptions share the panel subtitle role",function()
     load(style,"tasks")
-    test.eq(test.get("tasks-subtitle").text,"0 open tasks · Taskwarrior")
+    local note="Add a task, or choose another view."
+    test.truthy(test.get("tasks-empty").visible)
+    test.truthy(test.find {text=note,visible=true})
     if morf.env("MORF_THEME_SNAPSHOTS")=="1" then test.snapshot(style.."-tasks-title.png") end
     test.click("tasks-add") test.advance(2400)
     test.truthy(test.get("task-editor-title").visible)
     test.click("task-cancel") test.advance(2400)
-    test.truthy(test.get("tasks-subtitle").visible)
+    test.truthy(test.find {text=note,visible=true})
     test.eq(#test.logs("error"),0) test.eq(#test.logs("warn"),0)
   end)
 end

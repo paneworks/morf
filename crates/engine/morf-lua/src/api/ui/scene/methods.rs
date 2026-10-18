@@ -6,10 +6,10 @@ use super::*;
 /// A terminal's methods, called as `term:write("ls\r")`.
 pub(super) fn terminal_method<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     name: &str,
 ) -> Option<Callback<'gc>> {
-    use crate::terminals;
+    use crate::runtime::terminals;
     let state = Rc::clone(state);
     let busy = || HostError("terminals cannot be used from inside a layout function".to_owned());
     Some(match name {
@@ -100,10 +100,10 @@ pub(super) fn terminal_method<'gc>(
 /// place meant, so `text:sub(1, n)` is what lies before offset `n`.
 pub(super) fn text_input_method<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     name: &str,
 ) -> Option<Callback<'gc>> {
-    use crate::text_inputs;
+    use crate::runtime::text_inputs;
     let state = Rc::clone(state);
     let offset = |value: i64| value.max(0) as usize;
     Some(match name {
@@ -123,7 +123,7 @@ pub(super) fn text_input_method<'gc>(
             let node: UserRef<NodeToken> = stack.consume(ctx)?;
             let mut state = state.try_borrow_mut().map_err(|_| busy())?;
             let cursor = state
-                .scene
+                .scene()
                 .number(node.handle, "cursor_position")
                 .unwrap_or(0.0);
             text_inputs::select(&mut *state, node.handle, cursor as usize, cursor as usize);

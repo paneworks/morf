@@ -9,14 +9,14 @@ use std::time::Duration;
 use morf_scene::{Behavior, ListModel, Value as SceneValue, VirtualList};
 
 use crate::{
-    lua_values::*, model_revisions::*, reactive_bindings::*, reactive_execute::*,
-    scene_bindings::*, serialization::*, state::*, surface_types::*, table_menu::*, types::*,
-    views::*,
+    api::ui::bindings::*, api::ui::scene::*, runtime::host_types::*, runtime::model_revisions::*,
+    runtime::state::*, runtime::views::*, value::lua::*, value::table::*, vm::execute::*,
+    vm::loader::*, vm::types::*,
 };
 
 pub(crate) fn install_view_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     limits: Limits,
 ) {
@@ -243,7 +243,10 @@ pub(crate) fn install_view_api<'gc>(
     model_metatable.set_field(ctx, "__index", model_index);
     model_metatable.set_field(ctx, "__len", model_len);
     let model_metatable = ctx.stash(model_metatable);
-    state.borrow_mut().model_metatable = Some(model_metatable.clone());
+    state
+        .borrow_mut()
+        .metatables_mut()
+        .set_model(model_metatable.clone());
     let list_model = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let items: Table = stack.consume(ctx)?;
         let value = lua_to_scene(ctx, LuaValue::Table(items), 0).map_err(HostError)?;
@@ -338,11 +341,14 @@ pub(crate) fn install_view_api<'gc>(
         let (node, offset): (UserRef<NodeToken>, f64) = stack.consume(ctx)?;
         let mut view = sync_state
             .borrow_mut()
-            .views
+            .views_mut()
             .remove(&node.handle)
             .ok_or_else(|| HostError("node is not a ListView".to_owned()))?;
         let result = reconcile_lua_view(&sync_state, ctx, limits, node.handle, offset, &mut view);
-        sync_state.borrow_mut().views.insert(node.handle, view);
+        sync_state
+            .borrow_mut()
+            .views_mut()
+            .insert(node.handle, view);
         let transitions = result.map_err(HostError)?;
         let values = Table::new(&ctx);
         for (index, transition) in transitions.into_iter().enumerate() {
@@ -367,7 +373,7 @@ pub(crate) fn install_view_api<'gc>(
         let extent = {
             let state = extent_state.borrow();
             let view = state
-                .views
+                .views()
                 .get(&node.handle)
                 .ok_or_else(|| HostError("node is not a ListView".to_owned()))?;
             let count = view.model.borrow().len();
@@ -386,7 +392,7 @@ pub(crate) fn install_view_api<'gc>(
         let start = {
             let state = start_state.borrow();
             let view = state
-                .views
+                .views()
                 .get(&node.handle)
                 .ok_or_else(|| HostError("node is not a ListView".to_owned()))?;
             view.view.item_start((index - 1).max(0) as usize)
@@ -414,7 +420,7 @@ pub(crate) fn install_view_api<'gc>(
         };
         transition_state
             .borrow_mut()
-            .windows
+            .windows_mut()
             .parent_transitions
             .push(ParentTransitionRequest {
                 node: node.handle,

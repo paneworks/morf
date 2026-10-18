@@ -10,6 +10,7 @@ use morf_scene::{FastMap, FastSet, NodeHandle, Scene};
 use crate::incremental::{Basis, Dirty, Local};
 
 use crate::custom::{CustomLayout, NoCustom};
+use crate::flex::FlexTrees;
 use crate::geometry::{Geometry, Size, TextMeasurer};
 use crate::helpers::LayoutError;
 
@@ -49,6 +50,8 @@ pub struct Layout {
     /// How each node's position was worked out from its parent's, so a
     /// subtree that has only moved can be moved without being laid out.
     pub(crate) local: FastMap<NodeHandle, Local>,
+    /// The Taffy trees of the flex roots, kept for the next pass.
+    pub(crate) flex: FlexTrees,
 }
 
 /// Cached layout geometry used by native transform watchers.
@@ -161,6 +164,7 @@ impl Layout {
         self.requested.retain(|node, _| in_tree(node));
         self.text_widths.retain(|node, _| in_tree(node));
         self.reflow_text.retain(|node| in_tree(node));
+        self.flex.retain(scene);
         if let Some(first) = self.first.as_mut() {
             first.prune(scene, root);
         }

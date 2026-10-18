@@ -183,13 +183,14 @@ where
     R: Read + Send + 'static,
     F: Fn(Vec<u8>) -> ProcessEvent + Send + 'static,
 {
+    let waker = crate::waker();
     thread::spawn(move || {
         let mut buffer = vec![0; 8 * 1024];
         loop {
             match reader.read(&mut buffer) {
                 Ok(0) | Err(_) => break,
                 Ok(read) if tx.send(event(buffer[..read].to_vec())).is_err() => break,
-                Ok(_) => crate::wake_all(),
+                Ok(_) => waker.wake(),
             }
         }
     });

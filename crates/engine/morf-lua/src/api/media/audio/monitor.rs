@@ -6,7 +6,7 @@ use super::*;
 /// Installs `monitor` on `audio`.
 pub(super) fn install_monitor<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     audio: Table<'gc>,
 ) {
     let function =
@@ -44,7 +44,7 @@ pub(super) fn install_monitor<'gc>(
                                 LuaValue::Nil => None,
                                 LuaValue::Table(o) => Some(
                                     morf_audio::spectrum::Filter::new(
-                                        crate::api_audio_spectrum::options(ctx, Some(o))?,
+                                        crate::api::media::audio_spectrum::options(ctx, Some(o))?,
                                     )
                                     .map_err(HostError)?,
                                 ),

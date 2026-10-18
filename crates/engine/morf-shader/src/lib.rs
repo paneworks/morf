@@ -46,6 +46,7 @@ mod emit_branch;
 mod emit_expr;
 mod ir;
 mod limits;
+mod loop_work;
 mod lower;
 mod lower_array;
 mod lower_bits;
@@ -190,21 +191,26 @@ pub fn compile(source: &str, spec: &ShaderSpec) -> Result<Compiled, Vec<Diagnost
             ),
         )]);
     }
-    let chunk = parse_chunk(source.as_bytes(), BasicInterner::default())
-        .map_err(|error| vec![Diagnostic::new(1, error.to_string())])?;
+    let chunk = parse_chunk(source.as_bytes(), BasicInterner::default()).map_err(|error| {
+        vec![Diagnostic::new(
+            lower::line_of(error.line_number),
+            error.kind.to_string(),
+        )]
+    })?;
 
     let mut diagnostics = Vec::new();
     let functions = lower::functions(&chunk, &spec.entry, &mut diagnostics);
     let Some(definition) = functions.entry else {
         return Err(diagnostics);
     };
+    let entry_line = functions.entry_line;
 
     let mut lowerer = lower::Lowerer::new(&spec.inputs, &spec.params);
     lowerer.textures = spec.textures.clone();
     lowerer.data = spec.data.clone();
     lowerer.helpers = functions.helpers;
     lowerer.diagnostics = diagnostics;
-    bind_parameters(&mut lowerer, definition, spec);
+    bind_parameters(&mut lowerer, definition, spec, entry_line);
     let mut body = lowerer.block(&definition.body);
     body.resolve_mutability();
 
@@ -223,23 +229,25 @@ pub fn compile(source: &str, spec: &ShaderSpec) -> Result<Compiled, Vec<Diagnost
         reads_time: lowerer.reads_time,
         samples_behind: lowerer.samples_behind,
         takes_derivative: lowerer.takes_derivative,
+        entry_line,
         textures: spec.textures.clone(),
         data: spec.data.clone(),
     };
     let mut diagnostics = lowerer.diagnostics;
     validate::check(&program, spec, &mut diagnostics);
+    loop_work::check(&program, &mut diagnostics);
     if spec.vertex {
         // A vertex shader runs before there is a fragment, so a derivative or
         // a sample of what is underneath has nothing to read.
-        if program.takes_derivative {
+        if let Some(line) = program.takes_derivative {
             diagnostics.push(
-                Diagnostic::new(1, "a vertex shader cannot take a derivative")
+                Diagnostic::new(line, "a vertex shader cannot take a derivative")
                     .note("there are no neighbouring pixels yet; it runs once per corner"),
             );
         }
-        if program.samples_behind {
+        if let Some(line) = program.samples_behind {
             diagnostics.push(
-                Diagnostic::new(1, "a vertex shader cannot sample what is underneath")
+                Diagnostic::new(line, "a vertex shader cannot sample what is underneath")
                     .note("nothing has been drawn yet when it runs"),
             );
         }
@@ -262,7 +270,7 @@ pub fn compile(source: &str, spec: &ShaderSpec) -> Result<Compiled, Vec<Diagnost
         params,
         uniform_size,
         reads_time: program.reads_time,
-        samples_behind: program.samples_behind,
+        samples_behind: program.samples_behind.is_some(),
         hash,
     })
 }
@@ -277,14 +285,15 @@ fn bind_parameters(
     lowerer: &mut lower::Lowerer<'_>,
     definition: &luna::compiler::parser::FunctionDefinition<lower::Name>,
     spec: &ShaderSpec,
+    line: u32,
 ) {
     let declared: Vec<&Binding> = spec.inputs.iter().chain(spec.params.iter()).collect();
     if definition.has_varargs {
-        lowerer.error(1, "a shader entry point cannot take `...`");
+        lowerer.error(line, "a shader entry point cannot take `...`");
     }
     if definition.parameters.len() > declared.len() {
         lowerer.error_note(
-            1,
+            line,
             format!(
                 "`{}` takes {} arguments, but only {} are declared",
                 spec.entry,
@@ -305,7 +314,7 @@ fn bind_parameters(
         let written = lower::text(name);
         if written != binding.name {
             lowerer.error_note(
-                1,
+                line,
                 format!(
                     "argument {} is `{written}`, but `{}` was declared there",
                     index + 1,

@@ -5,6 +5,8 @@ mod outputless;
 mod pacing;
 mod popups;
 mod primary;
+mod reload_band;
+mod rotation;
 mod screens;
 
 // The supervisor and its workers: screen sets, IPC dispatch, hot reload.
@@ -12,10 +14,10 @@ mod screens;
 use morf_app::Output;
 use morf_host::lock::Worker;
 use morf_host::lock::WorkerCommand;
-use morf_host::services::stop_workers;
-use morf_host::supervisor::runtime_scripts;
-use morf_host::workers::handle_ipc;
-use morf_host::workers::handle_worker_command;
+use morf_host::process::services::stop_workers;
+use morf_host::process::supervisor::runtime_scripts;
+use morf_host::process::workers::handle_ipc;
+use morf_host::process::workers::handle_worker_command;
 use morf_io::IpcReply;
 use morf_io::IpcRequest;
 use morf_io::IpcValue as WireValue;
@@ -180,12 +182,79 @@ fn failed_reload_keeps_the_previous_runtime() {
     assert!(result.recv().unwrap().is_err());
     assert!(!update.repaint);
     assert!(!update.recreate_surface);
+    // The configuration handled the failure itself: no engine band.
+    assert!(!runtime.reload_error_shown());
     assert_eq!(
         runtime.call_ipc("value", &[]).unwrap(),
         [IpcValue::Integer(7)]
     );
     let failure = runtime.call_ipc("reload.failure", &[]).unwrap();
     assert!(matches!(&failure[..], [IpcValue::String(error)] if !error.is_empty()));
+}
+
+#[test]
+fn failed_reload_without_a_handler_shows_the_engine_band() {
+    let screen = Screen {
+        name: "test".into(),
+        width: None,
+        height: None,
+        scale: 1,
+        ..Screen::default()
+    };
+    let mut runtime = Runtime::for_screen(Limits::default(), screen.clone());
+    runtime
+        .execute(
+            "shell.lua",
+            br#"
+                    morf.ipc.value = function() return 7 end
+                    morf.ui.Item { morf.ui.Rect { width = 10, height = 10 } }
+                "#,
+        )
+        .unwrap();
+    let reload = |runtime: &mut Runtime, source: &[u8]| {
+        let (reply, result) = mpsc::sync_channel(1);
+        let update = handle_worker_command(
+            runtime,
+            Some(&screen),
+            LoadPolicy::default(),
+            WorkerCommand::Reload {
+                path: Arc::new(PathBuf::from("shell.lua")),
+                source: Arc::from(source),
+                hard: false,
+                reply,
+            },
+        );
+        (update, result.recv().unwrap())
+    };
+
+    let (update, result) = reload(&mut runtime, b"local =");
+    let error = result.unwrap_err();
+    // The old configuration still runs, and the band says what failed where.
+    assert_eq!(
+        runtime.call_ipc("value", &[]).unwrap(),
+        [IpcValue::Integer(7)]
+    );
+    assert!(update.repaint);
+    assert!(!update.reloaded);
+    assert!(runtime.reload_error_shown());
+    let failure = runtime.reload_failure().unwrap();
+    assert_eq!(failure.error, error);
+    assert_eq!(failure.location, Some((PathBuf::from("shell.lua"), 1)));
+    let text = runtime.reload_error_text().unwrap();
+    assert!(text.contains("shell.lua failed at line 1"), "{text}");
+    assert!(text.contains(&error), "{text}");
+    // The band is a tree of the engine's own, never the primary root.
+    let primary = morf_host::host::surfaces::primary_surface_root(&runtime).unwrap();
+    assert_ne!(Some(primary), runtime.reload_band_root());
+
+    // A fixed reload replaces the runtime, which dismisses the band.
+    let (update, result) = reload(
+        &mut runtime,
+        br#"morf.ui.Item { morf.ui.Rect { width = 20, height = 20 } }"#,
+    );
+    assert!(result.is_ok());
+    assert!(update.reloaded);
+    assert!(!runtime.reload_error_shown());
 }
 
 #[test]
@@ -222,7 +291,7 @@ fn supervisor_dispatches_registered_ipc_handler() {
         "test".to_owned(),
         Worker {
             stop,
-            commands: morf_host::lock::WorkerSender::new(commands),
+            commands: morf_host::lock::WorkerSender::new(commands, Default::default()),
             join,
             screen: Output {
                 name: Some("test".to_owned()),
@@ -286,7 +355,7 @@ fn supervisor_dispatches_registered_ipc_handler() {
 // stops, and a lock is a lock whether or not a shell holds the socket.
 #[test]
 fn a_loaded_configuration_decides_what_the_supervisor_does() {
-    use morf_host::supervisor::{LoadedStep, loaded_step};
+    use morf_host::process::supervisor::{LoadedStep, loaded_step};
     assert_eq!(loaded_step(false, false), LoadedStep::Run);
     assert_eq!(loaded_step(false, true), LoadedStep::Refuse);
     assert_eq!(loaded_step(true, false), LoadedStep::Lock);
@@ -295,7 +364,7 @@ fn a_loaded_configuration_decides_what_the_supervisor_does() {
 
 #[test]
 fn an_output_going_away_does_not_stop_the_shell() {
-    use morf_host::supervisor::{FailureStep, SURFACE_CLOSED, failure_step};
+    use morf_host::process::supervisor::{FailureStep, SURFACE_CLOSED, failure_step};
     use std::collections::VecDeque;
     use std::time::{Duration, Instant};
     let mut closures = VecDeque::new();
@@ -329,4 +398,21 @@ fn an_output_going_away_does_not_stop_the_shell() {
         FailureStep::Probe
     );
     assert_eq!(closures.len(), 1);
+}
+
+#[test]
+fn a_panicked_worker_is_restarted_a_few_times_a_minute() {
+    use morf_host::process::supervisor::{FailureStep, PANICKED, failure_step};
+    use std::collections::VecDeque;
+    use std::time::Instant;
+    let mut crashes = VecDeque::new();
+    let now = Instant::now();
+    let error = format!("{PANICKED}: index out of bounds");
+    for _ in 0..5 {
+        assert_eq!(
+            failure_step(&error, &mut crashes, now),
+            FailureStep::Restart
+        );
+    }
+    assert_eq!(failure_step(&error, &mut crashes, now), FailureStep::Stop);
 }

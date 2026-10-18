@@ -5,12 +5,18 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
   release:
     name: release ${{ matrix.artifact }}
+    needs: tests
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -20,8 +26,12 @@ jobs:
           - os: ubuntu-24.04-arm
             artifact: "morf-linux-arm64"
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: stable
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -31,12 +41,16 @@ jobs:
       - name: Package
         run: |
           stage="$RUNNER_TEMP/morf-release"
-          mkdir -p "$stage/library"
+          mkdir -p "$stage/library/docs"
           cp target/release/morf "$stage/"
           cp -r library/lib library/README.md library/luarc.template.json "$stage/library/"
+          cp docs/UI.md docs/IO.md "$stage/library/docs/"
+          "$stage/morf" --version | cut -d' ' -f2 > "$stage/library/docs/VERSION"
+          test "$(cat "$stage/library/docs/VERSION")" = "${GITHUB_REF_NAME#v}"
           "$stage/morf" types "$stage/library/types"
+          test "$("$stage/morf" docs --ui | head -n 1)" = "# $("$stage/morf" --version) UI guide"
           tar -czf "${{ matrix.artifact }}.tar.gz" -C "$stage" morf library
       - name: Upload artifact
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: ${{ matrix.artifact }}.tar.gz

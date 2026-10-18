@@ -3,19 +3,18 @@
 //! them is `morf_runtime::views`'.
 
 use luna::{Context, Executor, Function, UserRef, Value as LuaValue, Variadic};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use morf_scene::{Element, NodeHandle, Scene, Value as SceneValue, ViewTransition};
 
 use crate::{
-    reactive_bindings::*,
-    reactive_execute::*,
-    runtime_helpers::{begin_node_exit, cancel_node_exit, remove_scene_subtree},
-    scene_bindings::*,
-    serialization::*,
-    state::*,
-    types::*,
+    api::ui::bindings::*,
+    api::ui::scene::*,
+    runtime::helpers::{begin_node_exit, cancel_node_exit, remove_scene_subtree},
+    runtime::state::*,
+    vm::execute::*,
+    vm::loader::*,
+    vm::types::*,
 };
 use morf_runtime::Handler;
 use morf_runtime::views::ViewHost;
@@ -34,7 +33,7 @@ pub(crate) fn execute_delegate(
     ]);
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(delegate))
+        ctx.fetch(&crate::vm::handler_store::stashed(delegate)?)
             .into(),
         args,
     );
@@ -76,7 +75,7 @@ pub(crate) fn execute_delegate_updater(
     ]);
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(updater))
+        ctx.fetch(&crate::vm::handler_store::stashed(updater)?)
             .into(),
         args,
     );
@@ -101,11 +100,11 @@ pub(crate) fn execute_node_factory(
 ) -> Result<NodeHandle, String> {
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(factory))
+        ctx.fetch(&crate::vm::handler_store::stashed(factory)?)
             .into(),
         (),
     );
-    drive_executor(ctx, executor, limits, limits.effect_fuel, "Loader source")?;
+    drive_executor(ctx, executor, limits, limits.delegate_fuel, "Loader source")?;
     match executor.take_result::<UserRef<NodeToken>>(ctx) {
         Ok(Ok(node)) => Ok(node.handle),
         Ok(Err(error)) => Err(error.to_string()),
@@ -115,7 +114,7 @@ pub(crate) fn execute_node_factory(
 
 /// What a view asks of Lua and the scene, from inside a turn.
 struct LuaViewHost<'a, 'gc> {
-    state: &'a Rc<RefCell<ReactiveState>>,
+    state: &'a Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     limits: Limits,
 }
@@ -152,14 +151,14 @@ impl ViewHost for LuaViewHost<'_, '_> {
     }
 
     fn with_scene<R>(&mut self, f: impl FnOnce(&mut Scene) -> R) -> R {
-        f(&mut self.state.borrow_mut().scene)
+        f(self.state.borrow_mut().scene_mut())
     }
 }
 
 /// Brings `view`, filling `parent`, up to its model, scrolled `offset`
 /// along, building and rebinding its delegates in Lua.
 pub(crate) fn reconcile_lua_view(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
     parent: NodeHandle,

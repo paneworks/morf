@@ -28,8 +28,8 @@ use morf_scene::reactive::SignalId;
 use morf_scene::{ListModel, Value as SceneValue};
 
 use crate::{
-    reactive_execute::drive_executor, scene_bindings::*, serialization::scene_to_lua, state::*,
-    state_tokens::*, surface_types::*, types::*,
+    api::ui::scene::*, runtime::host_types::*, runtime::state::*, value::tokens::*,
+    vm::execute::drive_executor, vm::loader::scene_to_lua, vm::types::*,
 };
 use morf_runtime::Handler;
 
@@ -144,7 +144,7 @@ pub(crate) fn toplevel_row(window: &Toplevel) -> SceneValue {
 
 fn host(state: &mut ReactiveState) -> &mut ToplevelHost {
     state
-        .toplevels
+        .toplevels_mut()
         .as_mut()
         .expect("morf.toplevels is installed with the runtime")
 }
@@ -152,27 +152,23 @@ fn host(state: &mut ReactiveState) -> &mut ToplevelHost {
 /// Marks the running binding, if any, as following the window list.
 fn follow(state: &mut ReactiveState) {
     let revision = host(state).revision;
-    if let Some(active) = &mut state.active {
+    if let Some(active) = state.tracking_mut().capture() {
         active.reads.insert(revision);
     }
 }
 
 pub(crate) fn install_toplevels_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     {
         let mut state = state.borrow_mut();
         let revision = state
-            .reactive
-            .graph
-            .as_mut()
-            .expect("the graph is not running at install")
-            .signal("toplevels.revision", IpcValue::Integer(0));
-        state.reactive.values.insert(revision, IpcValue::Integer(0));
-        state.reactive.signals.push(revision);
-        state.toplevels = Some(ToplevelHost {
+            .reactive_mut()
+            .signal("toplevels.revision", IpcValue::Integer(0))
+            .expect("the graph is not running at install");
+        *state.toplevels_mut() = Some(ToplevelHost {
             windows: Vec::new(),
             model: Rc::new(RefCell::new(ListModel::default())),
             revision,
@@ -291,8 +287,8 @@ pub(crate) fn install_toplevels_api<'gc>(
             let mut state = state.borrow_mut();
             let model = Rc::clone(&host(&mut state).model);
             let metatable = state
-                .model_metatable
-                .clone()
+                .metatables()
+                .model()
                 .ok_or_else(|| HostError("list models are not installed".into()))?;
             let userdata = UserData::new_static(&ctx, ListModelToken { model });
             userdata.set_metatable(ctx, Some(ctx.fetch(&metatable)));
@@ -316,7 +312,7 @@ pub(crate) fn execute_toplevel_handler(
     let change = scene_to_lua(ctx, change)?;
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(closure))
+        ctx.fetch(&crate::vm::handler_store::stashed(closure)?)
             .into(),
         Variadic(vec![change]),
     );

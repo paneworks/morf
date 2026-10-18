@@ -3,12 +3,13 @@ mod commands;
 use morf_app::Output;
 use morf_lua::{LogEntry, Runtime};
 use std::collections::BTreeMap;
+use std::panic::{self, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self};
 
-use crate::{lock::*, outputless::*, supervisor::*, surface_run::*};
+use crate::{host::run::*, lock::*, paint::outputless::*, process::supervisor::*};
 
 pub use commands::{WorkerUpdate, handle_ipc, handle_worker_command};
 
@@ -74,6 +75,8 @@ pub struct WorkerStart {
     pub handover: Handover,
     /// Whether its runtime starts as the primary one (`morf.primary()`).
     pub primary: bool,
+    /// What its commands ring, claimed by the thread that runs it.
+    pub alarm: crate::lock::WorkerAlarm,
 }
 
 /// The workers the supervisor wants for an output list: one per named
@@ -126,6 +129,7 @@ pub fn reconcile_workers(
         |name, screen, seed, is_primary| {
             let (commands, command_rx) = mpsc::channel();
             let stop = Arc::new(AtomicBool::new(false));
+            let alarm = crate::lock::WorkerAlarm::default();
             let join = spawn_worker(
                 name,
                 screen,
@@ -139,11 +143,12 @@ pub fn reconcile_workers(
                     seed,
                     handover: context.handover.clone(),
                     primary: is_primary,
+                    alarm: alarm.clone(),
                 },
             );
             Worker {
                 stop,
-                commands: WorkerSender::new(commands),
+                commands: WorkerSender::new(commands, alarm),
                 join,
                 screen: screen.clone(),
             }
@@ -211,7 +216,11 @@ pub fn reconcile_with(
     let crossing = workers.is_empty() || was_outputless != desired.contains_key(OUTPUTLESS);
     let mut stale = workers
         .iter()
-        .filter(|(name, worker)| desired.get(*name) != Some(&worker.screen))
+        .filter(|(name, worker)| {
+            !desired
+                .get(*name)
+                .is_some_and(|wanted| same_output(wanted, &worker.screen))
+        })
         .map(|(name, _)| name.clone())
         .collect::<Vec<_>>();
     // The primary goes last, so its values are the ones handed over: every
@@ -222,6 +231,13 @@ pub fn reconcile_with(
         let worker = workers.remove(&name).expect("worker key is present");
         worker.request_stop();
         let _ = worker.join.join();
+    }
+    // A kept worker's output may have turned, moved or been rescaled: it
+    // takes the new geometry, which `morf.screens` already carries to it.
+    for (name, worker) in workers.iter_mut() {
+        if let Some(wanted) = desired.get(name) {
+            worker.screen = wanted.clone();
+        }
     }
     // Every runtime that is going has gone -- and given its bus names back
     // -- before any is told it is primary.
@@ -249,6 +265,12 @@ pub fn reconcile_with(
     }
 }
 
+/// Whether two descriptions are of one output: what a rotation, a new mode,
+/// a move or a rescale leaves as it was.
+fn same_output(a: &Output, b: &Output) -> bool {
+    a.id == b.id && a.name == b.name && a.make == b.make && a.model == b.model
+}
+
 /// Starts the thread that runs the configuration for one output, or for none.
 fn spawn_worker(name: &str, screen: &Output, start: WorkerStart) -> thread::JoinHandle<()> {
     let output = name.to_owned();
@@ -260,11 +282,20 @@ fn spawn_worker(name: &str, screen: &Output, start: WorkerStart) -> thread::Join
         .spawn(move || {
             let tx = start.tx.clone();
             let stop = Arc::clone(&start.stop);
-            let result = if output == OUTPUTLESS {
-                run_outputless(start, true)
-            } else {
-                run_surface(start, screen)
-            };
+            crate::process::crash::mark_recoverable();
+            // This thread's alarm, before the configuration runs: what it
+            // asks for rings this output's loop and no other.
+            let _alarm = morf_io::Wake::new();
+            start.alarm.claim();
+            let outputless = output == OUTPUTLESS;
+            let run = panic::catch_unwind(AssertUnwindSafe(move || {
+                if outputless {
+                    run_outputless(start, true)
+                } else {
+                    run_surface(start, screen)
+                }
+            }));
+            let result = run.unwrap_or_else(|payload| Err(panicked(payload.as_ref())));
             if let Err(error) = result
                 && !stop.load(Ordering::Acquire)
             {
@@ -275,6 +306,20 @@ fn spawn_worker(name: &str, screen: &Output, start: WorkerStart) -> thread::Join
             }
         })
         .expect("worker thread")
+}
+
+/// What a worker that panicked fails with: [`PANICKED`], the message, and
+/// where its crash report went.
+fn panicked(payload: &(dyn std::any::Any + Send)) -> String {
+    let what = payload
+        .downcast_ref::<&str>()
+        .map(|text| (*text).to_owned())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "a payload of an unknown type".to_owned());
+    match crate::process::crash::take_report() {
+        Some(report) => format!("{PANICKED}: {what} (report {})", report.display()),
+        None => format!("{PANICKED}: {what}"),
+    }
 }
 
 /// Hands every live worker the compositor's new output list, so each runtime's

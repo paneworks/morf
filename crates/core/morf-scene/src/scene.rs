@@ -10,6 +10,7 @@ impl Scene {
         Self {
             nodes: SlotMap::with_key(),
             properties: PropertyStore::default(),
+            defaults: FastMap::default(),
             behaviors: FastMap::default(),
             animations: FastMap::default(),
             physics: FastMap::default(),
@@ -21,12 +22,15 @@ impl Scene {
             next_group: 0,
             layout_revision: 0,
             root_revisions: FastMap::default(),
+            paint_revision: 0,
+            input_revision: 0,
             detached_revisions: FastMap::default(),
             motion_scale: 1.0,
             start_on_tick: false,
             removed: Vec::new(),
             shaders: FastMap::default(),
             terminal_screens: FastMap::default(),
+            glass_nodes: FastSet::default(),
             tracks: FastMap::default(),
             masks: FastMap::default(),
             mask_owners: FastMap::default(),
@@ -38,35 +42,17 @@ impl Scene {
         }
     }
 
-    /// Allocates an element with every schema property initialized.
+    /// Allocates an element whose properties all read their defaults.
     pub fn create(&mut self, element: Element) -> NodeHandle {
-        let node = self.nodes.insert_with_key(|_| {
-            let properties = schema(element)
-                .into_iter()
-                .map(|spec| {
-                    // Named by the property alone: nothing subscribes to
-                    // these signals, so the name is never shown, and
-                    // formatting one per signal -- element, node, property,
-                    // level -- was most of what building a node cost.
-                    let current = self.properties.signal(spec.name, spec.default.clone());
-                    let target = self.properties.signal(spec.name, spec.default);
-                    (
-                        spec.name,
-                        PropertySlot {
-                            current,
-                            target,
-                            kind: spec.kind,
-                        },
-                    )
-                })
-                .collect();
-            Node {
-                element,
-                parent: None,
-                children: Vec::new(),
-                properties,
-                stamps: LayoutStamps::default(),
-            }
+        self.ensure_defaults(element);
+        let node = self.nodes.insert(Node {
+            element,
+            parent: None,
+            children: Vec::new(),
+            properties: FastMap::default(),
+            stamps: LayoutStamps::default(),
+            paint: 0,
+            input: 0,
         });
         // A new node is a tree of its own until it is given a parent.
         self.bump_layout(node);
@@ -104,21 +90,13 @@ impl Scene {
 
     /// Checks whether a live element schema declares a property.
     pub fn has_property(&self, node: NodeHandle, property: &str) -> Result<bool, SceneError> {
-        Ok(self.nodes[self.live(node)?]
-            .properties
-            .contains_key(property))
+        Ok(self.lookup(self.live(node)?, property).is_ok())
     }
 
     /// Reports whether a property currently advances on animation ticks.
     pub fn is_animating(&self, node: NodeHandle, property: &str) -> Result<bool, SceneError> {
         let id = self.live(node)?;
-        let (name, _) = self.nodes[id]
-            .properties
-            .get_key_value(property)
-            .ok_or_else(|| SceneError::UnknownProperty {
-                element: self.nodes[id].element.name(),
-                property: property.to_owned(),
-            })?;
+        let (name, _) = self.lookup(id, property)?;
         let key = PropertyKey {
             node: id,
             property: name,
@@ -277,6 +255,7 @@ impl Scene {
             self.root_revisions.remove(&current);
             self.detached_revisions.remove(&current);
             self.terminal_screens.remove(&current);
+            self.glass_nodes.remove(&current);
             self.tracks.remove(&current);
             self.masks.remove(&current);
             if let Some(owner) = self.mask_owners.remove(&current) {
@@ -322,14 +301,7 @@ impl Scene {
     ) -> Result<(), SceneError> {
         let id = self.live(node)?;
         let element = self.nodes[id].element;
-        let (property_name, slot) = self.nodes[id]
-            .properties
-            .get_key_value(property)
-            .map(|(name, slot)| (*name, *slot))
-            .ok_or_else(|| SceneError::UnknownProperty {
-                element: element.name(),
-                property: property.to_owned(),
-            })?;
+        let (property_name, slot) = self.lookup(id, property)?;
         let value = coerce(element, property, slot.kind, value.into())?;
         let key = PropertyKey {
             node: id,
@@ -338,6 +310,7 @@ impl Scene {
         if self.properties.read(slot.target)? == &value {
             return Ok(());
         }
+        let (_, slot) = self.owned(id, property)?;
         if let Some(spec) = self.physics_specs.get(&key).copied()
             && let Value::Color(target) = value
             && let Value::Color(current) = *self.properties.read(slot.current)?
@@ -413,6 +386,9 @@ impl Scene {
         // layout pass is a great deal cheaper than a frame drawn at stale
         // geometry.
         self.touch_layout(id, property_name);
+        if property_name == "glass" {
+            self.expand_glass(node)?;
+        }
         Ok(())
     }
 }

@@ -244,6 +244,8 @@ impl Session {
                 delay: MonitorDelay::None,
                 hold: Duration::ZERO,
                 held: VecDeque::new(),
+                float: false,
+                warned: false,
             });
             let data = (&raw mut *monitor).cast::<c_void>();
             (self.pw.stream_add_listener)(stream, &raw mut monitor.hook, &STREAM_EVENTS, data);
@@ -283,7 +285,7 @@ unsafe fn set_param<E>(proxy: *mut c_void, id: u32, value: &pod::Encoded) {
     }
 }
 
-fn native_f32() -> u32 {
+pub(super) fn native_f32() -> u32 {
     if cfg!(target_endian = "little") {
         pod::AUDIO_FORMAT_F32_LE
     } else {

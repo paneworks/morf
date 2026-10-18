@@ -8,13 +8,13 @@
 //! shell's connection; the compositor restores every output when the shell
 //! exits, however it exits, and a reload resets them too.
 
-use std::cell::RefCell;
+use crate::runtime::state::StateCell;
 use std::rc::Rc;
 
 use luna::{Callback, CallbackReturn, Table, Value as LuaValue};
 
-use crate::scene_bindings::HostError;
-use crate::state::ReactiveState;
+use crate::api::ui::scene::HostError;
+use crate::runtime::state::ReactiveState;
 
 pub use morf_runtime::requests::GammaRequest;
 
@@ -50,17 +50,17 @@ fn output_name(value: LuaValue<'_>) -> Result<Option<String>, HostError> {
     }
 }
 
-fn push(state: &Rc<RefCell<ReactiveState>>, request: GammaRequest) -> Result<(), HostError> {
+fn push(state: &Rc<StateCell<ReactiveState>>, request: GammaRequest) -> Result<(), HostError> {
     state
         .borrow_mut()
-        .requests
+        .requests_mut()
         .queue_gamma(request)
         .map_err(HostError)
 }
 
 pub(crate) fn install_gamma_api<'gc>(
     ctx: luna::Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let gamma = Table::new(&ctx);
@@ -125,11 +125,7 @@ pub(crate) fn install_gamma_api<'gc>(
         ctx,
         "supported",
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-            let supported = supported_state
-                .borrow()
-                .capabilities
-                .iter()
-                .any(|(key, value)| key == "gamma_control" && value == "true");
+            let supported = supported_state.borrow().display().capable("gamma_control");
             stack.replace(ctx, supported);
             Ok(CallbackReturn::Return)
         }),

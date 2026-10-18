@@ -88,6 +88,7 @@ impl Alarm {
         let stop_raw = stop.as_raw_fd();
         let state = Arc::new((Mutex::new(AlarmState::Armed), Condvar::new()));
         let shared = Arc::clone(&state);
+        let waker = morf_io::waker();
         let join = std::thread::Builder::new()
             .name("morf-udev".to_owned())
             .spawn(move || {
@@ -134,7 +135,7 @@ impl Alarm {
                         }
                         *state = AlarmState::Fired;
                     }
-                    morf_io::wake_all();
+                    waker.wake();
                     // A socket in error stays readable: one ring is enough,
                     // and the reader reports the error.
                     if descriptors[0].revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL)
@@ -354,13 +355,13 @@ mod tests {
         assert!(wake.wait(Duration::from_secs(5)), "a packet rang the loop");
         wake.drain();
         // Unread, the socket stays readable; the alarm waits to be re-armed
-        // rather than ringing on and on. (Asked of its state, since other
-        // tests ring every alarm in the process.)
+        // rather than ringing on and on.
         std::thread::sleep(Duration::from_millis(50));
         assert!(
             *alarm.state.0.lock().unwrap() == AlarmState::Fired,
             "once per burst"
         );
+        assert_eq!(wake.rings(), 1, "and only this loop's alarm, once");
         let mut buffer = [0u8; 16];
         while reader.recv(&mut buffer).is_ok() {}
         alarm.rearm();

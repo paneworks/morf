@@ -4,7 +4,7 @@
 -- level pills swelling out (levels.lua). Over IPC: `osd`.
 --
 -- The volume is `morf.audio`'s default output; the brightness is the
--- backlight lib/sysinfo.lua reads (and writes when it may). Without either
+-- backlight lib/services/sysinfo.lua reads (and writes when it may). Without either
 -- the level rests at zero.
 
 local morf = require("morf")

@@ -6,15 +6,15 @@ pub use morf_runtime::events::*;
 
 use morf_scene::{NodeHandle, Scene};
 
-use crate::reactive_execute::{execute_handler_args, execute_ipc_handler};
-use crate::scene_bindings::assign_scene_property;
-use crate::types::LogLevel;
+use crate::api::ui::scene::assign_scene_property;
+use crate::vm::execute::{execute_handler_args, execute_ipc_handler};
+use crate::vm::types::LogLevel;
 use crate::{IpcValue, Runtime};
 
 impl EventHost for Runtime {
     fn with_events<R>(&self, read: impl FnOnce(&Scene, &Events) -> R) -> R {
         let state = self.reactive.borrow();
-        read(&state.scene, &state.events)
+        read(state.scene(), state.events())
     }
 
     fn assign_pointer_state(&mut self, node: NodeHandle, property: &str, value: bool) -> bool {

@@ -89,6 +89,7 @@ fn batch(
         }],
         command_spans,
         plain: vec![true],
+        atlases: [0; 2],
     }
 }
 

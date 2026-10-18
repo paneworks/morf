@@ -8,7 +8,7 @@
 --
 -- Each reader (`sysinfo.cpu()`, `sysinfo.memory()`, ...) is tracked: a binding
 -- that calls it re-runs on each new sample. A section is only sampled while
--- something reads it (see lib/poll.lua), so a panel that shows the clock and
+-- something reads it (see lib/util/poll.lua), so a panel that shows the clock and
 -- nothing else costs nothing here. The tables handed out are shared and
 -- replaced whole on each sample: read them, do not change them.
 --
@@ -38,6 +38,11 @@ local function yield_sample()
   if jobs[coroutine.running()] then coroutine.yield(false) end
 end
 
+-- Set by `configure { blocking = true }`: a sample reads each file in its
+-- own tick, as a fake machine in a folder needs no workers -- so a test's
+-- virtual clock alone decides what each sample sees.
+local blocking = false
+
 local function sample_async(sample, done)
   local thread = coroutine.create(function()
     local self = coroutine.running()
@@ -54,6 +59,12 @@ local function sample_async(sample, done)
     if coroutine.status(thread) == "dead" then
       done(value.value, value.error, value.pushes)
       return
+    end
+    if blocking then
+      if value == false then return resume() end
+      local read_ok, text = pcall(morf.fs.read, value, limit)
+      if read_ok and type(text) == "string" then return resume(text) end
+      return resume(nil, "cannot read " .. value)
     end
     if value == false then morf.timer(1, resume, false) return end
     local submitted, err = morf.fs.read_async({ value }, function(success, contents)
@@ -1326,9 +1337,11 @@ function sysinfo.sample(name)
   return value, err
 end
 
---- Options: `root`, `history` (samples kept), `top` (processes listed) and
---- `intervals = { cpu = ms, ... }`.
+--- Options: `root`, `history` (samples kept), `top` (processes listed),
+--- `intervals = { cpu = ms, ... }` and `blocking` (read in the sample's own
+--- tick, not on the I/O workers).
 function sysinfo.configure(options)
+  if options.blocking ~= nil then blocking = options.blocking == true end
   if options.root then
     sysinfo.root = options.root
     -- Everything remembered came from the old root.

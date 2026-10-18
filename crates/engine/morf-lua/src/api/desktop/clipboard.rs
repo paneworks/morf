@@ -9,11 +9,10 @@
 //! loop, and calls back with the bytes.
 
 use luna::{Callback, CallbackReturn, Closure, Context, Table, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::events::EventPoint;
-use crate::{scene_bindings::*, state::*, surface_types::*};
+use crate::runtime::events::EventPoint;
+use crate::{api::ui::scene::*, runtime::host_types::*, runtime::state::*};
 
 /// The most bytes one `set` may hand the compositor.
 const MAX_SET_BYTES: usize = 32 * 1024 * 1024;
@@ -24,7 +23,7 @@ const MAX_DRAG_TYPES: usize = 16;
 
 pub(crate) fn install_clipboard_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let set_state = Rc::clone(&state);
@@ -66,7 +65,7 @@ pub(crate) fn install_clipboard_api<'gc>(
         }
         let mut state = set_state.borrow_mut();
         state
-            .requests
+            .requests_mut()
             .queue_clipboard(ClipboardRequest {
                 data,
                 mime,
@@ -81,11 +80,11 @@ pub(crate) fn install_clipboard_api<'gc>(
     let clipboard_subscribe = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
         let mut state = subscribe_state.borrow_mut();
-        if state.requests.clipboard_callbacks.len() >= 64 {
+        if state.requests().clipboard_callbacks.len() >= 64 {
             return Err(HostError("clipboard callback limit reached".into()).into());
         }
         state
-            .requests
+            .requests_mut()
             .clipboard_callbacks
             .push(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
@@ -100,10 +99,10 @@ pub(crate) fn install_clipboard_api<'gc>(
             matches!(options.get_value(ctx, "primary"), LuaValue::Boolean(true))
         });
         let mut state = watch_state.borrow_mut();
-        if state.requests.clipboard_watchers.len() >= 64 {
+        if state.requests().clipboard_watchers.len() >= 64 {
             return Err(HostError("clipboard watch limit reached".into()).into());
         }
-        state.requests.clipboard_watchers.push((
+        state.requests_mut().clipboard_watchers.push((
             crate::vm::handler_store::register(ctx.stash(callback)),
             primary,
         ));
@@ -142,7 +141,7 @@ pub(crate) fn install_clipboard_api<'gc>(
         let done = done.map(|done| crate::vm::handler_store::register(ctx.stash(done)));
         drag_state
             .borrow_mut()
-            .requests
+            .requests_mut()
             .queue_drag(request, done)
             .map_err(HostError)?;
         Ok(CallbackReturn::Return)
@@ -162,10 +161,7 @@ pub(crate) fn install_clipboard_api<'gc>(
 }
 
 fn capability(state: &ReactiveState, name: &str) -> bool {
-    state
-        .capabilities
-        .iter()
-        .any(|(key, value)| key == name && value == "true")
+    state.display().capable(name)
 }
 
 fn string_list<'gc>(
@@ -239,7 +235,7 @@ fn drag_request<'gc>(ctx: Context<'gc>, payload: Table<'gc>) -> Result<DragReque
 /// from the table but its method.
 pub(crate) fn offer_table<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     offer: &OfferDescription,
     primary: Option<bool>,
     point: Option<EventPoint>,
@@ -289,18 +285,18 @@ pub(crate) fn offer_table<'gc>(
             return Err(HostError("offer mime must be 1..256 bytes".into()).into());
         }
         let mut state = read_state.borrow_mut();
-        if state.requests.offer_read_callbacks.len() >= MAX_PENDING_READS {
+        if state.requests().offer_read_callbacks.len() >= MAX_PENDING_READS {
             return Err(HostError("offer read limit reached".into()).into());
         }
-        state.requests.next_offer_read = state.requests.next_offer_read.wrapping_add(1);
-        let id = state.requests.next_offer_read;
-        state.requests.offer_reads.push(OfferReadRequest {
+        state.requests_mut().next_offer_read = state.requests().next_offer_read.wrapping_add(1);
+        let id = state.requests().next_offer_read;
+        state.requests_mut().offer_reads.push(OfferReadRequest {
             id,
             offer: offer_id,
             mime,
         });
         state
-            .requests
+            .requests_mut()
             .offer_read_callbacks
             .insert(id, crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)

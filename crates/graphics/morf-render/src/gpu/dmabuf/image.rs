@@ -6,7 +6,7 @@ use std::os::fd::{FromRawFd, OwnedFd};
 use ash::vk;
 use wgpu::hal::api::Vulkan;
 
-use super::{DmabufImage, DmabufPlane, Purpose, exportable_modifiers, vulkan_format};
+use super::{DmabufImage, DmabufPlane, Purpose, exportable_modifiers, vulkan_format, wgpu_format};
 
 /// Creates an image exported as a dmabuf, made for `purpose`.
 pub(crate) fn export_for(
@@ -18,6 +18,8 @@ pub(crate) fn export_for(
 ) -> Result<DmabufImage, String> {
     let format =
         vulkan_format(fourcc).ok_or_else(|| format!("no Vulkan format for fourcc {fourcc:#x}"))?;
+    let texture_format =
+        wgpu_format(fourcc).ok_or_else(|| format!("no wgpu format for fourcc {fourcc:#x}"))?;
     let hal = unsafe { device.as_hal::<Vulkan>() }.ok_or("the device is not Vulkan")?;
     let raw = hal.raw_device();
     let instance = hal.shared_instance().raw_instance();
@@ -182,7 +184,7 @@ pub(crate) fn export_for(
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Bgra8Unorm,
+                format: texture_format,
                 usage: purpose.hal_usage,
                 memory_flags: wgpu::hal::MemoryFlags::empty(),
                 view_formats: purpose.view_formats.to_vec(),
@@ -211,7 +213,7 @@ pub(crate) fn export_for(
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Bgra8Unorm,
+                format: texture_format,
                 usage: purpose.wgpu_usage,
                 view_formats: purpose.view_formats,
             },

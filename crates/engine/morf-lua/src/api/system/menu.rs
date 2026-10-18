@@ -10,10 +10,16 @@ use std::path::PathBuf;
 use morf_system::menu::Menu;
 
 use crate::{
-    lua_values::*, reactive_execute::*, scene_bindings::*, state::*, table_menu::*, types::*,
+    api::ui::scene::*, runtime::state::*, value::lua::*, value::table::*, vm::execute::*,
+    vm::permissions::gated, vm::types::*,
 };
 
-pub(crate) fn install_menu_desktop_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>, limits: Limits) {
+pub(crate) fn install_menu_desktop_api<'gc>(
+    ctx: Context<'gc>,
+    state: std::rc::Rc<StateCell<ReactiveState>>,
+    morf: Table<'gc>,
+    limits: Limits,
+) {
     let menu_entries = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let menu: UserRef<MenuToken> = stack.consume(ctx)?;
         stack.replace(ctx, menu_entries_to_lua(ctx, menu.menu.borrow().entries()));
@@ -144,25 +150,37 @@ pub(crate) fn install_menu_desktop_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>,
         }
         Ok(CallbackReturn::Return)
     });
-    let desktop_launch = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (entries, id): (UserRef<DesktopEntriesToken>, String) = stack.consume(ctx)?;
-        entries
-            .entries
-            .borrow()
-            .launch(&id, None)
-            .map_err(HostError)?;
-        Ok(CallbackReturn::Return)
-    });
-    let desktop_launch_action = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (entries, id, action): (UserRef<DesktopEntriesToken>, String, String) =
-            stack.consume(ctx)?;
-        entries
-            .entries
-            .borrow()
-            .launch(&id, Some(&action))
-            .map_err(HostError)?;
-        Ok(CallbackReturn::Return)
-    });
+    let desktop_launch = gated(
+        ctx,
+        &state,
+        "run",
+        "desktop_entries:launch",
+        |ctx, _, mut stack| {
+            let (entries, id): (UserRef<DesktopEntriesToken>, String) = stack.consume(ctx)?;
+            entries
+                .entries
+                .borrow()
+                .launch(&id, None)
+                .map_err(HostError)?;
+            Ok(CallbackReturn::Return)
+        },
+    );
+    let desktop_launch_action = gated(
+        ctx,
+        &state,
+        "run",
+        "desktop_entries:launch_action",
+        |ctx, _, mut stack| {
+            let (entries, id, action): (UserRef<DesktopEntriesToken>, String, String) =
+                stack.consume(ctx)?;
+            entries
+                .entries
+                .borrow()
+                .launch(&id, Some(&action))
+                .map_err(HostError)?;
+            Ok(CallbackReturn::Return)
+        },
+    );
     let desktop_methods = Table::new(&ctx);
     desktop_methods.set_field(ctx, "applications", desktop_applications);
     desktop_methods.set_field(ctx, "by_id", desktop_by_id);

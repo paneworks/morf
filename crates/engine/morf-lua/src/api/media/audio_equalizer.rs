@@ -1,4 +1,4 @@
-use crate::{api_geometry::number, scene_bindings::HostError};
+use crate::{api::geometry::geometry::number, api::ui::scene::HostError};
 use luna::{Callback, CallbackReturn, Context, Table, Value};
 use morf_audio::equalizer::{self, Options};
 fn array<'gc>(ctx: Context<'gc>, t: Table<'gc>, key: &str) -> Result<[f64; 8], HostError> {

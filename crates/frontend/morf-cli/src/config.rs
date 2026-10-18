@@ -1,21 +1,21 @@
 mod paths;
 
-use morf_host::morf_io::{IpcRequest, IpcValue as WireValue, ipc_call};
-use morf_host::morf_lua::LogLevel;
+use morf_io::{IpcRequest, IpcValue as WireValue, ipc_call};
+use morf_lua::LogLevel;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 
 use crate::commands::*;
-use morf_host::socket_path::{select_instance, socket_path};
-pub(crate) use morf_host::supervisor::LoadPolicy;
-use morf_host::supervisor::*;
+use morf_host::process::socket_path::{select_instance, socket_path};
+pub(crate) use morf_host::process::supervisor::LoadPolicy;
+use morf_host::process::supervisor::*;
 
 use paths::carry_fonts;
 pub(crate) use paths::{config_root, default_config_path, followed, named_config_path};
 
 pub(crate) fn usage() -> &'static str {
-    "morf - reactive Wayland shell runtime\n\nusage: morf [--no-plugin | --clean] [-d | --daemonize] [shell.lua] [-- args...]\n       morf <shell|lock|greet> [-c NAME] [-- args...]\n       morf --lock <ipc|log|info|...>   (talk to this display's lock process)\n       morf -i <display> <client command>\n       morf list [-j|--json] [--show-dead]\n       morf info\n       morf app <app.lua> [-- args...]   (run a configuration as an application: its windows, one process)\n       morf [--no-plugin | --clean] -c <name>[/shell|/lock|/greet] [-- args...]\n       morf ipc call <target> [args...]\n       morf ipc verbs\n       morf log [-f|--follow] [--level <debug|info|warn|error>]\n       morf log --bindings\n       morf kill\n       morf bundle <shell.lua> [-o <output>] [--with <path>]...\n       morf check <shell.lua> [--size WxH] [--screens N] [--ipc 'VERB ARGS']... [--after MS] [--wait MS] [--strict] [--no-dbus | --private-bus] [--isolate] [-- args...]\n       morf render <shell.lua> -o <out.png> [--size WxH] [--scale S] [--surface NAME|INDEX|screen] [--ipc 'VERB ARGS']... [--after MS] [--wait MS] [--no-dbus | --private-bus] [--isolate] [-- args...]\n       morf test <spec.lua>... [--filter PATTERN] [--size WxH] [--scale S] [--snapshots DIR] [--no-dbus | --private-bus] [--no-isolate]\n       morf --help\n       morf --version\n\nA bundle is morf and a configuration in one file, which then takes only the\nconfiguration's own arguments after `--`.\n\ncheck, render and test run a configuration with no compositor: nothing\nconnects to Wayland and time is virtual. See docs/TESTING.md."
+    "morf - reactive Wayland shell runtime\n\nusage: morf [--no-plugin | --clean] [-d | --daemonize] [shell.lua] [-- args...]\n       morf <shell|lock|greet> [-c NAME] [-- args...]\n       morf --lock <ipc|log|info|...>   (talk to this display's lock process)\n       morf -i <display> <client command>\n       morf list [-j|--json] [--show-dead]\n       morf info\n       morf app <app.lua> [-- args...]   (run a configuration as an application: its windows, one process)\n       morf [--no-plugin | --clean] -c <name>[/shell|/lock|/greet] [-- args...]\n       morf ipc call <target> [args...]\n       morf ipc verbs\n       morf log [-f|--follow] [--level <debug|info|warn|error>]\n       morf log --bindings\n       morf kill\n       morf bundle <shell.lua> [-o <output>] [--with <path>]...\n       morf check <shell.lua> [--size WxH] [--screens N] [--ipc 'VERB ARGS']... [--after MS] [--wait MS] [--strict] [--no-dbus | --private-bus] [--isolate] [-- args...]\n       morf render <shell.lua> -o <out.png> [--size WxH] [--scale S] [--surface NAME|INDEX|screen] [--ipc 'VERB ARGS']... [--after MS] [--wait MS] [--no-dbus | --private-bus] [--isolate] [-- args...]\n       morf test <spec.lua>... [--filter PATTERN] [--size WxH] [--scale S] [--snapshots DIR] [--no-dbus | --private-bus] [--no-isolate]\n       morf docs [--api | --ui | --io]   (this version's API reference, UI guide or I/O guide)\n       morf approve [--yes] <shell.lua | -c NAME>   (approve its imported modules; --yes approves all, for scripts; exit 0 all approved, 1 some not, 2 error)\n       morf --help\n       morf --version\n\nA bundle is morf and a configuration in one file, which then takes only the\nconfiguration's own arguments after `--`.\n\ncheck, render and test run a configuration with no compositor: nothing\nconnects to Wayland and time is virtual. See docs/TESTING.md."
 }
 
 pub(crate) fn run() -> Result<(), String> {
@@ -39,20 +39,20 @@ pub(crate) fn run() -> Result<(), String> {
             .unwrap_or_default();
         match strings.as_slice() {
             ["-h" | "--help"] => {
-                println!(
+                outln!(
                     "a morf bundle of {name}\n\nusage: <bundle> [--no-plugin] [-d | --daemonize] \
                      [-- args...]\n\nEverything after `--` is {name}'s own."
                 );
                 return Ok(());
             }
             ["-V" | "--version"] => {
-                println!("morf {} bundling {name}", env!("CARGO_PKG_VERSION"));
+                outln!("{} bundling {name}", crate::docs::version_line());
                 return Ok(());
             }
             _ => {}
         }
         let (policy, daemonize, rest) = leading_options(&strings)?;
-        morf_host::morf_lua::arguments::install(own(rest)?);
+        morf_lua::arguments::install(own(rest)?);
         if daemonize {
             detach()?;
         }
@@ -70,8 +70,8 @@ pub(crate) fn run() -> Result<(), String> {
         );
     }
     match parse_command(&args)? {
-        Command::Help => println!("{}", usage()),
-        Command::Version => println!("morf {}", env!("CARGO_PKG_VERSION")),
+        Command::Help => outln!("{}", usage()),
+        Command::Version => outln!("{}", crate::docs::version_line()),
         Command::Run(path, policy, arguments, daemonize) => {
             if daemonize {
                 // Before anything else: a fork after threads exist takes only
@@ -81,7 +81,7 @@ pub(crate) fn run() -> Result<(), String> {
             }
             // Before anything is loaded, so the very first line of the very
             // first configuration can already ask what it was started with.
-            morf_host::morf_lua::arguments::install(arguments);
+            morf_lua::arguments::install(arguments);
             let path = followed(path);
             carry_fonts(&path);
             let source = fs::read(&path)
@@ -94,7 +94,7 @@ pub(crate) fn run() -> Result<(), String> {
             extras,
         } => {
             let bundled = crate::bundle::write(&config, &output, &extras)?;
-            println!(
+            outln!(
                 "{}: {} files, {} bytes of configuration appended",
                 bundled.output.display(),
                 bundled.files,
@@ -104,11 +104,22 @@ pub(crate) fn run() -> Result<(), String> {
         Command::Log { follow, level } => follow_logs(follow, level)?,
         Command::List { json, show_dead } => list_instances(json, show_dead)?,
         Command::Info => print_info()?,
+        Command::Docs(docs) => out!("{}", crate::docs::render(docs)?),
+        Command::Approve(request) => {
+            morf_host::headless::env::isolate_from_session(true);
+            let stdin = std::io::stdin();
+            let result =
+                crate::approve::approve(&request, None, &mut stdin.lock(), &mut std::io::stdout());
+            if let Err(error) = &result {
+                eprintln!("morf: {error}");
+            }
+            std::process::exit(crate::approve::exit_code(&result));
+        }
         Command::Types(dir) => write_types(&dir)?,
         Command::Runner(args) => return crate::runners::run(args),
         Command::Client(request) => {
             let reply = ipc_call(socket_path()?, &request).map_err(|error| error.to_string())?;
-            println!(
+            outln!(
                 "{}",
                 String::from_utf8_lossy(&reply.to_wire().map_err(|e| e.to_string())?)
             );
@@ -169,6 +180,10 @@ pub(crate) enum Command {
     Info,
     /// The API as Lua language server definitions, written into a folder.
     Types(PathBuf),
+    /// This version's documentation: the API reference or a bundled guide.
+    Docs(crate::docs::Docs),
+    /// Approve a configuration's imported modules.
+    Approve(crate::approve::Request),
     /// `check`, `render` or `test`: a configuration with no compositor.
     Runner(crate::runner_args::RunnerArgs),
     Client(IpcRequest),
@@ -232,6 +247,14 @@ pub(crate) fn parse_command(args: &[std::ffi::OsString]) -> Result<Command, Stri
         ["bundle", rest @ ..] => parse_bundle(rest),
         ["info"] => Ok(Command::Info),
         ["types", dir] => Ok(Command::Types(PathBuf::from(dir))),
+        ["docs"] | ["docs", "--api"] => Ok(Command::Docs(crate::docs::Docs::Api)),
+        ["docs", "--ui"] => Ok(Command::Docs(crate::docs::Docs::Ui)),
+        ["docs", "--io"] => Ok(Command::Docs(crate::docs::Docs::Io)),
+        ["docs", args @ ..] => Err(format!(
+            "`morf docs` takes one of --api, --ui or --io, not `{}`",
+            args.join(" ")
+        )),
+        ["approve", rest @ ..] => crate::approve::parse(rest).map(Command::Approve),
         ["app", path, rest @ ..] if !path.starts_with('-') => {
             morf_host::app::enter();
             Ok(Command::Run(
@@ -307,7 +330,7 @@ fn leading_options<'a>(
                 strings = rest;
             }
             ["--lock", rest @ ..] => {
-                morf_host::socket_path::target_lock();
+                morf_host::process::socket_path::target_lock();
                 strings = rest;
             }
             ["-i" | "--instance", display, rest @ ..] => {
@@ -404,14 +427,14 @@ fn parse_list(rest: &[&str]) -> Result<Command, String> {
 /// `morf types DIR`: this build's API as LuaLS definitions (`---@meta`), so
 /// an editor pointed at DIR completes and checks `morf.*` and `ui.*`.
 fn write_types(dir: &std::path::Path) -> Result<(), String> {
-    for (relative, contents) in morf_host::morf_lua::generate_types() {
+    for (relative, contents) in morf_lua::generate_types() {
         let path = dir.join(relative);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|error| format!("{}: {error}", parent.display()))?;
         }
         std::fs::write(&path, contents).map_err(|error| format!("{}: {error}", path.display()))?;
-        println!("{}", path.display());
+        outln!("{}", path.display());
     }
     Ok(())
 }

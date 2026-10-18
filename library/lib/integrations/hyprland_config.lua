@@ -1,7 +1,7 @@
 -- Hyprland's configuration, changed at run time: options, animations,
 -- monitor rules, workspaces moved between monitors, the cursor, reloads.
 --
--- Opt-in, and built only on `lib/hyprland.lua` (its `eval`, `request`,
+-- Opt-in, and built only on `lib/integrations/hyprland.lua` (its `eval`, `request`,
 -- `batch`, `getoption`, `reload` and events); nothing here is known to the
 -- engine, and nothing spawns `hyprctl`. The user's configuration files are
 -- never written: whatever is set here lasts until the next reload, which is

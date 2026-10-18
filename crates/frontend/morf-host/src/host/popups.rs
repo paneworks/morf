@@ -7,7 +7,7 @@ use morf_lua::{PopupSurfaceConfig, WindowSurfaceConfig, WindowSurfaceKind};
 use std::collections::{HashMap, HashSet};
 
 use crate::host::windows::{Kind, Windows};
-use crate::{surface_layers::*, surfaces::*};
+use crate::host::{layers::*, surfaces::*};
 
 // Popups: how a configuration's description of one becomes a positioner, and
 // what has to be rebuilt when that description changes.

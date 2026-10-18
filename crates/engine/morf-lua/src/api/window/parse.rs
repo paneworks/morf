@@ -5,7 +5,7 @@ use morf_value::region::{
     Operation as RegionOperation, Rect as RegionRect, Region, Shape as RegionShape, ShapeParams,
 };
 
-use crate::{state::*, surface_types::*, table_menu::*};
+use crate::{runtime::host_types::*, runtime::state::*, value::table::*};
 
 pub(crate) fn window_root<'gc>(
     ctx: Context<'gc>,
@@ -208,7 +208,7 @@ pub(crate) fn parse_popup_surface<'gc>(
 fn window_blend<'gc>(ctx: Context<'gc>, options: Table<'gc>) -> Result<String, String> {
     match options.get_value(ctx, "blend") {
         LuaValue::Nil => Ok("linear".to_owned()),
-        value => crate::layer_parse::parse_blend(value),
+        value => crate::api::window::layer::parse_blend(value),
     }
 }
 

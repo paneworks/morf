@@ -18,10 +18,12 @@ use morf_lua::{Limits, LogEntry, LogLevel, Runtime};
 use morf_scene::NodeHandle;
 use morf_text::TextSystem;
 
+use crate::headless::lock::HeadlessLock;
+pub use crate::headless::options::LoadOptions;
+use crate::host::surfaces::PointerInput;
 use crate::host::turn::{Host, StartOptions, Turn};
-use crate::supervisor::LoadPolicy;
-use crate::supervisor::{execute_config_on, lua_screen, lua_screens, store_outputs};
-use crate::surfaces::PointerInput;
+use crate::process::supervisor::LoadPolicy;
+use crate::process::supervisor::{execute_config_with, lua_screen, lua_screens, store_outputs};
 
 /// One frame of a 60 Hz output, which is what time advances by between
 /// animation ticks.
@@ -31,45 +33,6 @@ pub const FRAME: Duration = Duration::from_millis(16);
 /// that open windows, converge within them as they do on a compositor over
 /// as many turns.
 pub(crate) const SETTLE_PASSES: usize = 8;
-
-/// What to load, and onto what.
-#[derive(Clone, Debug)]
-pub struct LoadOptions {
-    /// The configuration's path; its folder is where `require` looks.
-    pub path: PathBuf,
-    /// The source to run instead of reading `path`, for a configuration
-    /// written inline in a test.
-    pub source: Option<Vec<u8>>,
-    /// Every screen's logical size.
-    pub size: (u32, u32),
-    /// How many screens `morf.screens` lists.
-    pub screens: usize,
-    /// Which of them this runtime draws to, from zero.
-    pub screen_index: usize,
-    /// The integer scale screens report.
-    pub scale: i32,
-    /// The configuration's own arguments, what follows `--`.
-    pub args: Vec<String>,
-    pub policy: LoadPolicy,
-    /// Lua run before the configuration, in the same runtime.
-    pub prelude: Option<String>,
-}
-
-impl LoadOptions {
-    pub fn new(path: PathBuf) -> Self {
-        Self {
-            path,
-            source: None,
-            size: (1920, 1080),
-            screens: 1,
-            screen_index: 0,
-            scale: 1,
-            args: Vec::new(),
-            policy: LoadPolicy::default(),
-            prelude: None,
-        }
-    }
-}
 
 /// A configuration that did not load, and what it said before it stopped.
 #[derive(Debug)]
@@ -81,7 +44,7 @@ pub struct LoadFailure {
 /// One surface the configuration asked for.
 pub struct Surface {
     pub role: WindowId,
-    /// `primary`, `popup`, `floating` or `layer`.
+    /// `primary`, `popup`, `floating`, `layer` or `lock`.
     pub kind: &'static str,
     /// Its namespace, or a floating window's title.
     pub name: String,
@@ -148,6 +111,8 @@ pub struct Headless {
     /// The host and its headless backend; none with no screen (the outputless
     /// runtime) or a configuration that built no surface.
     pub host: Option<Host>,
+    /// The session lock a lock configuration holds, in place of a host.
+    pub lock: Option<HeadlessLock>,
     /// Lays out what the host has not opened (a hidden panel), so its
     /// problems are found before it is shown; with a host, the host's.
     pub(crate) text: Option<TextSystem>,
@@ -159,15 +124,19 @@ pub struct Headless {
     /// could not be worked out.
     pub problems: Vec<String>,
     /// The virtual clock's reading, and when the last frame was.
-    now: Duration,
-    last_frame: Duration,
+    pub(crate) now: Duration,
+    pub(crate) last_frame: Duration,
     /// Loaded with no screen: nothing it declares is mapped.
     pub outputless: bool,
     /// The layout revision each open surface was last linted at.
     pub(crate) linted: std::collections::HashMap<WindowId, u64>,
     /// The seat and pointer of a run with no host.
-    idle_seat: VirtualSeat,
-    idle_input: PointerInput,
+    pub(crate) idle_seat: VirtualSeat,
+    pub(crate) idle_input: PointerInput,
+    /// What a reload reads and runs as: the file, its policy, its screen.
+    pub(crate) path: PathBuf,
+    pub(crate) policy: LoadPolicy,
+    pub(crate) screen_model: Option<morf_lua::Screen>,
 }
 
 impl Headless {
@@ -202,6 +171,10 @@ impl Headless {
             capabilities.push(("outputless".to_owned(), "true".to_owned()));
         }
         runtime.set_capabilities(&capabilities);
+        runtime.set_permission_mode(options.permissions);
+        if let Some(approvals) = &options.approvals {
+            runtime.set_approvals_path(approvals.clone());
+        }
         for warning in warnings {
             runtime.warn(warning);
         }
@@ -219,7 +192,7 @@ impl Headless {
                 ))
             })?,
         };
-        if let Err(error) = execute_config_on(
+        if let Err(error) = execute_config_with(
             &mut runtime,
             &options.path,
             &source,
@@ -227,6 +200,7 @@ impl Headless {
             // Its own list rather than the recorded one another run may be
             // writing at the same moment.
             &lua_screens(&screens),
+            &options.runtime_path,
         ) {
             return Err(LoadFailure {
                 error,
@@ -244,19 +218,35 @@ impl Headless {
         // The shell hands a configuration the time of day once a second.
         let _ = runtime.update_clock(crate::paint::clock_text());
         let mut problems = Vec::new();
+        // A lock built per output is granted at once, as a compositor would.
+        let lock = match own.is_some() && HeadlessLock::wanted(&runtime) {
+            true => match HeadlessLock::start(&mut runtime, screens.clone()) {
+                Ok(lock) => Some(lock),
+                Err(error) => {
+                    return Err(LoadFailure {
+                        error,
+                        logs: runtime.take_logs(),
+                    });
+                }
+            },
+            false => None,
+        };
         let host = match &own {
-            Some(own) if crate::surfaces::primary_surface_root(&runtime).is_ok() => {
+            _ if lock.is_some() => None,
+            Some(own) if crate::host::surfaces::primary_surface_root(&runtime).is_ok() => {
                 // The output this runtime draws to, first: where its windows go.
                 let mut ordered = vec![own.clone()];
                 ordered.extend(screens.iter().filter(|screen| screen.id != own.id).cloned());
+                let desktop = morf_desktop::HeadlessDesktop::new()
+                    .with_outputs(ordered.iter().filter_map(|screen| screen.name.clone()));
                 let backend = HeadlessBackend::new(ordered);
                 match Host::start(
                     &mut runtime,
                     Box::new(backend),
-                    None,
+                    Box::new(desktop),
                     StartOptions {
                         name: own.name.clone().unwrap_or_default(),
-                        gpu: false,
+                        gpu: options.gpu,
                         publish_capabilities: false,
                         desktop_canvas: false,
                         report_slow: false,
@@ -272,7 +262,7 @@ impl Headless {
                 }
             }
             Some(_) => {
-                if let Err(error) = crate::surfaces::primary_surface_root(&runtime) {
+                if let Err(error) = crate::host::surfaces::primary_surface_root(&runtime) {
                     problems.push(error);
                 }
                 None
@@ -283,6 +273,7 @@ impl Headless {
         let mut headless = Self {
             runtime,
             host,
+            lock,
             text,
             screen: options.size,
             surfaces: Vec::new(),
@@ -294,6 +285,9 @@ impl Headless {
             linted: std::collections::HashMap::new(),
             idle_seat: VirtualSeat::default(),
             idle_input: PointerInput::default(),
+            path: options.path.clone(),
+            policy: options.policy,
+            screen_model: own.as_ref().map(lua_screen),
         };
         // The first frame, at time zero: what the shell draws before any
         // time has passed.
@@ -334,6 +328,12 @@ impl Headless {
                     }
                 }
             }
+            None if self.lock.is_some() => {
+                let text = self.text.get_or_insert_with(TextSystem::new);
+                if let Some(lock) = self.lock.as_mut() {
+                    lock.frame(&mut self.runtime, text, delta, &mut self.problems);
+                }
+            }
             // No surface to drive frames: the services, the timers and the
             // animations, as the outputless runtime has them.
             None => {
@@ -359,8 +359,14 @@ impl Headless {
     ///
     /// `real` spreads that much wall time over the advance, for a
     /// configuration whose answers come from processes and buses that run
-    /// on the wall clock whatever this one says.
+    /// on the wall clock whatever this one says. With `by` zero, the clock
+    /// holds: `real` passes and one frame takes in what came meanwhile.
     pub fn advance(&mut self, by: Duration, real: Duration) {
+        if by.is_zero() {
+            std::thread::sleep(real);
+            self.frame(Duration::ZERO);
+            return;
+        }
         let end = self.now + by;
         let frames = (by.as_millis() / FRAME.as_millis()).max(1) as u32;
         let nap = real / frames;
@@ -414,22 +420,6 @@ impl Headless {
             }
         }
         self.now - started
-    }
-
-    /// The seat: where the pointer is, and which surface has the keyboard.
-    pub fn seat(&self) -> &VirtualSeat {
-        self.host
-            .as_ref()
-            .and_then(|host| host.backend.as_headless())
-            .map_or(&self.idle_seat, HeadlessBackend::seat)
-    }
-
-    /// Where the pointer, the buttons and the fingers are, as the host's
-    /// pointer path keeps them.
-    pub fn input(&self) -> &PointerInput {
-        self.host
-            .as_ref()
-            .map_or(&self.idle_input, |host| &host.state.input)
     }
 
     /// The text system layouts are measured with.

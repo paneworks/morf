@@ -26,10 +26,7 @@ impl Runtime {
         } = collected;
         for (callback, unlock_on_success, result) in ready {
             if unlock_on_success && result.is_ok() {
-                self.reactive
-                    .borrow_mut()
-                    .lifecycle
-                    .session_unlock_requested = true;
+                self.reactive.borrow_mut().lifecycle_mut().ask_unlock();
             }
             let args = match result {
                 Ok(()) => vec![IpcValue::Boolean(true), IpcValue::Nil],
@@ -54,7 +51,9 @@ impl Runtime {
             }
             handle.done.set(true);
             if let Err(message) = self.run_handler(|ctx, limits| {
-                crate::api_http::execute_http_handler(ctx, &callback, outcome, &url, &json, limits)
+                crate::api::io::http::execute_http_handler(
+                    ctx, &callback, outcome, &url, &json, limits,
+                )
             }) {
                 self.reactive
                     .borrow_mut()
@@ -63,8 +62,8 @@ impl Runtime {
         }
         for call in &io_calls {
             let _span = crate::profile::span(|| "I/O callback".to_owned());
-            if let Err(message) =
-                self.run_handler(|ctx, limits| crate::api_io::execute_io_call(ctx, call, limits))
+            if let Err(message) = self
+                .run_handler(|ctx, limits| crate::api::io::io::execute_io_call(ctx, call, limits))
             {
                 self.reactive
                     .borrow_mut()
@@ -73,9 +72,9 @@ impl Runtime {
         }
         for call in &watch_calls {
             let _span = crate::profile::span(|| "fs.watch callback".to_owned());
-            if let Err(message) = self
-                .run_handler(|ctx, limits| crate::api_watch::execute_watch_call(ctx, call, limits))
-            {
+            if let Err(message) = self.run_handler(|ctx, limits| {
+                crate::api::io::watch::execute_watch_call(ctx, call, limits)
+            }) {
                 self.reactive
                     .borrow_mut()
                     .log(LogLevel::Warn, format!("fs.watch callback: {message}"));
@@ -84,7 +83,7 @@ impl Runtime {
         if io_more || watch_more {
             // One turn's share is spent; the rest is for the next turn,
             // which this makes come at once rather than at the next event.
-            morf_io::wake_all();
+            morf_io::waker().wake();
         }
         for DueTimer {
             origin,
@@ -169,13 +168,7 @@ impl Runtime {
             // Closed by an earlier callback in this same batch: what was
             // already read for it is not delivered, because "after close,
             // nothing" is the promise `close` makes.
-            if !self
-                .reactive
-                .borrow()
-                .dbus_signals
-                .iter()
-                .any(|subscription| subscription.id == id)
-            {
+            if !self.reactive.borrow().dbus().is_subscribed(id) {
                 continue;
             }
             if let Err(message) = self.run_handler(|ctx, limits| {

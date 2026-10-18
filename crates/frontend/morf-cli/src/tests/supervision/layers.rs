@@ -1,14 +1,14 @@
 use morf_app::KeyboardFocus;
 use morf_app::PRIMARY_LAYER;
 use morf_app::ShellLayer;
-use morf_host::surface_layers::LayerUpdate;
-use morf_host::surface_layers::RESERVE_LAYER_BASE;
-use morf_host::surface_layers::layer_update;
-use morf_host::surface_layers::reserve_bar_config;
-use morf_host::surface_layers::window_layer_id;
-use morf_host::surface_layers::window_surface_id;
-use morf_host::surfaces::primary_surface_root;
-use morf_host::surfaces::runtime_bar_config;
+use morf_host::host::layers::LayerUpdate;
+use morf_host::host::layers::RESERVE_LAYER_BASE;
+use morf_host::host::layers::layer_update;
+use morf_host::host::layers::reserve_bar_config;
+use morf_host::host::layers::window_layer_id;
+use morf_host::host::layers::window_surface_id;
+use morf_host::host::surfaces::primary_surface_root;
+use morf_host::host::surfaces::runtime_bar_config;
 use morf_lua::Runtime;
 use morf_lua::WindowSurfaceKind;
 

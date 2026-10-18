@@ -4,7 +4,7 @@
 use morf_lua::{EventPoint, IpcValue, Runtime, UiEvent};
 use morf_scene::NodeHandle;
 
-use crate::surfaces::PointerInput;
+use crate::host::surfaces::PointerInput;
 
 pub struct TwoFingerPan {
     ids: [i32; 2],
@@ -70,7 +70,7 @@ pub fn down(runtime: &mut Runtime, input: &mut PointerInput) -> (bool, bool) {
         {
             group.owner = n;
             let mut changed = super::pan::up(runtime, input, None, None).1;
-            changed |= crate::surface_gesture::finger_up(runtime, input, None);
+            changed |= crate::input::gesture::finger_up(runtime, input, None);
             runtime.cancel_gesture();
             for (&id, &(_, hit, x, y, _)) in &input.touches {
                 let point = EventPoint::new((x, y), (hit.local_x, hit.local_y)).with_button(0x110);

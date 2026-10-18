@@ -6,10 +6,12 @@ use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::collections::HashMap;
 
 mod device;
+mod recover;
 mod settings;
 
-pub use device::opened_device_count;
+pub(crate) use device::ready;
 use device::{SharedDevice, device_for, shared_instance};
+pub use device::{lose_devices, opened_device_count};
 
 /// How many buffers a surface presents through at most
 /// (`MORF_PRESENT_BUFFERS` overrides it). A compositor holds the buffer it
@@ -58,21 +60,13 @@ impl WgpuBackend {
         let linked: Result<(), String> = match sink {
             Ok(sink) if wanted => {
                 let mut backend = Self::initialize(instance.clone(), None, width, height).await?;
-                match super::present_link::BufferLink::connect(
-                    &backend.device,
-                    backend.dmabuf.as_ref(),
-                    sink,
-                ) {
-                    Ok(link) => {
-                        backend.buffers = Some(super::present::BufferRing::new(
-                            &backend.device,
-                            &backend.texture,
-                            ring_buffers(),
-                            Some(link),
-                        ));
+                backend.hdr = super::hdr::HdrRequest::from_env();
+                match backend.attach_sink(sink) {
+                    Ok(()) => {
                         // The sink holds the window's connection and
                         // surface: the handles are not needed again.
                         drop(window);
+                        backend.set_output_depth(super::depth::OutputDepth::from_env());
                         return Ok(backend);
                     }
                     Err(error) => Err(error),
@@ -88,11 +82,29 @@ impl WgpuBackend {
         }
         let surface = instance
             .create_surface(window)
-            .map_err(|error| GpuError(format!("could not create GPU surface: {error}")))?;
-        Self::initialize(instance, Some(surface), width, height).await
+            .map_err(|error| GpuError::Surface(format!("could not create GPU surface: {error}")))?;
+        let mut backend = Self::initialize(instance, Some(surface), width, height).await?;
+        backend.hdr = super::hdr::HdrRequest::from_env();
+        backend.set_output_depth(super::depth::OutputDepth::from_env());
+        Ok(backend)
     }
 
-    async fn initialize(
+    /// Presents through `sink` from now on, or says why it cannot.
+    pub(crate) fn attach_sink(&mut self, sink: Box<dyn BufferSink>) -> Result<(), String> {
+        let link =
+            super::present_link::BufferLink::connect(&self.device, self.dmabuf.as_ref(), sink)?;
+        self.buffers = Some(super::present::BufferRing::new(
+            &self.device,
+            &self.texture,
+            ring_buffers(),
+            Some(link),
+            (self.present, self.transfer()),
+        ));
+        self.select_depth();
+        Ok(())
+    }
+
+    pub(crate) async fn initialize(
         instance: wgpu::Instance,
         surface: Option<wgpu::Surface<'static>>,
         width: u32,
@@ -100,14 +112,43 @@ impl WgpuBackend {
     ) -> Result<Self, GpuError> {
         let started = std::time::Instant::now();
         let opened_before = opened_device_count();
+        let shared = device_for(&instance, surface.as_ref()).await?;
+        let device_ready = started.elapsed();
+        let backend = Self::build(shared, surface, width, height)?;
+        // `MORF_GPU_LOG=1`: what bringing a backend up cost, and how much of
+        // it was the device.
+        if std::env::var_os("MORF_GPU_LOG").is_some() {
+            eprintln!(
+                "morf: gpu: backend {}x{} ready in {:.1} ms; device {} in {:.1} ms",
+                width,
+                height,
+                started.elapsed().as_secs_f64() * 1000.0,
+                if opened_device_count() > opened_before {
+                    "opened"
+                } else {
+                    "shared"
+                },
+                device_ready.as_secs_f64() * 1000.0
+            );
+        }
+        Ok(backend)
+    }
+
+    /// A backend drawing with `shared`, into `surface` or offscreen.
+    pub(crate) fn build(
+        shared: SharedDevice,
+        surface: Option<wgpu::Surface<'static>>,
+        width: u32,
+        height: u32,
+    ) -> Result<Self, GpuError> {
         let SharedDevice {
             adapter,
             device,
             queue,
             dmabuf,
             lcd_supported,
-        } = device_for(&instance, surface.as_ref()).await?;
-        let device_ready = started.elapsed();
+            lost,
+        } = shared;
         let adapter_info = adapter.get_info();
         let viewport_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("morf viewport layout"),
@@ -147,11 +188,11 @@ impl WgpuBackend {
             bind_group_layouts: &[Some(&viewport_layout)],
             immediate_size: 0,
         });
-        let blend = crate::BlendSpace::default();
-        let format = super::target_format(blend);
+        let space = super::Space::default();
+        let format = super::target_format(space);
         let clear_pipeline =
             create_clear_pipeline(&device, &pipeline_layout, &clear_shader, format);
-        let (glyph_pipeline, glyph_layout, glyph_sampler) = create_glyph_pipeline(&device, blend);
+        let (glyph_pipeline, glyph_layout, glyph_sampler) = create_glyph_pipeline(&device, space);
         let nearest_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("morf nearest sampler"),
             mag_filter: wgpu::FilterMode::Nearest,
@@ -162,7 +203,7 @@ impl WgpuBackend {
             GlyphAtlas::new(&device, &glyph_layout, &glyph_sampler, RasterContent::Mask);
         let glyph_color_atlas =
             GlyphAtlas::new(&device, &glyph_layout, &glyph_sampler, RasterContent::Color);
-        let (blur_pipeline, blur_layout, blur_sampler) = create_blur_pipeline(&device, blend);
+        let (blur_pipeline, blur_layout, blur_sampler) = create_blur_pipeline(&device, space);
         let glyph_capacity = 1;
         let glyph_buffer = create_glyph_buffer(&device, glyph_capacity);
         let texture_capacity = 1;
@@ -183,33 +224,10 @@ impl WgpuBackend {
                 vertex: None,
                 textures: None,
                 data: None,
-                blend,
+                space,
             },
         )
         .expect("the field shader carries its own hook");
-        let specialised = |variant| {
-            build_field_pipeline(
-                &device,
-                FieldPipeline {
-                    layout: &field_layout,
-                    shader_layout: &field_shader_layout,
-                    variant,
-                    user: None,
-                    owns_coverage: false,
-                    vertex: None,
-                    textures: None,
-                    data: None,
-                    blend,
-                },
-            )
-            .expect("the field shader carries its own hook")
-        };
-        let field_analytic = specialised(FieldVariant::Analytic);
-        let field_opaque = specialised(FieldVariant::AnalyticOpaque);
-        let field_boxes = specialised(FieldVariant::Boxes);
-        let field_boxes_opaque = specialised(FieldVariant::BoxesOpaque);
-        let field_quad = specialised(FieldVariant::Quad);
-        let field_boxes_uniform = specialised(FieldVariant::BoxesUniform);
         let field_shader_default = create_shader_bind_group(
             &device,
             &field_shader_layout,
@@ -248,28 +266,16 @@ impl WgpuBackend {
                 )
             })
             .transpose()?;
-
-        // `MORF_GPU_LOG=1`: what bringing a backend up cost, and how much of
-        // it was the device.
-        if std::env::var_os("MORF_GPU_LOG").is_some() {
-            eprintln!(
-                "morf: gpu: backend {}x{} ready in {:.1} ms; device {} in {:.1} ms",
-                width,
-                height,
-                started.elapsed().as_secs_f64() * 1000.0,
-                if opened_device_count() > opened_before {
-                    "opened"
-                } else {
-                    "shared"
-                },
-                device_ready.as_secs_f64() * 1000.0
-            );
-        }
         let profile = super::profile::GpuProfile::new(&device, &queue);
         Ok(Self {
             device,
             queue,
-            blend,
+            space,
+            depth: super::depth::OutputDepth::Eight,
+            present: super::depth::PresentFormat::Eight,
+            hdr: super::hdr::HdrRequest::default(),
+            encoding: morf_value::present::Encoding::Srgb,
+            registered: Vec::new(),
             clear_pipeline,
             clear_layout: pipeline_layout,
             clear_shader,
@@ -286,6 +292,8 @@ impl WgpuBackend {
             nearest_sampler,
             glyph_mask_atlas,
             glyph_color_atlas,
+            kept_text: Default::default(),
+            kept_fields: Default::default(),
             warmed_text: std::collections::HashMap::new(),
             text_warmup: super::warm::TextWarmup::default(),
             blur_pipeline,
@@ -296,12 +304,7 @@ impl WgpuBackend {
             texture_buffer,
             texture_capacity,
             field_pipeline,
-            field_analytic,
-            field_opaque,
-            field_boxes,
-            field_boxes_opaque,
-            field_quad,
-            field_boxes_uniform,
+            field_variants: Default::default(),
             field_layout,
             field_buffer,
             field_capacity,
@@ -345,6 +348,15 @@ impl WgpuBackend {
             dmabuf,
             external_textures: HashMap::new(),
             pending_exports: HashMap::new(),
+            lost,
         })
+    }
+
+    /// Whether the GPU device this backend draws with was lost.
+    ///
+    /// A lost device runs nothing again, so every frame fails from then on
+    /// until [`WgpuBackend::recover`] moves the backend to a fresh one.
+    pub fn device_lost(&self) -> bool {
+        self.lost.load(std::sync::atomic::Ordering::Acquire)
     }
 }

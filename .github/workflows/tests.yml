@@ -4,6 +4,7 @@ on:
   push:
     branches: [ "develop", "main" ]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -14,15 +15,18 @@ jobs:
     env:
       RUST_TEST_THREADS: '1'
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: stable
           components: rustfmt, clippy
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libwayland-dev libxkbcommon-dev pkg-config fontconfig
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry

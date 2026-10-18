@@ -1,4 +1,4 @@
-use luna::{Closure, Executor, ExecutorMode, Fuel, Lua};
+use luna::{Executor, ExecutorMode, Fuel, Lua};
 use morf_scene::NodeHandle;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -6,11 +6,16 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use crate::{
-    api_finish::*, reactive_bindings::run_destroyed_hooks, reactive_execute::*, serialization::*,
-    state::*, surface_types::*, types::*,
+    api::install::*, api::ui::bindings::run_destroyed_hooks, runtime::host_types::*,
+    runtime::state::*, vm::execute::*, vm::loader::*, vm::types::*,
 };
 
+pub(crate) mod cover;
 mod lint;
+mod permissions;
+pub(crate) mod reload_band;
+
+pub use permissions::PermissionMode;
 
 pub(crate) use lint::lint_path;
 
@@ -28,14 +33,16 @@ impl Runtime {
     pub(crate) fn with_screen(limits: Limits, screen: Option<Screen>) -> Self {
         let mut lua = Lua::core();
         lua.set_memory_limit(Some(limits.memory));
-        crate::runtime_jit::configure(&mut lua);
-        let reactive = Rc::new(RefCell::new(ReactiveState::new()));
-        reactive.borrow_mut().limits = limits;
+        crate::vm::jit::configure(&mut lua);
+        let reactive = Rc::new(StateCell::new(ReactiveState::new()));
+        *reactive.borrow_mut().limits_mut() = limits;
         let module_roots = Rc::new(RefCell::new(default_module_roots()));
+        let permissions = Rc::new(RefCell::new(Default::default()));
         install_reactive_api(
             &mut lua,
             Rc::clone(&reactive),
             Rc::clone(&module_roots),
+            Rc::clone(&permissions),
             limits,
             screen.as_ref(),
         );
@@ -43,10 +50,17 @@ impl Runtime {
             lua,
             limits,
             reactive,
+            controller_authorizer: None,
+            recognizer_gate: None,
+            handoff_authorizer: None,
+            policy_retirement: None,
             module_roots,
+            permissions,
             lint_queue: RefCell::new(Vec::new()),
+            reload_error: RefCell::new(None),
+            cover: RefCell::new(None),
         };
-        crate::extensions::apply_extensions(&mut runtime);
+        crate::vm::extensions::apply_extensions(&mut runtime);
         runtime
     }
 
@@ -60,13 +74,45 @@ impl Runtime {
                 .borrow_mut()
                 .insert(0, parent.to_path_buf());
         }
+        self.adopt_config_file(name);
+        self.execute_scoped(name, source, None)
+    }
+
+    /// Runs `source` as one top level; a plugin's runs inside the
+    /// permission gate's scope for it.
+    pub(crate) fn execute_scoped(
+        &mut self,
+        name: &str,
+        source: &[u8],
+        plugin: Option<(&str, &Path)>,
+    ) -> Result<(), Error> {
+        let roots = self.module_roots.borrow().clone();
         let executor = self
             .lua
             .try_enter(|ctx| {
-                let closure = Closure::load(ctx, Some(name), source)?;
+                let closure = crate::vm::loader::load_compiled(ctx, name, source)?;
+                if let Some((plugin, path)) = plugin {
+                    let holder = self.permissions.borrow_mut().admit(
+                        ctx,
+                        &self.reactive,
+                        &roots,
+                        plugin,
+                        path,
+                        crate::vm::permissions::ModuleKind::Plugin,
+                    );
+                    self.reactive.borrow_mut().permissions_mut().enter(holder);
+                }
                 Ok(ctx.stash(Executor::start(ctx, closure.into(), ())))
             })
             .map_err(|error| Error::Load(format!("{name}: {error}")))?;
+        let result = self.drive_top_level(executor);
+        if plugin.is_some() {
+            self.reactive.borrow_mut().permissions_mut().leave();
+        }
+        result
+    }
+
+    fn drive_top_level(&mut self, executor: luna::StashedExecutor) -> Result<(), Error> {
         self.prepare_jit();
 
         let slice_fuel = self.limits.slice_fuel.max(1);
@@ -119,20 +165,23 @@ impl Runtime {
 
     /// Sets the root directory used by native shell path helpers.
     pub fn set_shell_root(&mut self, root: PathBuf) {
-        self.reactive.borrow_mut().shell_root = root;
+        self.reactive
+            .borrow_mut()
+            .lifecycle_mut()
+            .set_shell_root(root);
     }
 
     /// Returns the native layer-surface settings assigned by the configuration.
     pub fn layer_surface_config(&self) -> LayerSurfaceConfig {
-        self.reactive.borrow().windows.layer_surface.clone()
+        self.reactive.borrow().windows().layer_surface.clone()
     }
 
     pub fn window_surface_configs(&self) -> Vec<WindowSurfaceConfig> {
-        self.reactive.borrow().windows.configs()
+        self.reactive.borrow().windows().configs()
     }
 
     pub fn take_window_surface_change(&mut self) -> bool {
-        self.reactive.borrow_mut().windows.take_change()
+        self.reactive.borrow_mut().windows_mut().take_change()
     }
 
     /// Takes a pending change to the shell's own layer-surface geometry.
@@ -141,28 +190,33 @@ impl Runtime {
     /// be re-issued on a mapped surface, so an assignment to `morf.surface`
     /// reaches the compositor without a reconnect.
     pub fn take_layer_surface_change(&mut self) -> bool {
-        self.reactive.borrow_mut().windows.take_layer_change()
+        self.reactive.borrow_mut().windows_mut().take_layer_change()
     }
 
     pub fn take_window_surface_actions(&mut self) -> Vec<WindowSurfaceAction> {
-        self.reactive.borrow_mut().windows.take_actions()
+        self.reactive.borrow_mut().windows_mut().take_actions()
     }
 
     pub fn set_window_surface_visible(&mut self, id: u64, visible: bool) -> bool {
-        self.reactive.borrow_mut().windows.set_visible(id, visible)
+        self.reactive
+            .borrow_mut()
+            .windows_mut()
+            .set_visible(id, visible)
     }
 
     /// How big one of morf's pixels is: what the window system converts
     /// the compositor's pixels by.
     pub fn density(&self) -> morf_value::density::Density {
-        self.reactive.borrow().density
+        self.reactive.borrow().display().density()
     }
 
     /// The density, when the configuration changed it since this was last
     /// asked (a scale slider): the window system converts by it from now.
     pub fn take_density_change(&mut self) -> Option<morf_value::density::Density> {
-        let mut state = self.reactive.borrow_mut();
-        std::mem::take(&mut state.density_changed).then_some(state.density)
+        self.reactive
+            .borrow_mut()
+            .display_mut()
+            .take_density_change()
     }
 
     /// Records what the compositor and GPU under this output can do.
@@ -172,7 +226,10 @@ impl Runtime {
     /// try it and read the error. And answered over IPC for `morf info`, which
     /// is the same question asked from a terminal.
     pub fn set_capabilities(&mut self, capabilities: &[(String, String)]) {
-        self.reactive.borrow_mut().capabilities = capabilities.to_vec();
+        self.reactive
+            .borrow_mut()
+            .display_mut()
+            .set_capabilities(capabilities.to_vec());
         self.lua.enter(|ctx| {
             let Ok(morf) = ctx.get_global::<luna::Table>("morf") else {
                 return;
@@ -197,14 +254,15 @@ impl Runtime {
 
     /// The list as it was recorded, for a runtime that replaces this one.
     pub fn capability_pairs(&self) -> Vec<(String, String)> {
-        self.reactive.borrow().capabilities.clone()
+        self.reactive.borrow().display().capabilities().to_vec()
     }
 
     /// The same list, as `name=value` lines for the wire.
     pub fn capabilities(&self) -> Vec<String> {
         self.reactive
             .borrow()
-            .capabilities
+            .display()
+            .capabilities()
             .iter()
             .map(|(name, value)| format!("{name}={value}"))
             .collect()
@@ -218,13 +276,13 @@ impl Runtime {
 
     /// Drains non-fatal binding diagnostics produced since the previous call.
     pub fn take_logs(&mut self) -> Vec<LogEntry> {
-        self.reactive.borrow_mut().logs.take()
+        self.reactive.borrow_mut().logs_mut().take()
     }
 
     /// Returns bindings that currently read frame-varying scene properties.
     pub fn binding_dependencies(&self) -> Vec<String> {
         let state = self.reactive.borrow();
-        let Some(graph) = state.reactive.graph.as_ref() else {
+        let Some(graph) = state.reactive().graph() else {
             return Vec::new();
         };
         graph
@@ -236,10 +294,10 @@ impl Runtime {
                     .into_iter()
                     .filter(|signal| {
                         state
-                            .current_property_names
-                            .get(signal)
+                            .tracking()
+                            .property_named(signal)
                             .is_some_and(|(node, property)| {
-                                state.scene.is_animating(*node, property).unwrap_or(false)
+                                state.scene().is_animating(*node, property).unwrap_or(false)
                             })
                     })
                     .collect::<Vec<_>>();
@@ -260,75 +318,80 @@ impl Runtime {
     pub fn reloadable_state(&self) -> BTreeMap<String, IpcValue> {
         let state = self.reactive.borrow();
         state
-            .reloadable
-            .iter()
+            .lifecycle()
+            .reloadables()
             .filter_map(|(name, signal)| {
                 state
-                    .reactive
-                    .values
-                    .get(signal)
-                    .map(|value| (name.clone(), value.clone()))
+                    .reactive()
+                    .value(signal)
+                    .map(|value| (name.to_owned(), value.clone()))
             })
             .collect()
     }
 
     /// Seeds reloadable values before executing replacement configuration code.
     pub fn restore_reloadable_state(&mut self, values: BTreeMap<String, IpcValue>) {
-        // One value type across the boundary now, so this only changes the map
-        // kind — the values pass straight through.
-        self.reactive.borrow_mut().reload_seed = values.into_iter().collect();
+        self.reactive.borrow_mut().lifecycle_mut().seed(values);
     }
 
     /// Takes a reload request raised by Lua configuration.
-    pub fn take_reload_request(&mut self) -> Option<bool> {
-        self.reactive.borrow_mut().lifecycle.reload_request.take()
+    pub fn take_reload_request(&mut self) -> Option<ReloadRequest> {
+        self.reactive
+            .borrow_mut()
+            .lifecycle_mut()
+            .take_reload_request()
     }
 
     pub fn take_watch_files_change(&mut self) -> Option<bool> {
-        let mut state = self.reactive.borrow_mut();
-        state.lifecycle.watch_files_changed.then(|| {
-            state.lifecycle.watch_files_changed = false;
-            state.lifecycle.watch_files
-        })
+        self.reactive
+            .borrow_mut()
+            .lifecycle_mut()
+            .take_watch_files_change()
     }
 
     /// Whether the configuration has asked the shell to stop.
     pub fn quit_requested(&self) -> bool {
-        self.reactive.borrow().lifecycle.quit_requested
+        self.reactive.borrow().lifecycle().quit_requested()
     }
 
+    /// Tells every `on_reload_completed` handler; whether one returned
+    /// without an error.
     pub fn dispatch_reload_completed(&mut self) -> bool {
-        self.dispatch_reload_callbacks(true, None)
+        self.dispatch_reload_callbacks(true, None, 0).1 > 0
     }
 
+    /// Tells every `on_reload_failed` handler; whether one returned
+    /// without an error.
     pub fn dispatch_reload_failed(&mut self, error: String) -> bool {
-        self.dispatch_reload_callbacks(false, Some(error))
+        self.dispatch_reload_callbacks(false, Some(error), 0).1 > 0
     }
 
+    /// Runs the reload handlers from the `skip`th on. Returns how many are
+    /// registered, and how many of those run returned without an error.
     pub(crate) fn dispatch_reload_callbacks(
         &mut self,
         completed: bool,
         error: Option<String>,
-    ) -> bool {
-        let callbacks = {
-            let state = self.reactive.borrow();
-            if completed {
-                state.lifecycle.reload_completed_callbacks.clone()
-            } else {
-                state.lifecycle.reload_failed_callbacks.clone()
-            }
-        };
+        skip: usize,
+    ) -> (usize, usize) {
+        let callbacks = self
+            .reactive
+            .borrow()
+            .lifecycle()
+            .reload_callbacks(completed);
         let args = error.map(IpcValue::String).into_iter().collect::<Vec<_>>();
-        for callback in &callbacks {
-            if let Err(message) =
-                self.run_handler(|ctx, limits| execute_handler_args(ctx, callback, &args, limits))
+        let mut succeeded = 0;
+        for callback in callbacks.iter().skip(skip) {
+            match self.run_handler(|ctx, limits| execute_handler_args(ctx, callback, &args, limits))
             {
-                self.reactive
+                Ok(_) => succeeded += 1,
+                Err(message) => self
+                    .reactive
                     .borrow_mut()
-                    .log(LogLevel::Warn, format!("reload callback: {message}"));
+                    .log(LogLevel::Warn, format!("reload callback: {message}")),
             }
         }
-        !callbacks.is_empty()
+        (callbacks.len(), succeeded)
     }
 }
 
@@ -364,7 +427,7 @@ impl Runtime {
     pub fn shaders(&self) -> Vec<ShaderProgram> {
         self.reactive
             .borrow()
-            .shaders
+            .shaders()
             .values()
             .map(|shader| ShaderProgram {
                 program: shader.compiled.hash,
@@ -392,7 +455,7 @@ impl Runtime {
     /// not costs nothing after the first. Derived from the compiler rather than
     /// declared, so it cannot be forgotten.
     pub fn shaders_animate(&self) -> bool {
-        self.reactive.borrow().shaders.values().any(|shader| {
+        self.reactive.borrow().shaders().values().any(|shader| {
             shader.compiled.reads_time
                 || shader
                     .vertex

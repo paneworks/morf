@@ -13,10 +13,10 @@ impl Starter {
         options: SpawnOptions,
         kind: Kind,
     ) -> Result<Result<UserData<'gc>, String>, HostError> {
-        let spawned = self.state.borrow_mut().io.spawn(options, kind);
-        let link = match spawned.map_err(HostError)? {
+        let spawned = self.state.borrow_mut().io_mut().spawn(options, kind);
+        let link = match spawned.map_err(HostError::from)? {
             Ok(link) => link,
-            Err(message) => return Ok(Err(message)),
+            Err(error) => return Ok(Err(error.into_message())),
         };
         let userdata = UserData::new_static(&ctx, IoToken(link));
         userdata.set_metatable(ctx, Some(ctx.fetch(&self.process_metatable)));
@@ -32,9 +32,9 @@ impl Starter {
         let link = self
             .state
             .borrow_mut()
-            .io
+            .io_mut()
             .connect(options, kind)
-            .map_err(HostError)?;
+            .map_err(HostError::from)?;
         let userdata = UserData::new_static(&ctx, IoToken(link));
         userdata.set_metatable(ctx, Some(ctx.fetch(&self.connection_metatable)));
         Ok(userdata)
@@ -47,7 +47,7 @@ pub(super) fn spawn_options<'gc>(
     command: Table<'gc>,
     options: Option<Table<'gc>>,
 ) -> Result<SpawnOptions, HostError> {
-    let command = table_string_array(ctx, command, 256).map_err(HostError)?;
+    let command = table_string_array(ctx, command, 256).map_err(HostError::from)?;
     if command.is_empty() || command[0].is_empty() {
         return Err(HostError("command cannot be empty".into()));
     }
@@ -58,11 +58,12 @@ pub(super) fn spawn_options<'gc>(
     match options.get_value(ctx, "env") {
         LuaValue::Nil => {}
         LuaValue::Table(env) => {
-            spawn.environment = table_string_map(ctx, env, 256).map_err(HostError)?;
+            spawn.environment = table_string_map(ctx, env, 256).map_err(HostError::from)?;
         }
         _ => return Err(HostError("env must be a table".into())),
     }
-    spawn.clear_environment = table_bool(ctx, options, "clear_env", false).map_err(HostError)?;
+    spawn.clear_environment =
+        table_bool(ctx, options, "clear_env", false).map_err(HostError::from)?;
     match options.get_value(ctx, "cwd") {
         LuaValue::Nil => {}
         LuaValue::String(cwd) => {
@@ -86,7 +87,7 @@ pub(super) fn spawn_options<'gc>(
         spawn.max_line = (max_line as usize).min(MAX_LINE_LIMIT);
     }
     spawn.timeout = positive(ctx, options, "timeout_ms")?.map(Duration::from_millis);
-    spawn.detached = table_bool(ctx, options, "detached", false).map_err(HostError)?;
+    spawn.detached = table_bool(ctx, options, "detached", false).map_err(HostError::from)?;
     Ok(spawn)
 }
 

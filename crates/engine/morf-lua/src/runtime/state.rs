@@ -1,8 +1,7 @@
 //! `ReactiveState`, everything one runtime holds between turns, and the
 //! types its fields are made of.
 
-pub(crate) use crate::api_shader::RegisteredShader;
-use luna::StashedTable;
+pub(crate) use crate::api::media::shader::RegisteredShader;
 
 use morf_runtime::Handler;
 use morf_scene::reactive::SignalId;
@@ -14,12 +13,26 @@ use std::rc::Rc;
 // Re-exported, because these moved out of this file only to satisfy the line
 // gate: every consumer reaches for them through `state::*` and there is no
 // reason to make them all learn a second module name.
-pub(crate) use crate::state_pending::*;
-pub(crate) use crate::state_tokens::*;
+pub(crate) use crate::runtime::pending::*;
+pub(crate) use crate::value::tokens::*;
+pub(crate) use crate::vm::state_cell::{StateCell, StateRef, StateRefMut};
 
+mod access;
+mod auth;
+mod bridges;
+mod claims;
+mod dbus;
+mod feeds;
 mod follow;
+mod metatables;
 mod methods;
 
+pub(crate) use auth::Auth;
+pub(crate) use dbus::DbusState;
+pub(crate) use feeds::Feeds;
+pub(crate) use metatables::Metatables;
+
+pub(crate) use claims::{ClaimsPass, run_claims};
 pub(crate) use follow::apply_follows;
 pub(crate) use morf_runtime::animation::Follow;
 
@@ -47,7 +60,7 @@ pub(crate) struct StateFields {
     pub(crate) lists: HashMap<String, (luna::StashedUserData, Rc<RefCell<ListModel>>)>,
 }
 
-pub(crate) use morf_runtime::engine::CustomLayoutFns;
+pub(crate) use morf_runtime::layout::CustomLayoutFns;
 
 #[derive(Clone, Copy)]
 pub(crate) enum ViewKind {
@@ -56,14 +69,11 @@ pub(crate) enum ViewKind {
     Grid,
 }
 
-pub(crate) use morf_runtime::layout::TransformWatch as LuaTransformWatcher;
-pub(crate) use morf_runtime::windows::PopupNodeAnchor;
-
 pub(crate) use morf_runtime::reactive::Effect as LuaEffect;
 
 pub(crate) use morf_runtime::retention::RetainCallbacks;
 
-pub(crate) use morf_runtime::reactive::{EffectSink, PropertySink};
+pub(crate) use morf_runtime::reactive::{ClaimInput, ClaimSink, EffectSink, PropertySink};
 
 #[cfg(test)]
 pub(crate) use morf_runtime::log::MAX_LOG_ENTRIES;
@@ -71,73 +81,57 @@ pub(crate) use morf_runtime::log::MAX_LOG_ENTRIES;
 pub(crate) struct ReactiveState {
     /// Every subsystem the engine runs (`morf_runtime::Engine`); what
     /// follows is what only the Lua layer can hold.
-    pub(crate) engine: morf_runtime::Engine,
+    engine: morf_runtime::Engine,
     /// The runtime's limits, for a binding made where they are not at hand
     /// (a function assigned to a node's property).
-    pub(crate) limits: crate::Limits,
-    pub(crate) channels: crate::channels::Channels,
+    limits: crate::Limits,
+    /// The channels the configuration made, and the nodes drawing them.
+    channels: crate::api::ui::channels::Channels,
     /// Shaders the configuration registered, by name.
     ///
     /// Compiled once at load. The renderer is handed the generated WGSL when
     /// the host starts up, and a node only ever carries the program's hash.
-    pub(crate) shaders: HashMap<String, RegisteredShader>,
+    shaders: HashMap<String, RegisteredShader>,
     /// Each surface's overlay layer and what is open on it (`api_overlay.rs`).
-    pub(crate) overlays: crate::api_overlay::OverlayState,
+    overlays: crate::api::input::overlay::OverlayState,
     /// Captures to be written to a file rather than handed to Lua, by request.
-    pub(crate) screencopy_saves: HashMap<u64, crate::image_jobs::CaptureSave>,
+    capture_saves: crate::runtime::image_jobs::CaptureSaves,
     /// `morf.image` work on its way through the worker pool.
-    pub(crate) image_jobs: crate::image_jobs::ImageJobs,
-    pub(crate) pam_tasks: Vec<PendingPam>,
-    pub(crate) pam_sessions: Vec<PendingPamSession>,
-    pub(crate) greetd_sessions: Vec<PendingGreetdSession>,
-    /// The list model's metatable, kept so a list inside `morf.state` is
-    /// the same kind of object as `morf.list_model` makes.
-    pub(crate) model_metatable: Option<luna::StashedTable>,
-    /// The one metatable every scene-node handle shares.
-    ///
-    /// Built on first use rather than at install time, because it needs the
-    /// arena. Every node used to get its own — a fresh table and two fresh
-    /// closures per node, neither of which captured anything node-specific, so
-    /// a thousand-node tree allocated three thousand objects that were all the
-    /// same. Every other userdata type in this crate already shares one.
-    pub(crate) node_metatable: Option<StashedTable>,
-    pub(crate) transform_watchers: HashMap<u64, LuaTransformWatcher>,
-    pub(crate) next_transform_watcher: u64,
-    pub(crate) dbus_signals: Vec<PendingDbusSignal>,
-    /// Hands out the ids subscription handles close by.
-    pub(crate) next_dbus_signal_id: u64,
-    /// `call_async` calls waiting for their answer.
-    pub(crate) dbus_replies: Vec<PendingDbusReply>,
-    /// The metatable every state proxy shares, so a theme can be one.
-    pub(crate) state_metatable: Option<StashedTable>,
+    image_jobs: crate::runtime::image_jobs::ImageJobs,
+    /// `morf.pam` checks and conversations, and greetd logins.
+    auth: Auth,
+    /// The metatables list models, scene nodes and state proxies share.
+    metatables: Metatables,
+    /// `ui.watch_transform` watches.
+    transform_watchers: morf_runtime::layout::TransformWatches,
+    /// What extensions want told when nodes are removed.
+    removal_listeners: Vec<crate::vm::extensions::NodesRemoved>,
+    /// `morf.dbus`: subscriptions, calls waiting on an answer, and the
+    /// names and services this runtime serves.
+    dbus: DbusState,
     /// Theme token files being watched.
-    pub(crate) theme_sources: Vec<ThemeSource>,
+    theme_sources: ThemeSources,
     /// `morf.terminal.listen`: terminals of our own hearing colour sequences.
-    pub(crate) palette_listeners: Vec<crate::api_palette::PaletteListener>,
-    pub(crate) next_palette_listener: u64,
+    palettes: crate::api::media::terminal_palette::PaletteListeners,
     /// `morf.prefers` and where its answers come from.
-    pub(crate) prefers: Option<Prefers>,
+    prefers: Option<Prefers>,
     /// `morf.audio`, installed with the runtime and started on first use.
-    pub(crate) audio: Option<crate::api_audio::AudioHost>,
+    audio: Option<crate::api::media::audio::AudioHost>,
     /// `morf.toplevels`, installed with the runtime and fed by
     /// `Runtime::set_windows`.
-    pub(crate) toplevels: Option<crate::api_toplevels::ToplevelHost>,
-    /// Every bus name `morf.dbus.serve` took, so a runtime that ends or
-    /// hands its duties over gives them back first.
-    pub(crate) owned_bus_names: Vec<std::rc::Weak<std::cell::RefCell<morf_io::DbusService>>>,
-    pub(crate) dbus_services: morf_io::DbusHandlers<morf_runtime::Handler>,
-    pub(crate) udev_monitors: Vec<PendingUdev>,
-    pub(crate) status_notifiers: Vec<PendingStatusNotifier>,
-    /// `morf.http` requests in flight.
-    pub(crate) http_requests: Vec<crate::api_http::PendingHttp>,
+    toplevels: Option<crate::api::desktop::toplevels::ToplevelHost>,
+    /// udev monitors, tray hosts and `morf.http` requests in flight.
+    feeds: Feeds,
     /// `morf.spawn` children and `morf.connect` connections.
-    pub(crate) io: crate::api_io::IoHub,
+    io: crate::api::io::io::IoHub,
     /// `morf.fs.watch` watches.
-    pub(crate) watches: crate::api_watch::WatchHub,
+    watches: crate::api::io::watch::WatchHub,
     /// `ui.Terminal` nodes: their emulators and their programs.
-    pub(crate) terminals: crate::terminals::TerminalHub,
+    terminals: crate::runtime::terminals::TerminalHub,
     /// Every `ui.Image`: what became of its source, and its playback.
-    pub(crate) images: crate::images::ImageNodes,
+    images: crate::runtime::images::ImageNodes,
+    /// Whose top level is running, and which imported modules it holds back.
+    permissions: crate::vm::permissions::Gate,
 }
 
 impl std::ops::Deref for ReactiveState {

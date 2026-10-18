@@ -82,6 +82,9 @@ pub struct Capabilities {
     pub input_method: bool,
     /// The compositor blurs what is behind a window.
     pub backdrop_blur: bool,
+    /// What the compositor can be told about a surface's colours: whether
+    /// an HDR frame can be described (`color.hdr()`), and how.
+    pub color: morf_value::present::ColorSupport,
 }
 
 /// Where a window's frames go.
@@ -150,10 +153,11 @@ pub trait Backend {
     /// Declares a rectangle of the window's next buffer changed, in buffer
     /// pixels.
     fn damage(&self, _id: WindowId, _x: i32, _y: i32, _width: i32, _height: i32) {}
-    /// The Wayland client underneath, for what only a compositor has (the
-    /// desktop protocols on a queue of their own).
+    /// What the desktop protocols need of this backend's compositor, for
+    /// them to run on a queue of their own; `None` from a backend with no
+    /// compositor, which has no desktop protocols.
     #[cfg(feature = "wayland")]
-    fn as_wayland(&self) -> Option<&wayland::LayerClient> {
+    fn desktop_link(&self) -> Option<wayland::DesktopLink> {
         None
     }
     /// The headless backend underneath, for a runner that moves its clock
@@ -183,7 +187,7 @@ pub trait Backend {
     }
     /// Called from any thread that finishes something the loop must hear
     /// (a clipboard read, a drop), so the loop wakes for it.
-    fn set_waker(&mut self, _waker: fn()) {}
+    fn set_waker(&mut self, _waker: crate::transfer::Wakeup) {}
 
     fn screens(&self) -> &[Output] {
         self.outputs()
@@ -209,6 +213,9 @@ pub trait Backend {
     }
     fn layer_logical_size(&self, id: u64) -> Option<(u32, u32)> {
         self.logical_size(WindowId::Layer(id))
+    }
+    fn layer_space(&self, _id: u64) -> Option<crate::LayerSpace> {
+        None
     }
     fn layer_scale_120(&self, id: u64) -> Option<u32> {
         self.has_window(WindowId::Layer(id))
@@ -240,6 +247,14 @@ pub trait Backend {
     }
     fn supports_backdrop_blur(&self) -> bool {
         self.capabilities().backdrop_blur
+    }
+    fn color_support(&self) -> morf_value::present::ColorSupport {
+        self.capabilities().color
+    }
+    /// What output `id` prefers its pictures described as, once the
+    /// compositor has said.
+    fn output_color(&self, _id: u32) -> Option<crate::OutputColor> {
+        None
     }
     fn supports_drag_and_drop(&self) -> bool {
         self.capabilities().drag_and_drop

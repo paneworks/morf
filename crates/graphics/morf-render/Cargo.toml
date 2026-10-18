@@ -7,9 +7,9 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+morf-paint.workspace = true
 morf-value.workspace = true
 bytemuck.workspace = true
-kurbo.workspace = true
 morf-image.workspace = true
 morf-layout.workspace = true
 morf-vector.workspace = true
@@ -19,7 +19,6 @@ raw-window-handle.workspace = true
 # The dmabuf ioctls that carry a frame's fence, presenting into buffers of the
 # engine's own (the window system's half is the window's `BufferSink`).
 libc.workspace = true
-resvg.workspace = true
 wgpu.workspace = true
 # The same ash wgpu-hal speaks, for the handful of Vulkan calls wgpu has no
 # word for: exporting an image as a dmabuf, and acquiring it back.
@@ -29,4 +28,5 @@ ash = "0.38"
 # The shader tests compile Lua-syntax shaders to check what the renderer
 # draws with them; the renderer itself takes compiled WGSL.
 morf-shader.workspace = true
+morf-paint = { workspace = true, features = ["test-support"] }
 pollster.workspace = true

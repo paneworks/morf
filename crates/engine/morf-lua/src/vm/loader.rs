@@ -6,13 +6,17 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::{reactive_execute::*, scene_bindings::*, state::*, types::*};
+use crate::{api::ui::scene::*, runtime::state::*, vm::execute::*, vm::types::*};
 
+mod compiled;
 mod dbus;
 mod json;
+mod require;
 
+pub(crate) use compiled::load as load_compiled;
 pub(crate) use dbus::{dbus_value_to_lua, lua_to_dbus};
 pub(crate) use json::{json_to_lua, lua_to_json};
+pub(crate) use require::{Require, install_require};
 
 pub(crate) fn default_module_roots() -> Vec<PathBuf> {
     std::env::var_os("MORF_RUNTIME_PATH")
@@ -83,7 +87,11 @@ pub fn runtimepath_roots(config: &std::path::Path, external: bool) -> Vec<PathBu
     unique
 }
 
-pub(crate) fn load_runtime_module(roots: &[PathBuf], name: &str) -> Result<Vec<u8>, String> {
+/// Resolves a module name to the file it loads from and its source.
+pub(crate) fn resolve_runtime_module(
+    roots: &[PathBuf],
+    name: &str,
+) -> Result<(PathBuf, Vec<u8>), String> {
     if name.is_empty()
         || name.split('.').any(|part| {
             part.is_empty()
@@ -103,13 +111,18 @@ pub(crate) fn load_runtime_module(roots: &[PathBuf], name: &str) -> Result<Vec<u
             root.join("lua").join(&relative).join("init.lua"),
         ] {
             match fs::read(&path) {
-                Ok(source) => return Ok(source),
+                Ok(source) => return Ok((path, source)),
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                 Err(error) => return Err(format!("could not read {}: {error}", path.display())),
             }
         }
     }
     Err(format!("module `{name}` is not available"))
+}
+
+#[cfg(test)]
+pub(crate) fn load_runtime_module(roots: &[PathBuf], name: &str) -> Result<Vec<u8>, String> {
+    resolve_runtime_module(roots, name).map(|(_, source)| source)
 }
 
 pub(crate) fn lua_index(index: i64) -> Result<usize, HostError> {
@@ -136,7 +149,7 @@ pub(crate) fn scene_to_lua<'gc>(
         SceneValue::Bool(value) => LuaValue::Boolean(*value),
         SceneValue::Number(value) => LuaValue::Number(*value),
         SceneValue::String(value) => LuaValue::String(ctx.intern(value.as_bytes())),
-        SceneValue::Color(color) => crate::api_color::scene_color_userdata(ctx, *color),
+        SceneValue::Color(color) => crate::api::color::color::scene_color_userdata(ctx, *color),
         SceneValue::List(values) => {
             let table = Table::new(&ctx);
             for (index, value) in values.iter().enumerate() {
@@ -234,13 +247,12 @@ pub(crate) fn view_transition_to_lua(ctx: Context<'_>, transition: ViewTransitio
     table
 }
 
-pub(crate) fn execute_module<'gc>(
+/// Runs a module's compiled top level and returns what it returned.
+pub(crate) fn run_module<'gc>(
     ctx: Context<'gc>,
-    name: &str,
-    source: &[u8],
+    closure: Closure<'gc>,
     limits: Limits,
 ) -> Result<LuaValue<'gc>, String> {
-    let closure = Closure::load(ctx, Some(name), source).map_err(|error| error.to_string())?;
     let executor = Executor::start(ctx, closure.into(), ());
     drive_executor(ctx, executor, limits, limits.module_fuel, "module")?;
     match executor.take_result::<LuaValue>(ctx) {

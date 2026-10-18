@@ -23,13 +23,12 @@ use luna::{
     Value as LuaValue, Variadic,
 };
 use morf_io::{Watch, WatchHandle, WatchOptions};
-use std::cell::RefCell;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use crate::{Limits, reactive_execute::drive_executor, scene_bindings::*, state::*};
+use crate::{Limits, api::ui::scene::*, runtime::state::*, vm::execute::drive_executor};
 use morf_runtime::Handler;
 
 /// The runtime's watches, each owing a Lua callback.
@@ -43,7 +42,7 @@ struct WatchToken(WatchHandle);
 /// Adds `watch` to `morf.fs`.
 pub(crate) fn install_watch_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     limits: Limits,
 ) {
@@ -92,9 +91,9 @@ pub(crate) fn install_watch_api<'gc>(
         };
         let mut state = state.borrow_mut();
         state
-            .watches
+            .watches()
             .check_room(limits.watches)
-            .map_err(HostError)?;
+            .map_err(HostError::from)?;
         let watch = match Watch::new(&path, WatchOptions { recursive }) {
             Ok(watch) => watch,
             Err(error) => {
@@ -103,7 +102,7 @@ pub(crate) fn install_watch_api<'gc>(
             }
         };
         let callback = crate::vm::handler_store::register(ctx.stash(callback));
-        let token = WatchToken(state.watches.add(watch, callback));
+        let token = WatchToken(state.watches_mut().add(watch, callback));
         let userdata = UserData::new_static(&ctx, token);
         userdata.set_metatable(ctx, Some(ctx.fetch(&metatable)));
         stack.replace(ctx, userdata);
@@ -145,7 +144,7 @@ pub(crate) fn execute_watch_call(
     );
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(&call.callback))
+        ctx.fetch(&crate::vm::handler_store::stashed(&call.callback)?)
             .into(),
         Variadic(vec![LuaValue::Table(event)]),
     );

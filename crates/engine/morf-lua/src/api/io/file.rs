@@ -5,9 +5,13 @@ use morf_io::{
 };
 use std::cell::RefCell;
 
-use crate::{lua_values::*, scene_bindings::*, state::*};
+use crate::{api::ui::scene::*, runtime::state::*, value::lua::*, vm::permissions::refused_write};
 
-pub(crate) fn install_file_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
+pub(crate) fn install_file_api<'gc>(
+    ctx: Context<'gc>,
+    state: std::rc::Rc<StateCell<ReactiveState>>,
+    morf: Table<'gc>,
+) {
     let file_read = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let file: UserRef<FileToken> = stack.consume(ctx)?;
         let bytes = file
@@ -17,16 +21,21 @@ pub(crate) fn install_file_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         stack.replace(ctx, String::from_utf8_lossy(&bytes).as_ref());
         Ok(CallbackReturn::Return)
     });
-    let file_write = Callback::from_fn(&ctx, |ctx, _, mut stack| {
+    let write_state = std::rc::Rc::clone(&state);
+    let file_write = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (file, bytes): (UserRef<FileToken>, String) = stack.consume(ctx)?;
+        let target = file.file.path().to_path_buf();
+        if refused_write(ctx, &write_state, &mut stack, "file:write", &target) {
+            return Ok(CallbackReturn::Return);
+        }
         file.file
             .write_bounded(bytes.as_bytes())
-            .map_err(HostError)?;
+            .map_err(HostError::from)?;
         Ok(CallbackReturn::Return)
     });
     let watcher_next = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (watcher, timeout_ms): (UserRef<FileWatcherToken>, i64) = stack.consume(ctx)?;
-        let timeout = bounded_timeout(timeout_ms).map_err(HostError)?;
+        let timeout = bounded_timeout(timeout_ms).map_err(HostError::from)?;
         stack.replace(
             ctx,
             watcher.watcher.next_event(timeout).map(FileEvent::name),
@@ -142,8 +151,12 @@ pub(crate) fn install_file_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         }
         Ok(CallbackReturn::Return)
     });
-    let document_set_data = Callback::from_fn(&ctx, |ctx, _, mut stack| {
+    let document_set_data = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (file, data): (UserRef<FileDocumentToken>, String) = stack.consume(ctx)?;
+        let target = file.file.borrow().path().to_path_buf();
+        if refused_write(ctx, &state, &mut stack, "file_view:set_data", &target) {
+            return Ok(CallbackReturn::Return);
+        }
         let saved = file.file.borrow_mut().set_data(data.as_bytes());
         stack.replace(ctx, saved);
         Ok(CallbackReturn::Return)
@@ -173,7 +186,7 @@ pub(crate) fn install_file_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     });
     let document_next_change = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (file, timeout_ms): (UserRef<FileDocumentToken>, i64) = stack.consume(ctx)?;
-        let timeout = bounded_timeout(timeout_ms).map_err(HostError)?;
+        let timeout = bounded_timeout(timeout_ms).map_err(HostError::from)?;
         let change = file.file.borrow().next_change(timeout);
         stack.replace(ctx, change.map(FileEvent::name));
         Ok(CallbackReturn::Return)
@@ -226,7 +239,9 @@ pub(crate) fn install_file_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         };
         let maximum = match options.get_value(ctx, "maximum_bytes") {
             LuaValue::Nil => DEFAULT_BUFFER,
-            LuaValue::Integer(value) => buffer_limit(value, "file_view").map_err(HostError)?,
+            LuaValue::Integer(value) => {
+                buffer_limit(value, "file_view").map_err(HostError::from)?
+            }
             _ => {
                 return Err(HostError("file_view maximum_bytes must be an integer".into()).into());
             }

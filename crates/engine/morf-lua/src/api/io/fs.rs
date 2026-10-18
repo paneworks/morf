@@ -12,7 +12,7 @@ use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
-use crate::scene_bindings::*;
+use crate::api::ui::scene::*;
 
 use ops::{DEFAULT_READ, MAX_ASYNC_FILES};
 
@@ -113,9 +113,10 @@ mod paths;
 pub(crate) fn install_fs_api<'gc>(
     ctx: Context<'gc>,
     morf: Table<'gc>,
-    state: std::rc::Rc<std::cell::RefCell<crate::state::ReactiveState>>,
+    state: std::rc::Rc<crate::runtime::state::StateCell<crate::runtime::state::ReactiveState>>,
 ) {
     let fs = Table::new(&ctx);
+    let change_state = std::rc::Rc::clone(&state);
 
     // `read_async({ path, ... }, function(ok, contents) end)`: the files are
     // read on a worker, and the callback gets, on a later turn, a list in
@@ -150,12 +151,12 @@ pub(crate) fn install_fs_api<'gc>(
             let limit = match limit {
                 LuaValue::Nil => DEFAULT_READ,
                 LuaValue::Integer(limit) => {
-                    ops::read_limit(limit, "fs.read_async").map_err(HostError)?
+                    ops::read_limit(limit, "fs.read_async").map_err(HostError::from)?
                 }
                 _ => return Err(HostError("fs.read_async limit must be an integer".into()).into()),
             };
-            let job = crate::image_jobs::ImageJob::ReadFiles { paths, limit };
-            let submitted = state.borrow_mut().image_jobs.submit(
+            let job = crate::runtime::image_jobs::ImageJob::ReadFiles { paths, limit };
+            let submitted = state.borrow_mut().image_jobs_mut().submit(
                 job,
                 Some(crate::vm::handler_store::register(ctx.stash(callback))),
             );
@@ -238,7 +239,7 @@ pub(crate) fn install_fs_api<'gc>(
             if let LuaValue::Table(window) = limit {
                 let offset = integer(ctx, Some(window), "offset")?;
                 let length = integer(ctx, Some(window), "length")?;
-                let (offset, length) = ops::read_window(offset, length).map_err(HostError)?;
+                let (offset, length) = ops::read_window(offset, length).map_err(HostError::from)?;
                 match ops::read_range(&path, offset, length) {
                     Ok(bytes) => stack.replace(ctx, luna::String::from_slice(&ctx, bytes)),
                     Err(error) => fail!(stack, ctx, error),
@@ -247,7 +248,9 @@ pub(crate) fn install_fs_api<'gc>(
             }
             let limit = match limit {
                 LuaValue::Nil => DEFAULT_READ,
-                LuaValue::Integer(limit) => ops::read_limit(limit, "fs.read").map_err(HostError)?,
+                LuaValue::Integer(limit) => {
+                    ops::read_limit(limit, "fs.read").map_err(HostError::from)?
+                }
                 _ => {
                     return Err(HostError(
                         "fs.read takes a byte limit or { offset, length }".into(),
@@ -284,7 +287,7 @@ pub(crate) fn install_fs_api<'gc>(
         }),
     );
 
-    change::install_changes(ctx, fs);
+    change::install_changes(ctx, fs, &change_state);
     paths::install_paths(ctx, fs);
     morf.set_field(ctx, "fs", fs);
 }

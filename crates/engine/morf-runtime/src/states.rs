@@ -41,6 +41,38 @@ pub struct StateSet {
     pub current: Option<String>,
 }
 
+/// Each node's declared states, and which it is in.
+#[derive(Default)]
+pub struct States {
+    sets: HashMap<NodeHandle, StateSet>,
+}
+
+impl States {
+    /// Gives `node` its states, replacing any it had.
+    pub fn declare(&mut self, node: NodeHandle, set: StateSet) {
+        self.sets.insert(node, set);
+    }
+
+    /// `node`'s states, if it declared any.
+    pub fn get(&self, node: NodeHandle) -> Option<&StateSet> {
+        self.sets.get(&node)
+    }
+
+    /// Marks `node` as in state `name`. False when it has no states.
+    pub fn enter(&mut self, node: NodeHandle, name: &str) -> bool {
+        let Some(set) = self.sets.get_mut(&node) else {
+            return false;
+        };
+        set.current = Some(name.to_owned());
+        true
+    }
+
+    /// Forgets a removed node's states.
+    pub fn forget(&mut self, node: &NodeHandle) {
+        self.sets.remove(node);
+    }
+}
+
 #[derive(Default)]
 pub struct Capture {
     pub reads: HashSet<SignalId>,

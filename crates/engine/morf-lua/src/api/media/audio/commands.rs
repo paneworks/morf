@@ -6,7 +6,7 @@ use super::*;
 /// Installs the commands and `on_changed` on `audio`.
 pub(super) fn install_commands<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     audio: Table<'gc>,
 ) {
     let function =

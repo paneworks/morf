@@ -1,7 +1,6 @@
 //! Printing expressions.
 //!
-//! Split from the statement printer when the two crossed the line gate. Every
-//! decision here is about *context*: what type the surrounding code wanted, and
+//! Every decision here is about *context*: what type the surrounding code wanted, and
 //! which arguments are meant to be a different one. Getting that wrong is how a
 //! shader that type-checked gets refused by a driver with no line number, which
 //! has happened three times and been caught three times by the GPU tests.
@@ -13,6 +12,81 @@ use crate::ir::*;
 use crate::types::*;
 
 impl Emitter {
+    /// Prints an expression, widening a scalar where the context wants a vector.
+    pub(crate) fn expression(&mut self, expression: &Expr, wanted: Type) {
+        let actual = expression.ty();
+        // An abstract *expression* — arithmetic over literals that nothing has
+        // decided about — takes the wanted type all the way down. `0 - 2` in a
+        // `vec4u` has to print as `0u - 2u`, not as floats WGSL then refuses to
+        // convert.
+        if actual == Type::AbstractInt && wanted.is_integer() {
+            match expression {
+                Expr::Binary {
+                    op, left, right, ..
+                } => {
+                    self.out.push('(');
+                    self.expression(left, wanted);
+                    let _ = write!(self.out, " {} ", op.wgsl());
+                    self.expression(right, wanted);
+                    self.out.push(')');
+                    return;
+                }
+                Expr::Unary { op, value, .. } => {
+                    self.out.push_str(match op {
+                        UnOp::Negate => "-(",
+                        UnOp::Not => "!(",
+                        UnOp::BitNot => "~(",
+                    });
+                    self.expression(value, wanted);
+                    self.out.push(')');
+                    return;
+                }
+                _ => {}
+            }
+        }
+        // An abstract integer prints as whatever the surrounding code wanted.
+        // This is the only place that knows, which is why it is the only place
+        // that decides.
+        if let Expr::Literal(Value::Int(value)) = expression {
+            match wanted {
+                Type::U32 => {
+                    let _ = write!(self.out, "{}u", *value as u32);
+                }
+                Type::I32 => {
+                    let _ = write!(self.out, "{}", *value as i32);
+                }
+                other if other.is_vector() => {
+                    let _ = write!(self.out, "{}({})", other.wgsl(), float(*value as f32));
+                }
+                _ => {
+                    let _ = write!(self.out, "{}", float(*value as f32));
+                }
+            }
+            return;
+        }
+        // A scalar never widens into a matrix. `m * 2.0` is a scaled matrix in
+        // WGSL already, and `mat3x3<f32>(2.0)` is not the same thing — it is
+        // not even legal.
+        if wanted.is_matrix() && actual != wanted {
+            self.raw(expression);
+            return;
+        }
+        if wanted.is_vector() && actual == Type::F32 && !matches!(expression, Expr::Literal(_)) {
+            let _ = write!(self.out, "{}(", wanted.wgsl());
+            self.raw(expression);
+            self.out.push(')');
+            return;
+        }
+        if wanted.is_vector()
+            && actual == Type::F32
+            && let Expr::Literal(Value::F32(value)) = expression
+        {
+            let _ = write!(self.out, "{}({})", wanted.wgsl(), float(*value));
+            return;
+        }
+        self.raw(expression);
+    }
+
     pub(crate) fn raw(&mut self, expression: &Expr) {
         match expression {
             Expr::Literal(Value::F32(value)) => {

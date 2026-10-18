@@ -8,6 +8,17 @@ use wayland_client::protocol::wl_surface;
 
 use crate::backend::wayland::{helpers::*, state_types::*, surface_types::*, types::*};
 
+/// What the desktop protocols need of a backend's compositor: its
+/// connection, for a queue of their own, the output its surface is on and
+/// that surface. Only a backend with a compositor has one
+/// ([`crate::Backend::desktop_link`]).
+#[derive(Clone, Debug)]
+pub struct DesktopLink {
+    pub connection: wayland_client::Connection,
+    pub own_output: Option<String>,
+    pub shell_surface: Option<wl_surface::WlSurface>,
+}
+
 /// First `xdg_popup` version carrying the `reposition` request.
 pub(crate) const XDG_POPUP_REPOSITION_VERSION: u32 = 3;
 
@@ -91,6 +102,15 @@ impl LayerClient {
     /// own (the desktop protocols).
     pub fn connection(&self) -> wayland_client::Connection {
         self.connection.clone()
+    }
+
+    /// What the desktop protocols are given of this client.
+    pub fn desktop_link(&self) -> DesktopLink {
+        DesktopLink {
+            connection: self.connection(),
+            own_output: self.own_output().and_then(|output| output.name),
+            shell_surface: self.primary_surface(),
+        }
     }
 
     /// The primary layer surface's `wl_surface`, when there is one (a probe

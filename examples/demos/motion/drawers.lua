@@ -74,10 +74,6 @@ for group, edge in ipairs(ORDER) do
     width = spec.width,
     height = spec.height,
     anchors = spec.anchors,
-    [spec.axis] = function()
-      return open[edge] and 0 or tucked(edge)
-    end,
-    behavior = { [spec.axis] = { duration = 460, easing = slide } },
     -- Squash and stretch: longer along the slide, narrower across it.
     stretch = { stiffness = 240, damping = 13, scale = 0.16, max = 0.3 },
     ui.Column {
@@ -91,6 +87,11 @@ for group, edge in ipairs(ORDER) do
       },
     },
   }
+  ui.claims(panel, {
+    motion = { duration = 460, easing = slide },
+    open = { when = function() return open[edge] end, set = { [spec.axis] = 0 } },
+    tucked = { set = { [spec.axis] = tucked(edge) } },
+  })
   drawers[edge] = panel
   -- The drawer's background: a rounded box in the frame's field, wherever
   -- the drawer is drawn. Each drawer is its own blend group, so two drawers

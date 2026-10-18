@@ -22,10 +22,12 @@ pub struct Program {
     /// to set is a flag that will be wrong, and this one decides whether a node
     /// repaints every frame or never again.
     pub reads_time: bool,
-    /// Whether anything sampled what is underneath.
-    pub samples_behind: bool,
-    /// Whether anything took a screen-space derivative.
-    pub takes_derivative: bool,
+    /// The line of the first sample of what is underneath, if any.
+    pub samples_behind: Option<u32>,
+    /// The line of the first screen-space derivative, if any.
+    pub takes_derivative: Option<u32>,
+    /// The line the entry point is defined on.
+    pub entry_line: u32,
     /// Textures the shader declared, in binding order.
     pub textures: Vec<String>,
     /// Data blocks it declared: name, element type, length.
@@ -79,6 +81,9 @@ pub enum Stmt {
         /// Hard iteration ceiling, emitted as a counter the shader cannot
         /// reach around.
         guard: u32,
+        /// Whether `guard` is the loop's real trip count rather than the
+        /// ceiling.
+        counted: bool,
         body: Block,
         /// What runs before every next turn, including after a `continue`.
         ///
@@ -94,6 +99,9 @@ pub enum Stmt {
     /// owns its own coverage.
     Discard,
     Return(Expr),
+    /// The source line the statements after it came from. Emits nothing; it
+    /// is what lets a check over the finished program point at a line.
+    Line(u32),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -169,7 +177,7 @@ impl Block {
     }
 }
 
-fn collect_assigned(block: &Block, out: &mut Vec<String>) {
+pub(crate) fn collect_assigned(block: &Block, out: &mut Vec<String>) {
     for statement in &block.0 {
         match statement {
             Stmt::Assign { target, .. } => out.push(target.clone()),
@@ -187,7 +195,12 @@ fn collect_assigned(block: &Block, out: &mut Vec<String>) {
                 collect_assigned(body, out);
                 collect_assigned(continuing, out);
             }
-            Stmt::Let { .. } | Stmt::Break | Stmt::Continue | Stmt::Discard | Stmt::Return(_) => {}
+            Stmt::Let { .. }
+            | Stmt::Break
+            | Stmt::Continue
+            | Stmt::Discard
+            | Stmt::Return(_)
+            | Stmt::Line(_) => {}
         }
     }
 }
@@ -218,7 +231,8 @@ fn mark(block: &mut Block, assigned: &[String]) {
             | Stmt::Break
             | Stmt::Continue
             | Stmt::Discard
-            | Stmt::Return(_) => {}
+            | Stmt::Return(_)
+            | Stmt::Line(_) => {}
         }
     }
 }

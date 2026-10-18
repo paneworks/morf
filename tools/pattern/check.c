@@ -30,6 +30,14 @@
 #define PATTERN_PUBLIC PATTERN_PUBLIC_PARENT "/pattern"
 #endif
 
+/* Five failures earn a strike and a cooldown that grows per strike; the last
+ * strike disables patterns until a root --reset (a greetd password login).
+ * Strikes fade once a full window passes without a new one. */
+#define BLOCK_FAILURES 5u
+#define STRIKE_WINDOW (24LL * 60 * 60)
+static const long long cooldowns[] = {30, 60, 300, 900};
+#define LOCK_STRIKES (unsigned)(sizeof(cooldowns) / sizeof(cooldowns[0]) + 1)
+
 /* The same adjacency rule is used by lib.util.pattern at the UI boundary. */
 static const char *invalid_pattern(const char *s) {
     size_t n = strlen(s);
@@ -138,8 +146,9 @@ int main(int argc, char **argv) {
     bool set = argc == 3 && !strcmp(argv[1], "--set");
     bool clear = argc == 3 && !strcmp(argv[1], "--clear");
     bool status = argc == 3 && !strcmp(argv[1], "--status");
-    if (!validate && !check && !set && !clear && !status) return 1;
-    if (check && argc > 3) return 1;
+    bool reset = argc >= 2 && !strcmp(argv[1], "--reset");
+    if (!validate && !check && !set && !clear && !status && !reset) return 1;
+    if ((check || reset) && argc > 3) return 1;
     char secret[11] = {0}, stored[CRYPT_OUTPUT_SIZE] = {0};
     struct crypt_data crypt_state = {0};
     int result = 1, dir = -1, lock = -1, public = -1;
@@ -149,7 +158,7 @@ int main(int argc, char **argv) {
         if (error) { if (!check) fprintf(stderr, "%s\n", error); goto done; }
         if (validate) { result = 0; goto done; }
     }
-    if (geteuid() != 0 || ((set || clear) && getuid() != 0)) goto done;
+    if (geteuid() != 0 || ((set || clear || reset) && getuid() != 0)) goto done;
     const char *user = argc == 3 ? argv[2] : getenv("PAM_USER");
     if (!user || !*user || strlen(user) > 64 || strspn(user, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-") != strlen(user)) goto done;
     struct passwd *account = getpwnam(user);
@@ -166,6 +175,7 @@ int main(int argc, char **argv) {
     if (status) { result = read_file(dir, hashname, stored, sizeof(stored)) ? 0 : 1; goto done; }
     lock = openat(dir, lockname, O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK, 0600);
     if (!safe_file(lock) || flock(lock, LOCK_EX | LOCK_NB)) goto done;
+    if (reset) { result = replace_file(dir, ratename, "0 0 0\n", 0600) ? 0 : 1; goto done; }
     if (set || clear) {
         parent = directory(PATTERN_PUBLIC_PARENT, 0755, true);
         if (parent < 0) goto done;
@@ -184,7 +194,7 @@ int main(int argc, char **argv) {
         if (!hashed || strncmp(hashed, "$y$", 3)) goto done;
         snprintf(stored, sizeof(stored), "%s\n", hashed);
         if (!replace_file(public, user, "", 0644)
-            || !replace_file(dir, ratename, "0 0\n", 0600)
+            || !replace_file(dir, ratename, "0 0 0\n", 0600)
             || !replace_file(dir, hashname, stored, 0600)) goto done;
         result = 0; goto done;
     }
@@ -192,20 +202,26 @@ int main(int argc, char **argv) {
     stored[strcspn(stored, "\n")] = 0;
     /* Reserve an attempt BEFORE hashing: killing or racing helpers cannot
      * bypass the counter. Password PAM remains available during cooldown. */
-    unsigned failures = 0;
+    unsigned failures = 0, strikes = 0;
     long long until = 0;
     char rate[80];
-    if (!read_file(dir, ratename, rate, sizeof(rate))
-        || sscanf(rate, "%u %lld", &failures, &until) != 2 || failures > 5 || until < 0) goto done;
+    if (!read_file(dir, ratename, rate, sizeof(rate))) goto done;
+    int fields = sscanf(rate, "%u %lld %u", &failures, &until, &strikes);
+    if (fields < 2 || failures > BLOCK_FAILURES || until < 0 || strikes > LOCK_STRIKES) goto done;
+    if (fields == 2 && failures >= BLOCK_FAILURES) strikes = 1;
+    if (strikes >= LOCK_STRIKES) goto done;
     time_t now = time(NULL);
     if (now < 0 || (long long)now < until) goto done;
-    if (until) failures = 0;
-    ++failures;
-    until = failures >= 5 ? (long long)now + 30 : 0;
-    snprintf(rate, sizeof(rate), "%u %lld\n", failures, until);
+    if (strikes && (long long)now >= until + STRIKE_WINDOW) strikes = 0;
+    if (failures >= BLOCK_FAILURES) failures = 0;
+    if (++failures >= BLOCK_FAILURES) {
+        ++strikes;
+        until = strikes < LOCK_STRIKES ? (long long)now + cooldowns[strikes - 1] : (long long)now;
+    }
+    snprintf(rate, sizeof(rate), "%u %lld %u\n", failures, until, strikes);
     if (!replace_file(dir, ratename, rate, 0600)) goto done;
     char *hashed = crypt_r(secret, stored, &crypt_state);
-    if (hashed && same_hash(hashed, stored) && replace_file(dir, ratename, "0 0\n", 0600)) result = 0;
+    if (hashed && same_hash(hashed, stored) && replace_file(dir, ratename, "0 0 0\n", 0600)) result = 0;
 done:
     explicit_bzero(secret, sizeof(secret));
     explicit_bzero(stored, sizeof(stored));

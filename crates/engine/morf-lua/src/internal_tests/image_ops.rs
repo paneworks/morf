@@ -61,7 +61,7 @@ fn image_work_runs_off_the_loop_and_answers_on_it() {
         palette == "#ff0000@0.50,#0000ff@0.50" || palette == "#0000ff@0.50,#ff0000@0.50",
         "{palette}"
     );
-    assert_eq!(runtime.reactive.borrow().image_jobs.in_flight(), 0);
+    assert_eq!(runtime.reactive.borrow().image_jobs().in_flight(), 0);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -87,8 +87,8 @@ fn a_full_queue_is_refused_and_a_dropped_runtime_is_left_alone() {
     );
     runtime.execute("queue.lua", source.as_bytes()).unwrap();
     assert_eq!(
-        runtime.reactive.borrow().image_jobs.in_flight(),
-        crate::image_jobs::MAX_IN_FLIGHT
+        runtime.reactive.borrow().image_jobs().in_flight(),
+        crate::runtime::image_jobs::MAX_IN_FLIGHT
     );
     // Gone with work still queued: the workers finish or stop on their own,
     // and no callback runs against a Lua state that no longer exists.

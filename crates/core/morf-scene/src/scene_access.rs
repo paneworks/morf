@@ -1,4 +1,4 @@
-use crate::{animation::*, types::*};
+use crate::{animation::*, hashing::*, types::*};
 
 impl Scene {
     /// Reads the value currently used by layout or paint.
@@ -69,13 +69,74 @@ impl Scene {
         // then index it twice more. Every property read of every node in every
         // frame goes through here, so the difference is worth the directness.
         let node = self.node_ref(node)?;
+        Self::slot_of(&self.defaults, node, property).map(|(_, slot)| slot)
+    }
+
+    /// A live node's slot for `property`, and its name as the schema spells
+    /// it: the node's own, or the element's default when nothing set it.
+    /// For reading only: [`Scene::owned`] gives the slot a write needs.
+    pub(crate) fn lookup(
+        &self,
+        id: NodeId,
+        property: &str,
+    ) -> Result<(&'static str, PropertySlot), SceneError> {
+        Self::slot_of(&self.defaults, &self.nodes[id], property)
+    }
+
+    /// A live node's own slot for `property`, made from the default when
+    /// nothing set it yet: what an assignment or a motion writes into.
+    pub(crate) fn owned(
+        &mut self,
+        id: NodeId,
+        property: &str,
+    ) -> Result<(&'static str, PropertySlot), SceneError> {
+        if let Some((name, slot)) = self.nodes[id].properties.get_key_value(property) {
+            return Ok((*name, *slot));
+        }
+        let (name, shared) = self.lookup(id, property)?;
+        let value = self.properties.read(shared.current)?.clone();
+        let slot = PropertySlot {
+            current: self.properties.signal(name, value.clone()),
+            target: self.properties.signal(name, value),
+            kind: shared.kind,
+        };
+        self.nodes[id].properties.insert(name, slot);
+        Ok((name, slot))
+    }
+
+    fn slot_of(
+        defaults: &FastMap<Element, FastMap<&'static str, PropertySlot>>,
+        node: &Node,
+        property: &str,
+    ) -> Result<(&'static str, PropertySlot), SceneError> {
         node.properties
-            .get(property)
-            .copied()
+            .get_key_value(property)
+            .or_else(|| defaults.get(&node.element)?.get_key_value(property))
+            .map(|(name, slot)| (*name, *slot))
             .ok_or_else(|| SceneError::UnknownProperty {
                 element: node.element.name(),
                 property: property.to_owned(),
             })
+    }
+
+    /// Makes `element`'s default slots, the first time a node of it is made.
+    pub(crate) fn ensure_defaults(&mut self, element: Element) {
+        if self.defaults.contains_key(&element) {
+            return;
+        }
+        let slots = crate::schema::schema(element)
+            .into_iter()
+            .map(|spec| {
+                let shared = self.properties.signal(spec.name, spec.default);
+                let slot = PropertySlot {
+                    current: shared,
+                    target: shared,
+                    kind: spec.kind,
+                };
+                (spec.name, slot)
+            })
+            .collect();
+        self.defaults.insert(element, slots);
     }
 
     /// Borrows a live node, or reports that its handle has gone stale.
@@ -92,11 +153,14 @@ impl Scene {
     /// and never compiles anything.
     pub fn attach_shader(&mut self, node: NodeHandle, shader: NodeShader) {
         self.shaders.insert(node.0, shader);
+        self.bump_paint(node.0);
     }
 
     /// Removes a node's shader, if it had one.
     pub fn detach_shader(&mut self, node: NodeHandle) {
-        self.shaders.remove(&node.0);
+        if self.shaders.remove(&node.0).is_some() {
+            self.bump_paint(node.0);
+        }
     }
 
     /// Hangs a picture of a terminal's screen on its node, for the renderer.
@@ -107,6 +171,7 @@ impl Scene {
     ) {
         if self.nodes.contains_key(node.0) {
             self.terminal_screens.insert(node.0, screen);
+            self.bump_paint(node.0);
         }
     }
 
@@ -147,6 +212,7 @@ impl Scene {
                 self.tracks.remove(&id);
             }
         }
+        self.bump_paint(id);
         Ok(())
     }
 
@@ -177,6 +243,7 @@ impl Scene {
             block.clear();
             block.extend(values.iter().take(length).copied());
             block.resize(length, 0.0);
+            self.bump_paint(node.0);
         }
     }
 
@@ -190,6 +257,7 @@ impl Scene {
             && let Some(slot) = shader.params.get_mut(index)
         {
             *slot = value;
+            self.bump_paint(node.0);
         }
     }
 }

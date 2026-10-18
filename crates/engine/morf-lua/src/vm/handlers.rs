@@ -10,7 +10,7 @@
 
 use luna::Context;
 
-use crate::{reactive_bindings::*, types::*};
+use crate::{api::ui::bindings::*, vm::types::*};
 
 impl Runtime {
     /// Runs `body` in Lua as a handler, and flushes afterwards if it wrote.
@@ -18,24 +18,22 @@ impl Runtime {
         &mut self,
         body: impl for<'gc> FnOnce(Context<'gc>, Limits) -> T,
     ) -> T {
-        self.reactive.borrow_mut().handler_depth += 1;
+        let _stage = crate::profile::stage(crate::profile::Stage::Handlers);
+        self.reactive.borrow_mut().tracking_mut().enter_handler();
         let limits = self.limits;
         let result = self.lua.enter(|ctx| body(ctx, limits));
-        let flush = {
-            let mut state = self.reactive.borrow_mut();
-            state.handler_depth = state.handler_depth.saturating_sub(1);
-            state.handler_depth == 0 && std::mem::take(&mut state.flush_pending)
-        };
-        let _span =
-            flush.then(|| crate::profile::span(|| "engine: flush after a handler".to_owned()));
-        if flush
-            && let Err(message) = self
+        let flush = self.reactive.borrow_mut().tracking_mut().leave_handler();
+        if flush {
+            let _span = crate::profile::span(|| "engine: flush after a handler".to_owned());
+            let _stage = crate::profile::stage(crate::profile::Stage::Flush);
+            if let Err(message) = self
                 .lua
                 .enter(|ctx| flush_reactive(&self.reactive, ctx, self.limits))
-        {
-            self.reactive
-                .borrow_mut()
-                .log(LogLevel::Warn, format!("after handler: {message}"));
+            {
+                self.reactive
+                    .borrow_mut()
+                    .log(LogLevel::Warn, format!("after handler: {message}"));
+            }
         }
         // A handler that edited a text input — `:insert`, `:select` — owes
         // that field's callbacks, which could not run while it was running.
@@ -57,7 +55,7 @@ impl morf_runtime::Handlers for Runtime {
         args: &[crate::IpcValue],
     ) -> Result<Vec<crate::IpcValue>, String> {
         self.run_handler(|ctx, limits| {
-            crate::reactive_execute::execute_ipc_handler(ctx, handler, args, limits)
+            crate::vm::execute::execute_ipc_handler(ctx, handler, args, limits)
         })
     }
 
@@ -68,7 +66,7 @@ impl morf_runtime::Handlers for Runtime {
         args: &[crate::IpcValue],
     ) -> Result<(), String> {
         self.run_handler(|ctx, limits| {
-            crate::reactive_execute::execute_handler_args(ctx, handler, args, limits)
+            crate::vm::execute::execute_handler_args(ctx, handler, args, limits)
         })
     }
 }

@@ -8,7 +8,7 @@
 
 use crate::gpu::backend_types::ShaderRegistration;
 use crate::gpu::field_tests::alpha_at;
-use crate::gpu::shader_mode_tests::surface;
+use crate::gpu::shader_surface_tests::surface;
 use crate::gpu::shader_tests::{SIZE, channel, shaded};
 use crate::*;
 use morf_shader::{ShaderKind, ShaderSpec};
@@ -16,6 +16,7 @@ use morf_shader::{ShaderKind, ShaderSpec};
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn the_new_builtins_are_accepted_by_a_driver() {
+    require_gpu!();
     // A builtin that compiles here and is refused by naga is worse than a
     // missing one: the configuration author gets a validation error with no
     // line number instead of a diagnostic. Every W1 addition goes through an
@@ -49,6 +50,7 @@ pub(crate) fn the_new_builtins_are_accepted_by_a_driver() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_rotation_matrix_paints_a_turned_shape() {
+    require_gpu!();
     // W2 against an adapter. A matrix that compiles and is laid out wrongly is
     // the failure worth catching here: the uniform block's alignment rules are
     // where matrices actually go wrong, and a wrong layout reads back as a
@@ -80,6 +82,7 @@ pub(crate) fn a_rotation_matrix_paints_a_turned_shape() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_matrix_parameter_arrives_with_its_columns_intact() {
+    require_gpu!();
     // The uniform layout rule: a `mat3x3` is three sixteen-byte columns, not
     // nine floats. If the host and the shader disagree, the columns arrive
     // shuffled — which looks like a shear rather than an error.
@@ -131,6 +134,7 @@ pub(crate) fn a_matrix_parameter_arrives_with_its_columns_intact() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn integer_hash_noise_paints() {
+    require_gpu!();
     // W3 against an adapter. Integer arithmetic is where a compiler most easily
     // emits something plausible that a driver refuses — a mixed-width shift, a
     // literal that went through a float on the way — so the hash goes through a
@@ -167,6 +171,7 @@ pub(crate) fn integer_hash_noise_paints() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_shader_antialiases_its_own_edge_with_fwidth() {
+    require_gpu!();
     // W4 against an adapter. A derivative is the one builtin whose *value*
     // depends on neighbouring pixels, so it cannot be checked by reading the
     // generated WGSL — only by rendering and seeing a soft edge where a hard
@@ -197,6 +202,7 @@ pub(crate) fn a_shader_antialiases_its_own_edge_with_fwidth() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn an_array_palette_paints_its_bands() {
+    require_gpu!();
     // W5 against an adapter. In the uniform address space an array's stride is
     // a multiple of sixteen whatever the element is, and a shader that indexes
     // one the host laid out differently reads the wrong band — which looks like
@@ -241,6 +247,7 @@ pub(crate) fn an_array_palette_paints_its_bands() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_continue_in_a_counting_loop_reaches_every_turn() {
+    require_gpu!();
     // W6 against an adapter, and the one thing a compiler test cannot settle:
     // that the counter really does advance past a `continue`. If the increment
     // had stayed at the tail of the body this loop would spin against its
@@ -271,6 +278,7 @@ pub(crate) fn a_continue_in_a_counting_loop_reaches_every_turn() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn discard_removes_the_fragment_entirely() {
+    require_gpu!();
     // `discard` is only meaningful where the shader owns its coverage, so this
     // is a surface shader. What it throws away has to be *gone*, not merely
     // transparent — those look the same in a screenshot and different in a
@@ -298,6 +306,7 @@ pub(crate) fn discard_removes_the_fragment_entirely() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn the_whole_remaining_surface_is_accepted_by_a_driver() {
+    require_gpu!();
     // Everything PLAN_WGSL_COVERAGE.md had left unchecked, in one shader,
     // through a real adapter. Three of the six W steps had a bug that only a
     // driver could find, and this is the largest batch of new emission yet:
@@ -347,6 +356,7 @@ pub(crate) fn the_whole_remaining_surface_is_accepted_by_a_driver() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn records_and_helpers_reach_the_driver_together() {
+    require_gpu!();
     // Records had a bug a compiler test could not see: the interner is
     // process-wide, so emitting from it put every record any shader had ever
     // used into every shader after it. Collected from the program instead, and
@@ -381,4 +391,83 @@ pub(crate) fn records_and_helpers_reach_the_driver_together() {
         channel(&pixels, 20, 32, 0) > channel(&pixels, 20, 32, 2),
         "the left side is warmer than it is cool",
     );
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+pub(crate) fn a_ported_shadertoy_shader_compiles_and_paints() {
+    require_gpu!();
+    // Compiling is not the same as being WGSL a driver accepts. This is the
+    // Plasma port from `morf-shader`'s port suite, taken all the way to an
+    // adapter: vector division, a `tanh` tonemap, swizzled feedback through a
+    // loop, and a shape that came from somebody else's shader rather than from
+    // what happened to be convenient to emit.
+    let pixels = shaded(
+        "function fragment(uv, time, resolution)
+           local I = uv * resolution
+           local r = resolution
+           local p = (I + I - r) / r.y
+           local O = vec3(0.0, 0.0, 0.0)
+           local f = p * (4.0 - 4.0 * abs(0.7 - dot(p, p)))
+           local i = 0.0
+           while i < 8.0 do
+             i = i + 1.0
+             local s = sin(f) + vec2(1.0, 1.0)
+             O = O + vec3(s.x, s.y, s.y) * abs(f.x - f.y)
+             f = f + cos(f.yx * i + vec2(i, i) + vec2(time, time)) / i + vec2(0.7, 0.7)
+           end
+           O = tanh(7.0 * exp(0.0 - p.y * vec3(-1.0, 1.0, 2.0)) / O)
+           return vec4(O, 1.0)
+         end",
+    );
+    assert_eq!(
+        alpha_at(&pixels, SIZE, 32, 32),
+        255,
+        "the ported shader painted the node",
+    );
+    // Not a flat fill: a plasma that came out one colour everywhere would pass
+    // an alpha check and mean nothing.
+    let samples: Vec<[u8; 3]> = [(14, 20), (24, 30), (32, 32), (40, 42), (50, 46)]
+        .into_iter()
+        .map(|(x, y)| {
+            [
+                channel(&pixels, x, y, 0),
+                channel(&pixels, x, y, 1),
+                channel(&pixels, x, y, 2),
+            ]
+        })
+        .collect();
+    let distinct = samples
+        .iter()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    assert!(
+        distinct > 1,
+        "and it varies across the surface: {samples:?}"
+    );
+}
+
+#[test]
+#[ignore = "requires a GPU adapter"]
+pub(crate) fn a_helper_function_survives_to_the_gpu() {
+    require_gpu!();
+    // iq's palette, the most-copied helper in shader writing. Emitted as a real
+    // WGSL function ahead of the entry point, with its parameter type taken
+    // from the call because Lua had nowhere to declare one.
+    let pixels = shaded(
+        "function palette(t)
+           local a = vec3(0.5, 0.5, 0.5)
+           local d = vec3(0.263, 0.416, 0.557)
+           return a + a * cos(6.28318 * (t + d))
+         end
+
+         function fragment(uv, time, resolution)
+           return vec4(palette(uv.x), 1.0)
+         end",
+    );
+    assert_eq!(alpha_at(&pixels, SIZE, 32, 32), 255, "the node is painted");
+    // A palette sweeps: two points across it cannot be the same colour.
+    let left = channel(&pixels, 14, 32, 0);
+    let right = channel(&pixels, 50, 32, 0);
+    assert_ne!(left, right, "and the helper's gradient came through");
 }

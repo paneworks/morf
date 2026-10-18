@@ -19,7 +19,7 @@ fn log_writes_levels_and_stays_bounded() {
         )
         .unwrap();
     let logs = runtime.take_logs();
-    assert_eq!(logs.len(), crate::state::MAX_LOG_ENTRIES);
+    assert_eq!(logs.len(), crate::runtime::state::MAX_LOG_ENTRIES);
     assert_eq!(logs.last().unwrap().message, "line 2500");
     assert!(
         logs.iter()

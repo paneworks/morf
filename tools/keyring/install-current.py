@@ -15,7 +15,7 @@ if backup.is_symlink() or backup.is_file():backup.unlink()
 elif backup.exists():shutil.rmtree(backup)
 backup.mkdir(parents=True)
 files=[(repo/'target/dist/morf-keyring',home/'.local/bin/morf-keyring',0o755),
-       (repo/'library/lib/keyring_agent.lua',home/'.local/share/morf/library/lib/keyring_agent.lua',0o644),
+       (repo/'library/lib/services/keyring_agent.lua',home/'.local/share/morf/library/lib/services/keyring_agent.lua',0o644),
        (repo/'examples/shells/caelestia/shell/keyring_view.lua',shell/'keyring_view.lua',0o644),
        (repo/'examples/shells/caelestia/shell/keyring.lua',shell/'keyring.lua',0o644),
        (stage/'caelestia/shell/init.lua',init,0o644)]

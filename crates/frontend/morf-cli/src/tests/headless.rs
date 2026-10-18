@@ -11,8 +11,8 @@ use morf_value::IpcValue;
 use crate::runner_args::{Runner, parse_runner, parse_size};
 use crate::runners::is_error;
 use crate::test_runner::{Tally, run_spec};
+use morf_host::headless::input::{button, keysym, modifiers};
 use morf_host::headless::{Headless, LoadOptions};
-use morf_host::headless_input::{button, keysym, modifiers};
 
 fn load(source: &str) -> Headless {
     let mut options = LoadOptions::new(PathBuf::from("headless-test.lua"));
@@ -308,7 +308,7 @@ fn each_spec_file_starts_from_an_empty_home() {
         std::fs::write(path.join("settings.json"), "{\"left\":\"over\"}").unwrap();
     }
     std::fs::create_dir_all(base.join("bus")).unwrap();
-    morf_host::headless_env::empty_home(&base);
+    morf_host::headless::env::empty_home(&base);
     for folder in ["config", "data", "state", "cache"] {
         let path = base.join(folder);
         assert!(path.is_dir(), "{folder} is still there to write into");

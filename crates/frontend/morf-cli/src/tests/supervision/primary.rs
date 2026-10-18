@@ -5,10 +5,10 @@
 use super::outputless::{Started, call, named, output, spawner};
 use crate::config::LoadPolicy;
 use morf_app::Output;
-use morf_host::lock::{Worker, WorkerCommand, WorkerSender};
-use morf_host::outputless::{OUTPUTLESS, Outputless, outputless_screen};
-use morf_host::services::stop_workers;
-use morf_host::workers::{
+use morf_host::lock::{Worker, WorkerAlarm, WorkerCommand, WorkerSender};
+use morf_host::paint::outputless::{OUTPUTLESS, Outputless, outputless_screen};
+use morf_host::process::services::stop_workers;
+use morf_host::process::workers::{
     Handover, Seed, WorkerStart, desired_workers, elect_primary, hand_over_primary,
     handle_worker_command, reconcile_with,
 };
@@ -48,7 +48,7 @@ fn ask(worker: &Worker, verb: &str) -> WireValue {
         .recv_timeout(Duration::from_secs(2))
         .expect("answered")
         .expect("not refused");
-    morf_host::services::wire_ipc_value(&values[0])
+    morf_host::process::services::wire_ipc_value(&values[0])
 }
 
 fn number(value: WireValue) -> i64 {
@@ -218,13 +218,14 @@ fn logging_spawner<'a>(
             seed,
             handover: handover.clone(),
             primary,
+            alarm: WorkerAlarm::default(),
         };
         let (name, events) = (name.to_owned(), Arc::clone(events));
-        let screen_for_lua = morf_host::supervisor::lua_screen(screen);
+        let screen_for_lua = morf_host::process::supervisor::lua_screen(screen);
         let join = thread::spawn(move || {
             let mut runtime = Runtime::for_screen(Limits::default(), screen_for_lua.clone());
             runtime.set_primary(start.primary);
-            morf_host::supervisor::execute_config(
+            morf_host::process::supervisor::execute_config(
                 &mut runtime,
                 &start.path,
                 &start.source,
@@ -249,7 +250,7 @@ fn logging_spawner<'a>(
         });
         Worker {
             stop,
-            commands: WorkerSender::new(commands),
+            commands: WorkerSender::new(commands, WorkerAlarm::default()),
             join,
             screen: screen.clone(),
         }

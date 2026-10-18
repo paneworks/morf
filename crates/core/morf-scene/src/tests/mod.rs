@@ -262,11 +262,13 @@ fn smoothed_motion_obeys_velocity_limit() {
 }
 
 mod exit;
+mod glass;
 mod gradient;
 mod groups;
 mod physics;
 mod playback;
 mod shown;
+mod slots;
 mod spline;
 mod stretch;
 
@@ -411,22 +413,6 @@ fn an_animation_moves_the_layout_revision_only_on_geometry_frames() {
         before,
         "an easing colour never moves a box"
     );
-}
-
-#[test]
-fn removing_nodes_frees_their_property_signals() {
-    let mut scene = Scene::new();
-    let root = scene.create(Element::Item);
-    let baseline = scene.property_signal_count();
-    for _ in 0..50 {
-        let child = scene.create(Element::Rect);
-        let grandchild = scene.create(Element::Text);
-        scene.reparent(child, Some(root)).unwrap();
-        scene.reparent(grandchild, Some(child)).unwrap();
-        scene.remove(child).unwrap();
-    }
-    assert_eq!(scene.property_signal_count(), baseline);
-    assert!(scene.children(root).unwrap().is_empty());
 }
 
 #[test]

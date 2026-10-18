@@ -40,7 +40,8 @@
 # scheme.json to seed; without one caelestia keeps its built-in palette),
 # NIXGL (GL wrapper for the nix-built Quickshell, default nixGLIntel), NESTED_SCALE
 # (the visible window's output scale), POINTER_SIZE ("W H" of the virtual
-# pointer's area, default "1920 1080"), A11Y
+# pointer's area, default "1920 1080"), HYPR_EXTRA (Lua appended to the
+# nested Hyprland's config), A11Y
 # (an AT-SPI bus, enabled, on the private session bus).
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -53,6 +54,7 @@ OUT=$WORK/out/$KIND-$NAME; rm -rf "$OUT"; mkdir -p "$OUT"
 H=$WORK/home-$KIND; chmod -R u+w "$H" 2>/dev/null || true; rm -rf "$H"; mkdir -p "$H"
 UPHOME=$UPSTREAM/home
 WTYPE=${WTYPE:-$(command -v wtype || true)}
+NOTIFY_SEND=${NOTIFY_SEND:-$(command -v notify-send || echo /usr/bin/notify-send)}
 CAELESTIA=${CAELESTIA:-$WORK/caelestia}
 CAELESTIA_PKG=${CAELESTIA_PKG:-$WORK/caelestia-pkg}
 
@@ -145,6 +147,8 @@ hl.config({
 hl.layer_rule({ name = "impasto-desktop-blur", match = { namespace = "^(impasto-desktop)$" },
   blur = true, ignore_alpha = 0.15 })
 HYPR
+# HYPR_EXTRA: more of the nested config, as Lua (colour management, say).
+[ -n "${HYPR_EXTRA:-}" ] && printf '%s\n' "$HYPR_EXTRA" >> "$H/hyprland.lua"
 # MONITORS: the headless outputs, left to right, as WxH[@scale] each
 # ("3840x2160 3840x2160 3456x2160" for a desk of three 4K screens); one
 # 1920x1080 by default.
@@ -165,7 +169,9 @@ if [ -z "${RENDER_NODE:-}" ]; then
     RENDER_NODE=/dev/dri/$(basename "$d"); break
   done
 fi
-RUN=$(mktemp -d "${TMPDIR:-/tmp}/msXXXX"); chmod 700 "$RUN"
+# Always /tmp: a long TMPDIR (nix develop's) pushes Hyprland's socket path
+# past the unix limit.
+RUN=$(mktemp -d /tmp/msXXXX); chmod 700 "$RUN"
 # VISIBLE=1: the nested Hyprland opens as a window on the person's own
 # compositor, so they can watch -- and use -- the session under test.
 # (Under cage it would draw only headless: aquamarine brings up no windowed
@@ -313,7 +319,7 @@ if [ "$KIND" = caelestia ]; then
     for d in \$open_ones; do qsipc drawers toggle \$d >> \$OUT/hc.log; done
   }
   ipc() { asked ipc; qsipc "\$@" >> \$OUT/hc.log; }
-  notify() { asked notify; timeout 10 /usr/bin/notify-send "\$@" >> \$OUT/hc.log 2>&1; }
+  notify() { asked notify; timeout 10 "$NOTIFY_SEND" "\$@" >> \$OUT/hc.log 2>&1; }
 elif [ "$KIND" = upstream ]; then
   quickshell -p \$HOME/.config/quickshell > \$OUT/shell.log 2>&1 &
   S=\$!
@@ -326,9 +332,20 @@ else
   open() { asked open; timeout 10 "$REPO/target/release/morf" ipc call "\$@" >> \$OUT/hc.log 2>&1; }
   close() { asked close; timeout 10 "$REPO/target/release/morf" ipc call close >> \$OUT/hc.log 2>&1; }
   ipc() { asked ipc; timeout 10 "$REPO/target/release/morf" ipc call "\$@" >> \$OUT/hc.log 2>&1; }
-  notify() { asked notify; timeout 10 /usr/bin/notify-send "\$@" >> \$OUT/hc.log 2>&1; }
+  notify() { asked notify; timeout 10 "$NOTIFY_SEND" "\$@" >> \$OUT/hc.log 2>&1; }
 fi
 sleep \${BOOT:-15}
+# The shell under test: the one process of that name in this sandbox's own
+# runtime dir. The person's live shell shares the PID namespace.
+shell_pid() {
+  found=""
+  for p in \$(pgrep -x "\${1:-morf}"); do
+    grep -qzx "XDG_RUNTIME_DIR=\$XDG_RUNTIME_DIR" /proc/\$p/environ 2>/dev/null && found="\$found \$p"
+  done
+  set -- \$found
+  [ \$# -eq 1 ] || { echo "shell_pid: \$# matches in \$XDG_RUNTIME_DIR" >> \$OUT/hc.log; return 1; }
+  echo \$1
+}
 [ -n "$WTYPE" ] && { timeout \${TIMEOUT:-240} "$WTYPE" -s 400000 > /dev/null 2>&1 & KP=\$!; }
 . "$STEPS"
 kill \$S \${AW:-} \${AB:-} \${AR:-} 2>/dev/null

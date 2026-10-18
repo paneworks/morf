@@ -73,6 +73,16 @@ impl PipeWire {
             .clone()
             .map(|pw| Self { pw })
     }
+
+    /// Points libpipewire at its plugins, when it can be opened at all.
+    ///
+    /// # Safety
+    /// No other thread may be running.
+    pub(crate) unsafe fn prepare_environment() {
+        if let Some(backend) = Self::open() {
+            unsafe { thread::point_at_plugins(&backend.pw) };
+        }
+    }
 }
 
 enum Message {
@@ -246,6 +256,10 @@ struct Monitor {
     hold: Duration,
     /// Measured, and waiting for its time.
     held: VecDeque<(Instant, Update)>,
+    /// Whether the negotiated format is native-endian f32, the only one read.
+    float: bool,
+    /// Whether another format has been reported already.
+    warned: bool,
 }
 
 impl Monitor {

@@ -11,9 +11,9 @@
 
 use morf_scene::NodeHandle;
 
-use crate::api_focus::FocusReason;
-use crate::reactive_execute::execute_ipc_handler;
-use crate::types::LogLevel;
+use crate::api::input::focus::FocusReason;
+use crate::vm::execute::execute_ipc_handler;
+use crate::vm::types::LogLevel;
 use crate::{IpcValue, KeyModifiers, Runtime, UiEvent};
 
 const SPACE: u32 = 0x20;
@@ -26,7 +26,7 @@ impl Runtime {
     /// The scene's revision: it moves whenever a property is written, so
     /// a backend knows when a tree it built may be stale.
     pub fn scene_revision(&self) -> u64 {
-        self.reactive.borrow().revisions.scene_revision
+        self.reactive.borrow().revisions().scene()
     }
 
     /// Carries out a screen reader's `action` on `node`, under the surface
@@ -38,13 +38,13 @@ impl Runtime {
         action: &str,
         value: Option<IpcValue>,
     ) -> bool {
-        if !self.reactive.borrow().scene.contains(node) {
+        if !self.reactive.borrow().scene().contains(node) {
             return false;
         }
         let handler = self
             .reactive
             .borrow()
-            .events
+            .events()
             .handler(node, UiEvent::AccessibleAction);
         if let Some(handler) = handler {
             let args = vec![

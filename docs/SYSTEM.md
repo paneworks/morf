@@ -16,14 +16,17 @@ core       morf-layout    measuring and placing nodes                       scen
 graphics   morf-text      shaping, fonts, glyph rasters                     scene layout vector value
 graphics   morf-vector    outlines and SVG                                  image value
 graphics   morf-image     decoding, the image cache, XDG data dirs          value
-graphics   morf-render    painting a laid-out scene with wgpu               scene layout text vector
-                                                                            image value
+graphics   morf-paint     painting a laid-out scene into draw lists,        scene layout text vector
+                          damage tracking, CPU field/path raster            value
+graphics   morf-render    presenting draw lists with wgpu                   paint scene layout text
+                                                                            vector image value
 platform   morf-app       our own windowing: window kinds, one event type,  value
                           outputs, input, cursors; Wayland and headless
                           backends behind the Backend trait
-platform   morf-desktop   the desktop protocols on their own queue:         app value
+platform   morf-desktop   the desktop protocols behind the Desktop trait:   app value
                           capture, gamma, data-control clipboard,
-                          workspaces, foreign toplevels, idle, output power
+                          workspaces, foreign toplevels, idle, output
+                          power; on their own Wayland queue, or headless
 platform   morf-io        processes, files, sockets, D-Bus, HTTP            value
 platform   morf-audio     PipeWire                                          io value
 platform   morf-terminal  terminal emulation                                io scene value
@@ -38,7 +41,8 @@ engine     morf-lua       the Lua bindings (the morf.* tables) and the VM   ever
 frontend   morf-host      running a configuration: live windows, the loop,  everything above
                           the lock screen, the supervisor and workers,
                           capture, a11y, the app mode, the headless runner
-frontend   morf-cli       the command line, the runners, the test host      host value
+frontend   morf-cli       the command line, the runners, the test host      host app io lua scene
+                                                                            text value
 ```
 
 Three more rules hold everywhere: nothing below morf-lua names `luna`;
@@ -71,6 +75,10 @@ morf-desktop shares the Wayland connection but keeps its own event queue
 and registry: smithay's toolkit implements every handler on one state type,
 and a state type of another crate cannot be given them. Any read of the
 socket fills its queue too, so the host dispatches it after each wake.
+The host sees only the `Desktop` trait object and asks its
+`DesktopCapabilities` before each feature: a request for a protocol that
+is missing is taken from the queue and dropped, as a compositor without it
+would leave it.
 
 ## Handlers
 
@@ -86,11 +94,36 @@ backend: virtual outputs that configure every window opened, a virtual seat
 that carries a test's clicks and keys to the host's own pointer and key
 paths, and a clock that moves only when told (with the runtime's virtual
 one), so the same spec fires the same timers and frame callbacks every run.
+The desktop protocols there are morf-desktop's `HeadlessDesktop`: no
+capabilities, empty workspace and window lists, every request it is
+handed recorded.
 With no GPU the host's `Painter` is a text system: every window is laid
 out, observed and given its input region and frames, and nothing is drawn;
 `morf render` draws a surface on demand. What the host has not opened (a
 hidden panel) the runner lays out itself, so `morf check` finds its
 problems too.
+
+## What a configuration may do
+
+A configuration is a program, run with your privileges. Nothing sandboxes
+it: it can start programs (`morf.run`, `morf.spawn`), read and write your
+files, open sockets and fetch from the network, talk to the session and
+system buses, and ask PAM to authenticate. Run one you would not run as a
+shell script.
+
+The limits morf sets are against mistakes, not against intent. Instruction
+fuel stops a loop that never ends and a memory cap stops one that grows
+without end; caps on processes, watches and terminals stop a runaway
+request. None of them limits what a configuration may reach.
+
+`morf check`, `render` and `test` run the configuration too, side effects
+and all. `--no-dbus`, `--private-bus` and `--isolate` keep the bus and your
+settings out of the run ([TESTING.md](TESTING.md)); programs it starts and
+files outside its XDG folders are still real.
+
+A lock's IPC socket is reachable by any process of yours, so while it holds
+the session it answers only `status`, `keyboard_show` and `keyboard_hide`:
+unlocking is the configuration's own authentication, never a verb.
 
 ## Lua
 

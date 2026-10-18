@@ -28,6 +28,11 @@ pub(crate) use image::export_for;
 pub const FOURCC_XRGB8888: u32 = 0x3432_5258;
 /// `DRM_FORMAT_ARGB8888`: the same with alpha where the padding was.
 pub const FOURCC_ARGB8888: u32 = 0x3432_5241;
+/// `DRM_FORMAT_XBGR2101010`: a 32-bit word of red, green and blue from the
+/// low bits up, ten bits each, and two of padding.
+pub const FOURCC_XBGR2101010: u32 = 0x3033_4258;
+/// `DRM_FORMAT_ABGR16161616F`: half-float red, green, blue and alpha.
+pub const FOURCC_ABGR16161616F: u32 = 0x4834_4241;
 /// `DRM_FORMAT_MOD_LINEAR`: rows in order, no tiling.
 pub const MODIFIER_LINEAR: u64 = 0;
 
@@ -168,10 +173,23 @@ pub fn split_dev_t(dev: u64) -> (u32, u32) {
     (major as u32, minor as u32)
 }
 
-/// The Vulkan format a DRM fourcc is drawn as, for the two a capture offers.
+/// The Vulkan format a DRM fourcc is drawn as: the two a capture offers, and
+/// the deep ones a surface may present as.
 fn vulkan_format(fourcc: u32) -> Option<vk::Format> {
     match fourcc {
         FOURCC_XRGB8888 | FOURCC_ARGB8888 => Some(vk::Format::B8G8R8A8_UNORM),
+        FOURCC_XBGR2101010 => Some(vk::Format::A2B10G10R10_UNORM_PACK32),
+        FOURCC_ABGR16161616F => Some(vk::Format::R16G16B16A16_SFLOAT),
+        _ => None,
+    }
+}
+
+/// The wgpu format of the same memory as [`vulkan_format`].
+fn wgpu_format(fourcc: u32) -> Option<wgpu::TextureFormat> {
+    match fourcc {
+        FOURCC_XRGB8888 | FOURCC_ARGB8888 => Some(wgpu::TextureFormat::Bgra8Unorm),
+        FOURCC_XBGR2101010 => Some(wgpu::TextureFormat::Rgb10a2Unorm),
+        FOURCC_ABGR16161616F => Some(wgpu::TextureFormat::Rgba16Float),
         _ => None,
     }
 }
@@ -328,6 +346,22 @@ mod tests {
         // with the major in bits 8..20.
         let packed = (226u64 << 8) | (300 & 0xff) | ((300u64 >> 8) << 20);
         assert_eq!(split_dev_t(packed), (226, 300));
+    }
+
+    #[test]
+    fn the_deep_formats_match_wgpus_own() {
+        assert_eq!(
+            vulkan_format(FOURCC_XBGR2101010),
+            Some(vk::Format::A2B10G10R10_UNORM_PACK32)
+        );
+        assert_eq!(
+            wgpu_format(FOURCC_XBGR2101010),
+            Some(wgpu::TextureFormat::Rgb10a2Unorm)
+        );
+        assert_eq!(
+            wgpu_format(FOURCC_ABGR16161616F),
+            Some(wgpu::TextureFormat::Rgba16Float)
+        );
     }
 
     #[test]

@@ -1,16 +1,13 @@
 use luna::{
     Callback, CallbackReturn, Context, Function, Table, UserData, UserRef, Value as LuaValue,
 };
-use std::cell::RefCell;
 use std::rc::Rc;
 
-use morf_layout::TransformWatcher as NativeTransformWatcher;
-
-use crate::{runtime_helpers::*, scene_bindings::*, state::*};
+use crate::{api::ui::scene::*, runtime::helpers::*, runtime::state::*};
 
 pub(crate) fn install_transform_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let transform_revision = Callback::from_fn(&ctx, {
@@ -19,9 +16,8 @@ pub(crate) fn install_transform_api<'gc>(
             let watcher: UserRef<TransformWatcherToken> = stack.consume(ctx)?;
             let revision = state
                 .borrow()
-                .transform_watchers
-                .get(&watcher.id)
-                .map(|watcher| watcher.revision)
+                .transform_watchers()
+                .revision(watcher.id)
                 .ok_or_else(|| HostError("transform watcher is stale".into()))?;
             stack.replace(ctx, revision as i64);
             Ok(CallbackReturn::Return)
@@ -76,21 +72,22 @@ pub(crate) fn install_transform_api<'gc>(
             };
             let id = {
                 let mut state = state.borrow_mut();
-                if state.transform_watchers.len() >= 1_024 {
+                if state.transform_watchers().len() >= morf_runtime::layout::TransformWatches::LIMIT
+                {
                     return Err(HostError("transform watcher limit reached".into()).into());
                 }
                 state
-                    .scene
+                    .scene()
                     .element(a)
-                    .and_then(|_| state.scene.element(b))
+                    .and_then(|_| state.scene().element(b))
                     .map_err(|error| HostError(error.to_string()))?;
                 if let Some(common) = common_parent {
                     state
-                        .scene
+                        .scene()
                         .element(common)
                         .map_err(|error| HostError(error.to_string()))?;
-                    if !scene_node_in_subtree(&state.scene, common, a)
-                        || !scene_node_in_subtree(&state.scene, common, b)
+                    if !scene_node_in_subtree(state.scene(), common, a)
+                        || !scene_node_in_subtree(state.scene(), common, b)
                     {
                         return Err(HostError(
                             "transform watcher common_parent must contain both nodes".into(),
@@ -98,20 +95,12 @@ pub(crate) fn install_transform_api<'gc>(
                         .into());
                     }
                 }
-                let id = state.next_transform_watcher;
-                state.next_transform_watcher = id.wrapping_add(1);
-                state.transform_watchers.insert(
-                    id,
-                    LuaTransformWatcher {
-                        a,
-                        b,
-                        watcher: NativeTransformWatcher::new(a, b, common_parent),
-                        callback: callback.map(crate::vm::handler_store::register),
-                        revision: 0,
-                        pending: false,
-                    },
-                );
-                id
+                state.transform_watchers_mut().add(
+                    a,
+                    b,
+                    common_parent,
+                    callback.map(crate::vm::handler_store::register),
+                )
             };
             let value = UserData::new_static(&ctx, TransformWatcherToken { id });
             value.set_metatable(ctx, Some(ctx.fetch(&transform_metatable)));

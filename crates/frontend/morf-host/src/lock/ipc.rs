@@ -3,16 +3,17 @@
 //! A lock runs alongside the shell on the same `WAYLAND_DISPLAY`, so it
 //! cannot take the shell's socket. It binds `<display>-lock.sock` beside it,
 //! which `morf list` shows like any other instance and `morf --lock ipc call
-//! ...` (or `morf -i <display>-lock ...`) reaches.
+//! ...` (or `morf -i <display>-lock ...`) reaches. While the lock holds the
+//! session it answers only the verbs in [`LOCKED_VERBS`].
 
 use morf_io::{IpcIncoming, IpcReply, IpcRequest, IpcServer, IpcValue as WireValue};
-use morf_lua::{LogEntry, Runtime};
+use morf_lua::{LogEntry, Runtime, SessionLockState};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Instant;
 
-use crate::services::{lua_ipc_value, wire_ipc_value};
+use crate::process::services::{lua_ipc_value, wire_ipc_value};
 
 /// The lock's socket, and what reaches it.
 pub struct LockIpc {
@@ -28,7 +29,7 @@ impl LockIpc {
     /// Binds the lock's socket. Its requests ring the loop's wake, so a call
     /// is answered at once rather than at the next fallback tick.
     pub fn bind(config: &Path) -> Result<Self, String> {
-        let socket = crate::socket_path::lock_socket_path()?;
+        let socket = crate::process::socket_path::lock_socket_path()?;
         let (tx, forwarded) = mpsc::channel();
         let server = IpcServer::bind(&socket, tx).map_err(|error| {
             if error.kind() == std::io::ErrorKind::AddrInUse {
@@ -46,12 +47,13 @@ impl LockIpc {
             .map_err(|error| format!("could not inspect lock IPC socket: {error}"))?
             .uid();
         let (ring, requests) = mpsc::channel();
+        let waker = morf_io::waker();
         std::thread::spawn(move || {
             while let Ok(request) = forwarded.recv() {
                 if ring.send(request).is_err() {
                     break;
                 }
-                morf_io::wake_all();
+                waker.wake();
             }
         });
         Ok(Self {
@@ -89,14 +91,25 @@ pub fn answer_lock_request(
     started: Instant,
 ) -> (IpcReply, bool) {
     match request {
+        IpcRequest::Call { target, .. }
+            if held(runtime) && !LOCKED_VERBS.contains(&target.as_str()) =>
+        {
+            (
+                IpcReply::refused(format!(
+                    "`{target}` is not answered while the session is locked"
+                )),
+                false,
+            )
+        }
         IpcRequest::Call { target, args } => {
             let args = args.iter().map(lua_ipc_value).collect::<Vec<_>>();
-            match runtime.call_ipc(target, &args) {
+            let (result, changed) = runtime.call_ipc_with_repaint(target, &args);
+            match result {
                 Ok(values) => (
                     IpcReply::success(values.iter().map(wire_ipc_value).collect()),
-                    true,
+                    changed,
                 ),
-                Err(error) => (IpcReply::refused(error.to_string()), false),
+                Err(error) => (IpcReply::refused(error.to_string()), changed),
             }
         }
         IpcRequest::Verbs => (strings(runtime.ipc_verbs()), false),
@@ -122,6 +135,20 @@ pub fn answer_lock_request(
             false,
         ),
     }
+}
+
+/// The only verbs a lock answers while it holds the session: any process of
+/// the user reaches the socket, so a verb the configuration exposed that
+/// unlocks must not be one of them. Unlocking is authentication's, inside
+/// the lock.
+pub const LOCKED_VERBS: &[&str] = &["status", "keyboard_show", "keyboard_hide"];
+
+/// Whether the lock holds the session, or has asked to.
+fn held(runtime: &Runtime) -> bool {
+    matches!(
+        runtime.session_lock_state(),
+        SessionLockState::Locked | SessionLockState::Pending
+    )
 }
 
 fn strings(lines: Vec<String>) -> IpcReply {

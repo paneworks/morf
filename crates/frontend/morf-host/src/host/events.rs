@@ -1,21 +1,21 @@
 use morf_app::Backend;
 use morf_lua::Runtime;
-use morf_render::RenderEngine;
+use morf_paint::RenderEngine;
 
 use morf_app::{Event, PRIMARY_LAYER, WindowId, physical_size};
 use std::sync::mpsc;
 
 use crate::host::windows::Kind;
-use crate::render_target::surface_backend;
+use crate::paint::render_target::surface_backend;
 use crate::{
-    lock::*, pacing::*, paint::*, surface_keys::*, surface_layers::*, surface_pointer::*,
-    surfaces::*,
+    host::layers::*, host::surfaces::*, input::keys::*, input::pointer::*, lock::*,
+    paint::pacing::*, paint::*,
 };
 
 pub fn handle_surface_event(
     runtime: &mut Runtime,
     client: &mut dyn Backend,
-    desktop: Option<&mut morf_desktop::Desktop>,
+    desktop: &mut dyn morf_desktop::Desktop,
     state: &mut SurfaceEventState,
     event: Event,
     tx: Option<&mpsc::Sender<SupervisorMessage>>,
@@ -23,7 +23,7 @@ pub fn handle_surface_event(
 ) -> Result<bool, String> {
     let mut repaint = false;
     // Then selections and drags, which need the layout and the client.
-    let event = match crate::surface_drag::handle_data_event(runtime, client, desktop, state, event)
+    let event = match crate::input::drag::handle_data_event(runtime, client, desktop, state, event)
     {
         Ok(repaint) => return repaint,
         Err(event) => event,
@@ -35,7 +35,7 @@ pub fn handle_surface_event(
     };
     let event = match handle_pointer_event(
         runtime,
-        &mut crate::pointer_cursor::BackendCursor(&mut *client),
+        &mut crate::input::cursor::BackendCursor(&mut *client),
         &mut state.input,
         &layouts,
         event,
@@ -46,6 +46,7 @@ pub fn handle_surface_event(
     match event {
         Event::Configure { id, .. } | Event::Scale { id, .. } if id == PRIMARY_LAYER => {
             let (width, height) = client.physical_size();
+            crate::paint::cover::before_resize(state, client, name, (width, height));
             state.painter.resize(width, height);
             for surface in state
                 .windows
@@ -83,7 +84,7 @@ pub fn handle_surface_event(
         }
         Event::Frame { id, .. } => layer_surface_frame(runtime, client, state, id)?,
         Event::Closed { id } if id == PRIMARY_LAYER => {
-            return Err(crate::supervisor::SURFACE_CLOSED.to_owned());
+            return Err(crate::process::supervisor::SURFACE_CLOSED.to_owned());
         }
         Event::Closed { id } => layer_surface_closed(runtime, client, state, id),
         Event::Clipboard { text } => {
@@ -304,8 +305,8 @@ fn surface_window(surface: morf_app::WindowId) -> Option<Option<u64>> {
     use morf_app::WindowId;
     match surface {
         WindowId::Layer(morf_app::PRIMARY_LAYER) => Some(None),
-        WindowId::Layer(layer) => crate::surface_layers::window_surface_id(layer)
-            .filter(|_| layer < crate::surface_layers::RESERVE_LAYER_BASE)
+        WindowId::Layer(layer) => crate::host::layers::window_surface_id(layer)
+            .filter(|_| layer < crate::host::layers::RESERVE_LAYER_BASE)
             .map(Some),
         WindowId::Popup(id) | WindowId::Toplevel(id) => Some(Some(id)),
         WindowId::Lock(_) => None,

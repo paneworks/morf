@@ -7,9 +7,9 @@
 use morf_runtime::editing::{EditHost, Editing};
 use morf_scene::{NodeHandle, Scene, Value as SceneValue};
 
-use crate::scene_bindings::assign_scene_property;
-use crate::state::ReactiveState;
-use crate::{surface_types::*, types::LogLevel};
+use crate::api::ui::scene::assign_scene_property;
+use crate::runtime::state::ReactiveState;
+use crate::{runtime::host_types::*, vm::types::LogLevel};
 
 pub(crate) use morf_runtime::editing::{
     KeyOutcome, blink, drag, history, input_method_commit, insert, key, next_blink, observe_shaped,
@@ -20,15 +20,15 @@ pub use morf_runtime::events::KeyModifiers;
 
 impl EditHost for ReactiveState {
     fn scene(&self) -> &Scene {
-        &self.scene
+        self.engine().scene()
     }
 
     fn editing(&self) -> &Editing {
-        &self.editing
+        self.engine().editing()
     }
 
     fn editing_mut(&mut self) -> &mut Editing {
-        &mut self.editing
+        self.engine_mut().editing_mut()
     }
 
     fn assign(
@@ -45,23 +45,25 @@ impl EditHost for ReactiveState {
     }
 
     fn clipboard_text(&self) -> Option<String> {
-        self.requests.clipboard_text.clone()
+        self.requests().clipboard_text.clone()
     }
 
     fn copy(&mut self, text: String) {
-        self.requests.clipboard_text = Some(text.clone());
-        self.requests.clipboard_requests.push(ClipboardRequest {
-            data: text.into_bytes(),
-            mime: None,
-            primary: false,
-        });
+        self.requests_mut().clipboard_text = Some(text.clone());
+        self.requests_mut()
+            .clipboard_requests
+            .push(ClipboardRequest {
+                data: text.into_bytes(),
+                mime: None,
+                primary: false,
+            });
     }
 
     fn text_input(&mut self, request: TextInputRequest) {
-        self.requests.text_input_requests.push(request);
+        self.requests_mut().text_input_requests.push(request);
     }
 
     fn enable_text_input(&mut self) {
-        self.requests.text_input_enable_requested = true;
+        self.requests_mut().text_input_enable_requested = true;
     }
 }

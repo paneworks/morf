@@ -195,7 +195,7 @@ impl<H> Hub<H> {
                             timed_out: false,
                             truncated: false,
                         });
-                        morf_io::wake_all();
+                        morf_io::waker().wake();
                     }
                 }
             }

@@ -239,8 +239,39 @@ return function(theme)
 
   -- --------------------------------------------------------- containers --
 
-  --- Non-interactive surfaces.
-  M.surface = ui.Rect
+  --- The names `surface` takes as a `style`, in order.
+  M.surface_styles = {}
+  for name in pairs(theme.surfaces) do M.surface_styles[#M.surface_styles + 1] = name end
+  table.sort(M.surface_styles)
+
+  local function surface_style(name)
+    local style = theme.surfaces[name]
+    if style == nil then
+      error(("no surface style %q; there are %s"):format(tostring(name), table.concat(M.surface_styles, ", ")), 3)
+    end
+    return style
+  end
+
+  --- Non-interactive surfaces: a Rect, or with `style` one of the named
+  --- surface styles (`surface_styles`), which fills `glass` and a clear
+  --- `color` unless the props give their own.
+  function M.surface(props)
+    if props.style == nil then return ui.Rect(props) end
+    local style = surface_style(props.style)
+    local node = {}
+    for key, value in pairs(props) do
+      if key ~= "style" then node[key] = value end
+    end
+    if node.glass == nil then
+      node.glass = {}
+      for key, value in pairs(style.glass) do node.glass[key] = value end
+    end
+    if node.color == nil then node.color = "#00000000" end
+    return ui.Rect(node)
+  end
+
+  --- The ink that reads on a named surface style.
+  function M.surface_ink(name) return morf.color(surface_style(name).ink) end
 
   -- While a collector is set, a card is an item whose ground is a layer of
   -- a distance field the caller builds (`{ node, radius, color, shape }`).

@@ -7,20 +7,21 @@
 //! The signal is made the first time a binding reads the model, so a model
 //! nothing computes from costs the graph nothing.
 
+use crate::runtime::state::StateCell;
 use luna::Context;
 use morf_scene::ListModel;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{
-    reactive_bindings::flush_reactive, scene_bindings::HostError, serialization::scene_to_lua,
-    state::ReactiveState, types::*,
+    api::ui::bindings::flush_reactive, api::ui::scene::HostError, runtime::state::ReactiveState,
+    vm::loader::scene_to_lua, vm::types::*,
 };
 
 /// Notes that the running binding read `model`.
 pub(crate) fn track_model_read(state: &mut ReactiveState, model: &Rc<RefCell<ListModel>>) {
-    let signal = state.model_revisions.signal(model);
-    if let Some(active) = &mut state.active {
+    let signal = state.model_revisions().signal(model);
+    if let Some(active) = state.tracking_mut().capture() {
         match signal {
             Some(signal) => {
                 active.reads.insert(signal);
@@ -41,19 +42,13 @@ pub(crate) fn track_model_read(state: &mut ReactiveState, model: &Rc<RefCell<Lis
 /// The revision signal of each model the finished binding read, made now
 /// if this is the first binding to read it, for the binding to depend on.
 pub(crate) fn model_read_signals(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     models: Vec<Rc<RefCell<ListModel>>>,
 ) -> Result<Vec<morf_scene::reactive::SignalId>, String> {
     let mut signals = Vec::with_capacity(models.len());
     let mut state = state.borrow_mut();
-    let state = &mut *state;
     for model in models {
-        signals.push(
-            state
-                .engine
-                .model_revisions
-                .signal_or_make(&mut state.engine.reactive, &model)?,
-        );
+        signals.push(state.model_signal(&model)?);
     }
     Ok(signals)
 }
@@ -64,22 +59,16 @@ pub(crate) fn bump_model_revision(
     state: &mut ReactiveState,
     model: &Rc<RefCell<ListModel>>,
 ) -> Result<bool, String> {
-    let Some((signal, value)) = state.model_revisions.bump(model) else {
+    let Some((signal, value)) = state.model_revisions_mut().bump(model) else {
         return Ok(false);
     };
-    if let Some(active) = &mut state.active {
+    if let Some(active) = state.tracking_mut().capture() {
         active.writes.push((signal, value.clone()));
+        state.reactive_mut().mirror(signal, value);
     } else {
-        state
-            .reactive
-            .graph
-            .as_mut()
-            .ok_or_else(|| "reactive graph is already running".to_owned())?
-            .write(signal, value.clone())
-            .map_err(|error| error.to_string())?;
-        state.flush_pending = true;
+        state.reactive_mut().write(signal, value)?;
+        state.tracking_mut().defer_flush();
     }
-    state.reactive.values.insert(signal, value);
     Ok(true)
 }
 
@@ -87,7 +76,7 @@ pub(crate) fn bump_model_revision(
 /// binding is running, which flush on their own -- the same rule a signal
 /// write follows.
 pub(crate) fn model_changed(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
     model: &Rc<RefCell<ListModel>>,
@@ -95,10 +84,10 @@ pub(crate) fn model_changed(
     let flush = {
         let mut state = state.borrow_mut();
         let bumped = bump_model_revision(&mut state, model)?;
-        bumped && state.active.is_none() && state.handler_depth == 0
+        bumped && !state.tracking().capturing() && !state.tracking().in_handler()
     };
     if flush {
-        state.borrow_mut().flush_pending = false;
+        state.borrow_mut().tracking_mut().cancel_flush();
         flush_reactive(state, ctx, limits)?;
     }
     Ok(())
@@ -122,7 +111,7 @@ pub(crate) fn model_row<'gc>(
 /// Replaces a model's rows, matched by `key` or by value, and bumps its
 /// revision when that changed anything.
 pub(crate) fn replace_model_rows(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
     model: &Rc<RefCell<ListModel>>,

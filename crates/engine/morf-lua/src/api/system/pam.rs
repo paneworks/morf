@@ -10,11 +10,11 @@
 //! and dropped "touch the sensor" on the floor.
 
 use luna::{Callback, CallbackReturn, Closure, Context, Table, UserData, UserRef};
-use morf_system::{PamAuthenticator, PamSession};
+use morf_system::{PamAuthenticator, PamSession, Secret, Zeroizing};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::{scene_bindings::HostError, state::*};
+use crate::{api::ui::scene::HostError, runtime::state::*, vm::permissions::gated};
 
 /// How many conversations one configuration may hold open.
 ///
@@ -25,7 +25,7 @@ const MAX_PAM_SESSIONS: usize = 8;
 /// Installs `morf.pam`.
 pub(crate) fn install_pam_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let pam = Table::new(&ctx);
@@ -34,26 +34,30 @@ pub(crate) fn install_pam_api<'gc>(
     // callback. `unlock` is the one difference between the two entries -- a
     // success on the second also lifts the session lock, which is the lock
     // screen's whole reason to call it.
-    for (name, unlock_on_success) in [("authenticate", false), ("authenticate_unlock", true)] {
+    for (name, api, unlock_on_success) in [
+        ("authenticate", "morf.pam.authenticate", false),
+        ("authenticate_unlock", "morf.pam.authenticate_unlock", true),
+    ] {
         let pam_state = Rc::clone(&state);
-        let entry = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        let entry = gated(ctx, &state, "pam", api, move |ctx, _, mut stack| {
             let (service, username, password, callback, confdir): (
                 String,
                 String,
-                String,
+                luna::String,
                 Closure,
                 Option<String>,
             ) = stack.consume(ctx)?;
-            pam_state.borrow_mut().pam_tasks.push(PendingPam {
-                task: PamAuthenticator::authenticate_async(
-                    service,
-                    username,
-                    password,
-                    confdir.as_deref(),
-                ),
-                callback: crate::vm::handler_store::register(ctx.stash(callback)),
-                unlock_on_success,
-            });
+            let task = PamAuthenticator::authenticate_async(
+                &service,
+                &username,
+                secret(password),
+                confdir.as_deref(),
+            );
+            let callback = crate::vm::handler_store::register(ctx.stash(callback));
+            pam_state
+                .borrow_mut()
+                .auth_mut()
+                .check(task, callback, unlock_on_success);
             Ok(CallbackReturn::Return)
         });
         pam.set_field(ctx, name, entry);
@@ -64,34 +68,32 @@ pub(crate) fn install_pam_api<'gc>(
     let session_on_message = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (session, callback): (UserRef<PamSessionToken>, Closure) = stack.consume(ctx)?;
         let mut state = on_message_state.borrow_mut();
-        if state.pam_sessions.len() >= MAX_PAM_SESSIONS {
+        if state.auth().session_count() >= MAX_PAM_SESSIONS {
             return Err(HostError("PAM session limit reached".into()).into());
         }
         // One listener per session, replacing rather than adding: two
         // listeners answering one prompt is one answer thrown away.
-        let existing = state
-            .pam_sessions
-            .iter()
-            .position(|entry| Rc::ptr_eq(&entry.session, &session.session));
-        let entry = PendingPamSession {
-            session: Rc::clone(&session.session),
-            callback: crate::vm::handler_store::register(ctx.stash(callback)),
-        };
-        match existing {
-            Some(index) => state.pam_sessions[index] = entry,
-            None => state.pam_sessions.push(entry),
-        }
+        let callback = crate::vm::handler_store::register(ctx.stash(callback));
+        state
+            .auth_mut()
+            .listen_to_session(&session.session, callback);
         Ok(CallbackReturn::Return)
     });
-    let session_respond = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (session, answer): (UserRef<PamSessionToken>, String) = stack.consume(ctx)?;
-        // `false` rather than an error, because a late answer is ordinary: the
-        // person pressed Enter as the module gave up, and the configuration
-        // should learn that its answer went nowhere rather than crash.
-        let taken = session.session.borrow_mut().respond(answer);
-        stack.replace(ctx, taken);
-        Ok(CallbackReturn::Return)
-    });
+    let session_respond = gated(
+        ctx,
+        &state,
+        "pam",
+        "pam session:respond",
+        |ctx, _, mut stack| {
+            let (session, answer): (UserRef<PamSessionToken>, luna::String) = stack.consume(ctx)?;
+            // `false` rather than an error, because a late answer is ordinary: the
+            // person pressed Enter as the module gave up, and the configuration
+            // should learn that its answer went nowhere rather than crash.
+            let taken = session.session.borrow_mut().respond(secret(answer));
+            stack.replace(ctx, taken);
+            Ok(CallbackReturn::Return)
+        },
+    );
     let session_cancel = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let session: UserRef<PamSessionToken> = stack.consume(ctx)?;
         // The listener still gets the final `finished` on the next poll; the
@@ -107,19 +109,31 @@ pub(crate) fn install_pam_api<'gc>(
     session_metatable.set_field(ctx, "__index", session_methods);
     let session_metatable = ctx.stash(session_metatable);
 
-    let session = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (service, username, confdir): (String, String, Option<String>) = stack.consume(ctx)?;
-        let started = PamSession::start(&service, &username, confdir.as_deref());
-        let userdata = UserData::new_static(
-            &ctx,
-            PamSessionToken {
-                session: Rc::new(RefCell::new(started)),
-            },
-        );
-        userdata.set_metatable(ctx, Some(ctx.fetch(&session_metatable)));
-        stack.replace(ctx, userdata);
-        Ok(CallbackReturn::Return)
-    });
+    let session = gated(
+        ctx,
+        &state,
+        "pam",
+        "morf.pam.session",
+        move |ctx, _, mut stack| {
+            let (service, username, confdir): (String, String, Option<String>) =
+                stack.consume(ctx)?;
+            let started = PamSession::start(&service, &username, confdir.as_deref());
+            let userdata = UserData::new_static(
+                &ctx,
+                PamSessionToken {
+                    session: Rc::new(RefCell::new(started)),
+                },
+            );
+            userdata.set_metatable(ctx, Some(ctx.fetch(&session_metatable)));
+            stack.replace(ctx, userdata);
+            Ok(CallbackReturn::Return)
+        },
+    );
     pam.set_field(ctx, "session", session);
     morf.set_field(ctx, "pam", pam);
+}
+
+/// Copies a Lua string straight into a buffer that is wiped when dropped.
+fn secret(text: luna::String<'_>) -> Secret {
+    Zeroizing::new(text.as_bytes().to_vec())
 }

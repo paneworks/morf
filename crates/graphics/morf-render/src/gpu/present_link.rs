@@ -23,7 +23,9 @@
 //! nothing here, and are left out -- they would need submissions of their own
 //! outside wgpu's ordering.
 
-use std::os::fd::{AsFd, AsRawFd, FromRawFd, IntoRawFd, OwnedFd, RawFd};
+mod sync_file;
+
+use std::os::fd::{AsFd, AsRawFd, FromRawFd, IntoRawFd, OwnedFd};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
@@ -32,9 +34,46 @@ use ash::vk;
 use morf_value::present::{BufferSink, Damage, DmabufPlane, SinkBuffer};
 use wgpu::hal::api::Vulkan;
 
-use super::dmabuf::{self, DmabufImage, FOURCC_ARGB8888, Purpose};
+use super::depth::PresentFormat;
+use super::dmabuf::{self, DmabufImage, Purpose};
 use super::present::Slot;
 use crate::DamageRect;
+use sync_file::{
+    DMA_BUF_SYNC_WRITE, export_sync_file, import_sync_file, signalled, wait_signalled,
+};
+
+/// The modifiers both the window and the device take `format` buffers with.
+///
+/// Linear whenever both sides can: a presented buffer is never drawn into,
+/// only copied to (the frame is drawn in a target of its own), so tiling it
+/// buys nothing, and linear is the one layout every importer reads the same
+/// way. A tiled one, left to the driver to pick, came out garbled under
+/// Hyprland on a Kaby Lake laptop -- blocks of noise, text in pieces --
+/// where a swapchain was fine.
+fn agreed(device: &wgpu::Device, sink: &dyn BufferSink, format: PresentFormat) -> Vec<u64> {
+    let theirs = sink.modifiers(format.fourcc());
+    let ours = dmabuf::modifiers_for_purpose(device, format.fourcc(), Purpose::PRESENT);
+    let shared: Vec<u64> = ours
+        .iter()
+        .copied()
+        .filter(|modifier| theirs.contains(modifier))
+        .filter(|modifier| dmabuf::modifier_wanted(*modifier))
+        .collect();
+    let modifiers = if shared.contains(&dmabuf::MODIFIER_LINEAR) {
+        vec![dmabuf::MODIFIER_LINEAR]
+    } else {
+        shared
+    };
+    if std::env::var_os("MORF_GPU_LOG").is_some() {
+        eprintln!(
+            "morf: gpu: {format:?} present modifiers: ours {}, the compositor's {}, used {}",
+            dmabuf::modifier_names(&ours),
+            dmabuf::modifier_names(&theirs),
+            dmabuf::modifier_names(&modifiers),
+        );
+    }
+    modifiers
+}
 
 /// A slot's dmabuf, the window system's buffer for it, and its two
 /// semaphores.
@@ -71,9 +110,10 @@ impl Drop for SlotLink {
 
 /// The window a ring presents to, through the sink its backend gave.
 pub(crate) struct BufferLink {
-    sink: Box<dyn BufferSink>,
-    /// Modifiers both the window system and the device take.
-    modifiers: Vec<u64>,
+    /// `None` only once [`BufferLink::into_sink`] took it.
+    sink: Option<Box<dyn BufferSink>>,
+    /// Modifiers both the window system and the device take, by format.
+    modifiers: [(PresentFormat, Vec<u64>); 3],
     /// Buffers of an old size, kept until the compositor lets go of them.
     retired: Vec<Slot>,
     device: wgpu::Device,
@@ -92,34 +132,8 @@ impl BufferLink {
         if !support.is_some_and(|support| support.sync_file) {
             return Err("the device cannot export dmabufs with sync files".to_owned());
         }
-        let theirs = sink.modifiers(FOURCC_ARGB8888);
-        let ours = dmabuf::modifiers_for_purpose(device, FOURCC_ARGB8888, Purpose::PRESENT);
-        let shared: Vec<u64> = ours
-            .iter()
-            .copied()
-            .filter(|modifier| theirs.contains(modifier))
-            .filter(|modifier| dmabuf::modifier_wanted(*modifier))
-            .collect();
-        // Linear whenever both sides can: a presented buffer is never drawn
-        // into, only copied to (the frame is drawn in a target of its own),
-        // so tiling it buys nothing, and linear is the one layout every
-        // importer reads the same way. A tiled one, left to the driver to
-        // pick, came out garbled under Hyprland on a Kaby Lake laptop --
-        // blocks of noise, text in pieces -- where a swapchain was fine.
-        let modifiers = if shared.contains(&dmabuf::MODIFIER_LINEAR) {
-            vec![dmabuf::MODIFIER_LINEAR]
-        } else {
-            shared
-        };
-        if std::env::var_os("MORF_GPU_LOG").is_some() {
-            eprintln!(
-                "morf: gpu: present modifiers: ours {}, the compositor's {}, used {}",
-                dmabuf::modifier_names(&ours),
-                dmabuf::modifier_names(&theirs),
-                dmabuf::modifier_names(&modifiers),
-            );
-        }
-        if modifiers.is_empty() {
+        let modifiers = PresentFormat::ALL.map(|format| (format, agreed(device, &*sink, format)));
+        if modifiers[0].1.is_empty() {
             return Err("the compositor and the GPU agree on no ARGB8888 modifier".to_owned());
         }
         let hal = unsafe { device.as_hal::<Vulkan>() }.ok_or("the device is not Vulkan")?;
@@ -130,7 +144,7 @@ impl BufferLink {
         );
         drop(hal);
         Ok(Self {
-            sink,
+            sink: Some(sink),
             modifiers,
             retired: Vec::new(),
             device: device.clone(),
@@ -139,10 +153,18 @@ impl BufferLink {
         })
     }
 
+    /// The window's sink, for a link on another device: the buffers made
+    /// here go with this link, the window stays.
+    pub(crate) fn into_sink(mut self) -> Option<Box<dyn BufferSink>> {
+        self.sink.take()
+    }
+
     /// Hears whatever the window system sent the sink: releases, mostly.
     /// The host's loop reads the socket; this only takes what it read.
     pub(crate) fn dispatch(&mut self) {
-        self.sink.dispatch();
+        if let Some(sink) = &mut self.sink {
+            sink.dispatch();
+        }
         self.retired
             .retain(|slot| slot.busy.load(Ordering::Acquire));
     }
@@ -151,26 +173,55 @@ impl BufferLink {
     /// passes -- at least once, without waiting, when it already has.
     /// Returns whether anything did.
     pub(crate) fn wait_release(&mut self, deadline: Instant) -> bool {
-        let heard = self.sink.wait(deadline);
+        let heard = self.sink.as_mut().is_some_and(|sink| sink.wait(deadline));
         if heard {
             self.dispatch();
         }
         heard
     }
 
-    /// A new buffer of `size`, exported, made the window system's.
+    /// What the window system can be told about the buffers' colours.
+    pub(crate) fn color_support(&self) -> morf_value::present::ColorSupport {
+        self.sink
+            .as_ref()
+            .map(|sink| sink.color_support())
+            .unwrap_or_default()
+    }
+
+    /// Says how the buffers presented from the next commit on are encoded.
+    pub(crate) fn set_encoding(
+        &mut self,
+        encoding: morf_value::present::Encoding,
+    ) -> Result<(), String> {
+        let sink = self.sink.as_mut().ok_or("the link has no window")?;
+        sink.set_encoding(encoding)
+    }
+
+    /// Whether the window and the device agree on a modifier for `format`.
+    pub(crate) fn takes(&self, format: PresentFormat) -> bool {
+        self.modifiers_of(format).is_some()
+    }
+
+    fn modifiers_of(&self, format: PresentFormat) -> Option<&[u64]> {
+        self.modifiers
+            .iter()
+            .find(|(each, modifiers)| *each == format && !modifiers.is_empty())
+            .map(|(_, modifiers)| modifiers.as_slice())
+    }
+
+    /// A new `format` buffer of `size`, exported, made the window system's.
     pub(crate) fn allocate(
         &mut self,
         device: &wgpu::Device,
         size: (u32, u32),
+        format: PresentFormat,
     ) -> Result<Slot, String> {
-        let image = dmabuf::export_for(
-            device,
-            size,
-            FOURCC_ARGB8888,
-            &self.modifiers,
-            Purpose::PRESENT,
-        )?;
+        let modifiers = self
+            .modifiers_of(format)
+            .map(<[u64]>::to_vec)
+            .ok_or_else(|| format!("the compositor takes no {format:?} buffer"))?;
+        let image =
+            dmabuf::export_for(device, size, format.fourcc(), &modifiers, Purpose::PRESENT)?;
         let exportable = |raw: &ash::Device| {
             let mut export = vk::ExportSemaphoreCreateInfo::default()
                 .handle_types(vk::ExternalSemaphoreHandleTypeFlags::SYNC_FD);
@@ -200,7 +251,11 @@ impl BufferLink {
             stride: image.plane.stride,
             modifier: image.modifier,
         };
-        let buffer = match self.sink.import(plane, size, FOURCC_ARGB8888, busy.clone()) {
+        let imported = match &mut self.sink {
+            Some(sink) => sink.import(plane, size, format.fourcc(), busy.clone()),
+            None => Err("the link has no window".to_owned()),
+        };
+        let buffer = match imported {
             Ok(buffer) => buffer,
             Err(error) => {
                 unsafe {
@@ -264,10 +319,13 @@ impl BufferLink {
                     None,
                     vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
                 ),
-                Err(_) => {
+                Err(error) => {
                     // Waited for here instead; it is almost always done.
+                    fallback_once(&SEMAPHORE_FALLBACK, || {
+                        format!("the driver would not import a fence ({error})")
+                    });
                     let fence = unsafe { OwnedFd::from_raw_fd(fd) };
-                    wait_signalled(&fence, 1000);
+                    wait_signalled(&fence, FENCE_WAIT_MS);
                 }
             }
         }
@@ -294,12 +352,25 @@ impl BufferLink {
                 if !import_sync_file(link.image.plane.fd.as_raw_fd(), &fence) {
                     // A kernel without the import: the compositor would read
                     // a frame half drawn, so it is waited for here instead.
-                    wait_signalled(&fence, 1000);
+                    fallback_once(&IMPORT_FALLBACK, || {
+                        format!(
+                            "the kernel refused DMA_BUF_IOCTL_IMPORT_SYNC_FILE ({})",
+                            std::io::Error::last_os_error()
+                        )
+                    });
+                    wait_signalled(&fence, FENCE_WAIT_MS);
                 }
             }
             Ok(_) => {}
             Err(_) => {
-                let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+                super::present_stalls::count(&super::present_stalls::FENCE_WAITS);
+                let waited = self.device.poll(wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: Some(std::time::Duration::from_millis(FENCE_WAIT_MS as u64)),
+                });
+                if waited.is_err() {
+                    super::present_stalls::count(&super::present_stalls::FENCE_TIMEOUTS);
+                }
             }
         }
         if super::present::log_wanted() {
@@ -318,13 +389,17 @@ impl BufferLink {
                 height: rect.height,
             })
             .collect();
-        self.sink.present(link.buffer.as_ref(), &damage);
+        if let Some(sink) = &mut self.sink {
+            sink.present(link.buffer.as_ref(), &damage);
+        }
     }
 
     /// Commits with the buffer already there: a frame drawn into no buffer
     /// still delivers the frame callback the host asked for.
     pub(crate) fn commit_without_buffer(&mut self) {
-        self.sink.commit();
+        if let Some(sink) = &mut self.sink {
+            sink.commit();
+        }
     }
 }
 
@@ -336,63 +411,18 @@ impl Drop for BufferLink {
     }
 }
 
-const DMA_BUF_SYNC_WRITE: u32 = 2;
-/// `_IOWR('b', 2, struct dma_buf_export_sync_file)`.
-const DMA_BUF_IOCTL_EXPORT_SYNC_FILE: u64 = 0xC008_6202;
-/// `_IOW('b', 3, struct dma_buf_import_sync_file)`.
-const DMA_BUF_IOCTL_IMPORT_SYNC_FILE: u64 = 0x4008_6203;
+/// The longest a fence is waited for on the CPU before the frame goes out.
+const FENCE_WAIT_MS: i32 = 1000;
 
-#[repr(C)]
-struct SyncFileArgument {
-    flags: u32,
-    fd: i32,
-}
+static SEMAPHORE_FALLBACK: std::sync::Once = std::sync::Once::new();
+static IMPORT_FALLBACK: std::sync::Once = std::sync::Once::new();
 
-/// The fences a dmabuf carries, as one sync file: with `DMA_BUF_SYNC_WRITE`,
-/// every one a writer has to wait for.
-fn export_sync_file(dmabuf: RawFd, flags: u32) -> Option<OwnedFd> {
-    let mut argument = SyncFileArgument { flags, fd: -1 };
-    let status = unsafe {
-        libc::ioctl(
-            dmabuf,
-            DMA_BUF_IOCTL_EXPORT_SYNC_FILE as _,
-            &mut argument as *mut SyncFileArgument,
+/// Says once per process that a fence is being waited for on the CPU.
+fn fallback_once(said: &std::sync::Once, why: impl FnOnce() -> String) {
+    said.call_once(|| {
+        eprintln!(
+            "morf: gpu: {}; waiting for frames on the CPU instead",
+            why()
         )
-    };
-    (status == 0 && argument.fd >= 0).then(|| unsafe { OwnedFd::from_raw_fd(argument.fd) })
-}
-
-/// Attaches a sync file to a dmabuf as a write fence. Returns whether the
-/// kernel took it.
-fn import_sync_file(dmabuf: RawFd, fence: &OwnedFd) -> bool {
-    let mut argument = SyncFileArgument {
-        flags: DMA_BUF_SYNC_WRITE,
-        fd: fence.as_raw_fd(),
-    };
-    let status = unsafe {
-        libc::ioctl(
-            dmabuf,
-            DMA_BUF_IOCTL_IMPORT_SYNC_FILE as _,
-            &mut argument as *mut SyncFileArgument,
-        )
-    };
-    status == 0
-}
-
-fn signalled(fence: &OwnedFd) -> bool {
-    poll_fence(fence, 0)
-}
-
-fn wait_signalled(fence: &OwnedFd, milliseconds: i32) {
-    poll_fence(fence, milliseconds);
-}
-
-/// A sync file polls readable once its fence has signalled.
-fn poll_fence(fence: &OwnedFd, milliseconds: i32) -> bool {
-    let mut poll = [libc::pollfd {
-        fd: fence.as_raw_fd(),
-        events: libc::POLLIN,
-        revents: 0,
-    }];
-    unsafe { libc::poll(poll.as_mut_ptr(), 1, milliseconds) > 0 }
+    });
 }

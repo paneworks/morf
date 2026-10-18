@@ -2,8 +2,8 @@
 //! selection and caret.
 
 use crate::TextEdit;
-use crate::effects::color_array;
 use morf_layout::{Geometry, Transform2D};
+use morf_paint::effects::color_array;
 use morf_scene::{Color, DecorationLine, TextDecoration};
 use morf_text::{LineBand, TextSystem};
 
@@ -11,29 +11,9 @@ use super::super::glyphs::*;
 
 /// A solid quad through the glyph pipeline: a decoration, a selection, a
 /// caret. Clipped and masked with the command it belongs to.
-pub(super) fn push_band(
-    instances: &mut Vec<GlyphInstance>,
-    command_spans: &mut [Vec<GlyphSpan>],
-    band: PreparedBand,
-    scale: f32,
-    target: (u32, u32),
-) {
+pub(super) fn band_instance(band: &PreparedBand, scale: f32, target: (u32, u32)) -> GlyphInstance {
     let (origin, axes) = transformed_quad(band.transform, band.rect, f64::from(scale), target);
-    let instance = instances.len() as u32;
-    let spans = &mut command_spans[band.command_index];
-    if let Some(span) = spans.last_mut()
-        && !span.color
-        && span.range.end == instance
-    {
-        span.range.end = instance + 1;
-    } else {
-        spans.push(GlyphSpan {
-            range: instance..instance + 1,
-            color: false,
-            lcd: false,
-        });
-    }
-    instances.push(GlyphInstance {
+    GlyphInstance {
         origin,
         axes,
         color: color_array(band.color),
@@ -41,7 +21,7 @@ pub(super) fn push_band(
         // `z` past one is solid: no sample, the colour as it is.
         mode: [0.0, 0.0, 2.0, 0.0],
         ..GlyphInstance::default()
-    });
+    }
 }
 
 /// A text input's selection rectangles and its caret, in surface space.
@@ -111,6 +91,7 @@ pub(super) fn edit_bands(
 }
 
 /// One decoration line, positioned, waiting to become an instance.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct PreparedBand {
     pub(crate) rect: Geometry,
     pub(crate) color: Color,

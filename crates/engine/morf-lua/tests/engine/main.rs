@@ -1,5 +1,6 @@
 mod arguments;
 mod backdrop;
+mod claims;
 mod colors;
 use morf_scene::NodeHandle;
 
@@ -52,8 +53,10 @@ mod exiting;
 mod flush_construction;
 mod flushing;
 mod focus;
+mod frame_stall;
 mod fs_time;
 mod fs_watch;
+mod glass;
 mod gradients;
 mod harness;
 mod http;
@@ -63,6 +66,7 @@ mod image_ops;
 mod image_preview;
 mod images;
 mod input_api;
+mod kit_lifetime;
 mod layer_surfaces;
 mod lib_dbus_services;
 mod lib_hyprland;

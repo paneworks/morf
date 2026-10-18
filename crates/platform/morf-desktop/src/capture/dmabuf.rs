@@ -16,7 +16,7 @@
 use wayland_client::QueueHandle;
 
 use super::CaptureBuffer;
-use crate::{Desktop, DesktopEvent, DesktopState};
+use crate::{DesktopEvent, DesktopState, WaylandDesktop};
 use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_protocols::wp::linux_dmabuf::zv1::client::{
     zwp_linux_buffer_params_v1::{self, ZwpLinuxBufferParamsV1},
@@ -71,7 +71,7 @@ impl DesktopState {
     }
 }
 
-impl Desktop {
+impl WaylandDesktop {
     /// Whether a capture can be drawn straight into a dmabuf.
     ///
     /// The protocol side only: whether the renderer can export one is its

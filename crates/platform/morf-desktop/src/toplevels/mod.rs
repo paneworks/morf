@@ -6,7 +6,7 @@ mod list;
 
 pub(crate) use control::ToplevelControl;
 
-use crate::Desktop;
+use crate::WaylandDesktop;
 
 /// One window on the compositor, as `ext-foreign-toplevel-list-v1` describes it.
 ///
@@ -73,7 +73,7 @@ pub struct ToplevelInfo {
     pub parent: Option<String>,
 }
 
-impl Desktop {
+impl WaylandDesktop {
     /// What can be done to another window, by identifier.
     ///
     /// One entry point rather than five methods, because every one of them is

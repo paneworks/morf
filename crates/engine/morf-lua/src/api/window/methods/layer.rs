@@ -35,7 +35,7 @@ pub(crate) fn set_window_layer_setting<'gc>(
     value: LuaValue<'gc>,
 ) -> Result<(), HostError> {
     let surface = state
-        .windows
+        .windows_mut()
         .window_surfaces
         .get_mut(&id)
         .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -52,7 +52,7 @@ pub(crate) fn set_window_layer_setting<'gc>(
         }));
     }
     let changed = apply_layer_setting(ctx, config, key, value).map_err(HostError)?;
-    state.windows.window_surfaces_changed |= changed;
+    state.windows_mut().window_surfaces_changed |= changed;
     Ok(())
 }
 
@@ -60,7 +60,7 @@ pub(crate) fn set_window_layer_setting<'gc>(
 /// validated before any lands so a bad one leaves the surface untouched.
 pub(crate) fn window_configure_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, settings): (UserRef<WindowSurfaceToken>, Table) = stack.consume(ctx)?;
@@ -74,18 +74,18 @@ pub(crate) fn window_configure_method<'gc>(
         }
         entries.sort_by(|(left, _), (right, _)| left.cmp(right));
         let before = state
-            .windows
+            .windows()
             .window_surfaces
             .get(&surface.id)
             .map(|surface| surface.kind.clone())
             .ok_or_else(|| HostError("window destroyed".into()))?;
-        let changed_before = state.windows.window_surfaces_changed;
+        let changed_before = state.windows().window_surfaces_changed;
         for (key, value) in entries {
             if let Err(error) = set_window_layer_setting(ctx, &mut state, surface.id, &key, value) {
-                if let Some(target) = state.windows.window_surfaces.get_mut(&surface.id) {
+                if let Some(target) = state.windows_mut().window_surfaces.get_mut(&surface.id) {
                     target.kind = before;
                 }
-                state.windows.window_surfaces_changed = changed_before;
+                state.windows_mut().window_surfaces_changed = changed_before;
                 return Err(error.into());
             }
         }

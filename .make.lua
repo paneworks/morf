@@ -365,6 +365,18 @@ make.recipe{
 }
 
 make.recipe{
+  name = "docs-check",
+  desc = "check the docs against the API the engine emits (tools/docs_check.py)",
+  run = function()
+    sh.cargo("build", "--package", "morf-cli")
+    assert(oslo.run{ "env", "MORF_BIN=target/debug/morf", "python3", "tools/test_docs_check.py" }.ok,
+           "the docs gate's own tests failed; see tools/test_docs_check.py")
+    assert(oslo.run{ "env", "MORF_BIN=target/debug/morf", "python3", "tools/docs_check.py", "--strict" }.ok,
+           "the documentation disagrees with the engine; see tools/docs_check.py")
+  end,
+}
+
+make.recipe{
   name = "boundary-check",
   desc = "enforce the engine-only repository boundary",
   run = function()
@@ -499,7 +511,7 @@ make.recipe{
 make.recipe{
   name = "verify",
   desc = "the whole local gate",
-  deps = { "boundary-check", "layer-check", "rust-loc-check", "fmt-check", "check", "test",
+  deps = { "boundary-check", "layer-check", "docs-check", "rust-loc-check", "fmt-check", "check", "test",
            "check-all", "test-all", "clippy", "rustdoc", "link-check" },
 }
 make.alias("v", "verify")

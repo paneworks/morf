@@ -19,9 +19,15 @@ return function(options)
     return false
   end
   local send
+  -- This runtime's request waiting for its grant, and whether its draft was
+  -- cleared meanwhile: a withdrawn request's grant is handed back unused.
+  local requested,withdrawn=false,false
   function M.receive(action, name, payload)
     if action=="claim" and valid(name) then
-      if active:get()~=name then options.clear() active:set(name) end
+      if active:get()~=name then
+        if requested then requested,withdrawn=false,true end
+        options.clear() active:set(name)
+      end
     elseif action=="state" then
       local ok, data=pcall(morf.json.decode,payload or "")
       if ok and type(data)=="table" and valid(name) then options.restore(data) end
@@ -30,9 +36,10 @@ return function(options)
       owner:set(name)
       send("grant",name)
     elseif action=="grant" and valid(name) then
+      if name==own and withdrawn then withdrawn=false send("release",own) return end
       owner:set(name)
       options.busy(true)
-      if name==own then options.submit() end
+      if name==own then requested=false options.submit() end
     elseif action=="release" and owner:get()==name then
       owner:set("") options.busy(false)
     elseif action=="sync" and primary() then
@@ -54,7 +61,7 @@ return function(options)
     send("claim",own)
   end
   function M.submit()
-    if M.main() and owner:get()=="" then send("request",own) end
+    if M.main() and owner:get()=="" then requested,withdrawn=true,false send("request",own) end
   end
   function M.release()
     M.publish()

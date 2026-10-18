@@ -211,6 +211,27 @@ pub(crate) fn animation_start(
 /// for a `ClipRect`'s content inset even though painting owns the border. Using
 /// it here would let a moved node keep a stale layout.
 ///
+/// Of the properties layout does not read, the ones that still move where a
+/// node takes input: its transform. Everything else among them is how it is
+/// drawn, not where.
+pub(crate) fn affects_input(property: &str) -> bool {
+    matches!(
+        property,
+        "scale"
+            | "scale_x"
+            | "scale_y"
+            | "skew_x"
+            | "skew_y"
+            | "translate_x"
+            | "translate_y"
+            | "transform_origin_x"
+            | "transform_origin_y"
+            | "transform_matrix"
+            | "matrix"
+            | "rotation"
+    )
+}
+
 /// The list is negative on purpose: everything counts unless it is known never
 /// to be read, so a property added to the schema without a thought here costs
 /// one extra layout pass rather than a frame drawn at the wrong geometry.
@@ -234,6 +255,7 @@ pub(crate) fn affects_layout(property: &str) -> bool {
             | "opacity"
             | "color"
             | "color_overlay"
+            | "hdr"
             | "layer"
             | "radius"
             | "top_left_radius"
@@ -250,6 +272,11 @@ pub(crate) fn affects_layout(property: &str) -> bool {
             | "blur"
             | "backdrop_blur"
             | "backdrop_saturation"
+            | "backdrop_tint"
+            | "glass"
+            | "glass_refraction"
+            | "glass_frost"
+            | "glass_rim"
             | "shadow_color"
             | "shadow_blur"
             | "shadow_spread"

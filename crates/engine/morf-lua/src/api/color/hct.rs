@@ -13,8 +13,8 @@ use luna::{Callback, CallbackReturn, Context, Table, UserRef, Value as LuaValue}
 use morf_scene::hct;
 use pastel::Color;
 
-use crate::api_color::{ColorToken, color_of, color_userdata};
-use crate::scene_bindings::*;
+use crate::api::color::color::{ColorToken, color_of, color_userdata};
+use crate::api::ui::scene::*;
 
 /// The colour of a hue, chroma and tone, in sRGB.
 pub(crate) fn from_hct(hue: f64, chroma: f64, tone: f64, alpha: f64) -> Color {

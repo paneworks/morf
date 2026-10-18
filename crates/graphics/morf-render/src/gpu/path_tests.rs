@@ -44,6 +44,7 @@ fn scene_with(path: impl FnOnce(&mut Scene, NodeHandle)) -> (Scene, NodeHandle) 
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_path_fills_its_outline_through_a_view_box() {
+    require_gpu!();
     let (scene, root) = scene_with(|scene, node| {
         scene.assign(node, "width", 64.0).unwrap();
         scene.assign(node, "height", 64.0).unwrap();
@@ -67,6 +68,7 @@ pub(crate) fn a_path_fills_its_outline_through_a_view_box() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_stroke_reaches_past_the_box_and_a_trim_cuts_it() {
+    require_gpu!();
     let (scene, root) = scene_with(|scene, node| {
         scene.assign(node, "x", 16.0).unwrap();
         scene.assign(node, "y", 16.0).unwrap();
@@ -92,6 +94,7 @@ pub(crate) fn a_stroke_reaches_past_the_box_and_a_trim_cuts_it() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_scaled_path_is_drawn_at_the_size_it_is_seen() {
+    require_gpu!();
     // A disc 8 across, scaled four times. Stretched from an 8-pixel picture,
     // its edge would be a ramp several pixels wide; drawn at the size it
     // covers, one pixel of antialiasing is all there is.

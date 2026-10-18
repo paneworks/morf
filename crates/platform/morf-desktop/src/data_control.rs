@@ -38,7 +38,7 @@ use wayland_protocols_wlr::data_control::v1::client::{
     zwlr_data_control_source_v1::ZwlrDataControlSourceV1,
 };
 
-use crate::{Desktop, DesktopEvent, DesktopState};
+use crate::{DesktopEvent, DesktopState, WaylandDesktop};
 
 /// How many announced offers stay readable after a newer one replaced them.
 ///
@@ -119,7 +119,7 @@ pub(crate) struct OwnedSource {
 
 /// Where the desktop's offer ids start: far from the window client's own
 /// (a drag's), so a read names exactly one of them.
-const OFFER_ID_BASE: u64 = 1 << 48;
+pub(crate) const OFFER_ID_BASE: u64 = 1 << 48;
 
 /// The selection as data control sees it, and the reads of it in flight.
 pub(crate) struct ClipboardState {
@@ -130,7 +130,7 @@ pub(crate) struct ClipboardState {
     read_tx: mpsc::Sender<ReadDone<u64>>,
     read_rx: mpsc::Receiver<ReadDone<u64>>,
     /// Rung when a read finishes on its thread, so the loop wakes for it.
-    waker: Option<fn()>,
+    waker: Option<morf_app::transfer::Wakeup>,
 }
 
 impl ClipboardState {
@@ -184,9 +184,9 @@ impl ClipboardState {
     }
 }
 
-impl Desktop {
+impl WaylandDesktop {
     /// Rings `waker` whenever a read finishes on its thread.
-    pub fn set_waker(&mut self, waker: fn()) {
+    pub fn set_waker(&mut self, waker: morf_app::transfer::Wakeup) {
         self.state.clipboard.waker = Some(waker);
     }
 
@@ -197,15 +197,6 @@ impl Desktop {
             .control
             .as_ref()
             .is_some_and(|control| control.device.is_some())
-    }
-
-    /// Which data-control protocol is bound, if any.
-    pub fn data_control_protocol(&self) -> Option<&'static str> {
-        self.state
-            .clipboard
-            .control
-            .as_ref()
-            .map(DataControl::protocol)
     }
 
     /// Whether the primary selection can be watched and set too.
@@ -287,7 +278,7 @@ impl Desktop {
             reader,
             request_id,
             clipboard.read_tx.clone(),
-            clipboard.waker,
+            clipboard.waker.clone(),
             Arc::clone(&clipboard.reads),
         );
         let _ = self.connection.flush();
@@ -323,14 +314,6 @@ impl DataControl {
         match &self.manager {
             DcManager::Ext(_) => true,
             DcManager::Wlr(manager) => manager.version() >= 2,
-        }
-    }
-
-    /// The protocol in use, for a configuration that wants to know.
-    pub(crate) fn protocol(&self) -> &'static str {
-        match self.manager {
-            DcManager::Ext(_) => "ext-data-control-v1",
-            DcManager::Wlr(_) => "zwlr-data-control-v1",
         }
     }
 

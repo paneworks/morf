@@ -4,7 +4,7 @@ use morf_app::WindowId;
 use morf_lua::{FocusReason, KeyModifiers, Runtime};
 use morf_scene::NodeHandle;
 
-use crate::surfaces::*;
+use crate::host::surfaces::*;
 
 /// What happened to a key.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -63,8 +63,8 @@ pub struct PaletteTty {
 
 impl PaletteTty {
     /// Opens the terminal and starts listening. Each burst of colours
-    /// written to it arrives through [`PaletteTty::take`], and the loop is
-    /// woken (`morf_io::wake_all`) when one does.
+    /// written to it arrives through [`PaletteTty::take`], and the loop
+    /// that opened it is woken when one does.
     pub fn open() -> std::io::Result<Self> {
         let master = openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY | OpenptFlags::CLOEXEC)?;
         grantpt(&master)?;
@@ -76,10 +76,11 @@ impl PaletteTty {
         );
         let slave = crate::pty::open_slave(&master)?;
         let (sender, changes) = mpsc::channel();
+        let waker = morf_io::waker();
         std::thread::Builder::new()
             .name("palette-tty".to_owned())
             .spawn(move || {
-                let _wake = morf_io::WakeOnDrop;
+                let _wake = morf_io::WakeOnDropOf(waker.clone());
                 let mut master = std::fs::File::from(master);
                 let mut parser: Processor = Processor::new();
                 let mut buffer = [0u8; 8192];
@@ -95,7 +96,7 @@ impl PaletteTty {
                         if sender.send(collect.changes).is_err() {
                             break;
                         }
-                        morf_io::wake_all();
+                        waker.wake();
                     }
                 }
             })?;

@@ -65,10 +65,11 @@ pub(crate) struct Lowerer<'a> {
     pub(crate) nodes: u32,
     pub(crate) scope_id: u32,
     pub(crate) reads_time: bool,
-    pub(crate) samples_behind: bool,
-    /// Whether anything took a screen-space derivative, which lives under the
-    /// same uniformity rule as sampling.
-    pub(crate) takes_derivative: bool,
+    /// Line of the first sample of what is underneath.
+    pub(crate) samples_behind: Option<u32>,
+    /// Line of the first screen-space derivative, which lives under the same
+    /// uniformity rule as sampling.
+    pub(crate) takes_derivative: Option<u32>,
 }
 
 impl<'a> Lowerer<'a> {
@@ -88,8 +89,8 @@ impl<'a> Lowerer<'a> {
             nodes: 0,
             scope_id: 0,
             reads_time: false,
-            samples_behind: false,
-            takes_derivative: false,
+            samples_behind: None,
+            takes_derivative: None,
         }
     }
 
@@ -194,6 +195,8 @@ fn sanitize(name: &Name) -> String {
 /// Every function a shader declares: the entry point, and the helpers.
 pub(crate) struct Functions<'c> {
     pub(crate) entry: Option<&'c FunctionDefinition<Name>>,
+    /// The line the entry point is defined on.
+    pub(crate) entry_line: u32,
     /// Helpers by name, in declaration order.
     pub(crate) helpers: Vec<(String, &'c FunctionDefinition<Name>)>,
 }
@@ -212,6 +215,7 @@ pub(crate) fn functions<'c>(
 ) -> Functions<'c> {
     let mut found = Functions {
         entry: None,
+        entry_line: 1,
         helpers: Vec::new(),
     };
     for statement in &chunk.block.statements {
@@ -226,7 +230,10 @@ pub(crate) fn functions<'c>(
             _ => None,
         };
         match named {
-            Some((name, definition)) if name == wanted => found.entry = Some(definition),
+            Some((name, definition)) if name == wanted => {
+                found.entry = Some(definition);
+                found.entry_line = line;
+            }
             Some((name, definition)) => found.helpers.push((name, definition)),
             None => diagnostics.push(
                 Diagnostic::new(line, "a shader holds functions and nothing else")

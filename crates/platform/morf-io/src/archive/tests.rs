@@ -65,19 +65,30 @@ fn tar_lists_members_with_long_names() {
     assert_eq!(&tar[entries[2].data.clone()], b"x");
     assert_eq!(names[3], "pax/renamed");
     assert_eq!(entries.len(), 4);
-    assert!(tar_entries(&tar, 3).unwrap_err().contains("more than 3"));
+    let error = tar_entries(&tar, 3).unwrap_err();
+    assert!(error.kind() == crate::ErrorKind::Invalid && error.message().contains("more than 3"));
 }
 
 #[test]
 fn tar_refuses_corruption() {
     let mut tar = sample_tar();
     tar[10] ^= 1;
-    assert!(tar_entries(&tar, 100).unwrap_err().contains("checksum"));
+    assert!(
+        tar_entries(&tar, 100)
+            .unwrap_err()
+            .message()
+            .contains("checksum")
+    );
     // A size field claiming more than there is.
     let mut bad = Vec::new();
     bad.extend_from_slice(&header("big", b'0', 4096));
     bad.extend_from_slice(&[0u8; BLOCK]);
-    assert!(tar_entries(&bad, 100).unwrap_err().contains("past the end"));
+    assert!(
+        tar_entries(&bad, 100)
+            .unwrap_err()
+            .message()
+            .contains("past the end")
+    );
 }
 
 #[test]
@@ -91,6 +102,7 @@ fn gzip_and_zlib_round_trip_and_cap() {
     assert!(
         decompress(&gz, Compression::Gzip, 100)
             .unwrap_err()
+            .message()
             .contains("exceeds")
     );
 
@@ -128,6 +140,7 @@ fn zstd_and_xz_decode_and_cap() {
     assert!(
         decompress(ZSTD_HELLO, Compression::Zstd, 4)
             .unwrap_err()
+            .message()
             .contains("exceeds")
     );
     let twice = [ZSTD_HELLO, ZSTD_HELLO].concat();
@@ -144,6 +157,7 @@ fn zstd_and_xz_decode_and_cap() {
     assert!(
         decompress(XZ_HELLO, Compression::Xz, 4)
             .unwrap_err()
+            .message()
             .contains("exceeds")
     );
     assert!(decompress(&XZ_HELLO[..20], Compression::Xz, 100).is_err());

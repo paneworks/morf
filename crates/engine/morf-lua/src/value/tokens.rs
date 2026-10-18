@@ -9,7 +9,8 @@ use luna::UserRef;
 use morf_image::ImageRect as QuantizeRect;
 use morf_system::desktop_entries::DesktopEntries;
 
-use crate::state::ReactiveState;
+use crate::runtime::state::ReactiveState;
+use crate::vm::state_cell::StateCell;
 use morf_io::{
     DbusProxy, DbusService, FileDocument, FileView, FileWatcher, Process, ServerView, SocketView,
     SplitParser, StreamCollector,
@@ -71,7 +72,7 @@ pub(crate) struct TransformWatcherToken {
 pub(crate) struct RetainLockToken {
     pub(crate) node: NodeHandle,
     pub(crate) locked: Cell<bool>,
-    pub(crate) state: Rc<RefCell<ReactiveState>>,
+    pub(crate) state: Rc<StateCell<ReactiveState>>,
 }
 
 impl Drop for RetainLockToken {
@@ -80,14 +81,17 @@ impl Drop for RetainLockToken {
             return;
         }
         if let Ok(mut state) = self.state.try_borrow_mut()
-            && state.retained.retention.unlock(self.node).is_ok()
+            && state.retained_mut().retention.unlock(self.node).is_ok()
             && state
-                .retained
+                .retained()
                 .retention
                 .should_destroy(self.node)
                 .unwrap_or(false)
         {
-            state.retained.retained_destroy_queue.insert(self.node);
+            state
+                .retained_mut()
+                .retained_destroy_queue
+                .insert(self.node);
         }
     }
 }

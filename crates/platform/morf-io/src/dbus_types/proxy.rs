@@ -11,6 +11,7 @@ use std::time::Duration;
 use serde::Serialize;
 use zbus::blocking::Proxy as ZbusProxy;
 
+use crate::Error;
 use crate::dbus_decode::DbusSignal;
 use zbus::zvariant::{DynamicDeserialize, DynamicType, OwnedValue, Value};
 
@@ -194,9 +195,10 @@ impl DbusProxy {
         let proxy = self.clone();
         let property = property.to_owned();
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        let waker = crate::waker();
         std::thread::spawn(move || {
             let _ = tx.send(proxy.get_value(&property));
-            crate::wake_all();
+            waker.wake();
         });
         PendingReply { rx, deadline: None }
     }
@@ -206,9 +208,10 @@ impl DbusProxy {
         let proxy = self.clone();
         let method = method.to_owned();
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        let waker = crate::waker();
         std::thread::spawn(move || {
             let _ = tx.send(proxy.call_value_with(&method, &value));
-            crate::wake_all();
+            waker.wake();
         });
         PendingReply { rx, deadline: None }
     }
@@ -218,50 +221,43 @@ impl DbusProxy {
     ///
     /// The configuration-facing form of [`Self::call_later_with`]: the same
     /// thread and poll, with a ceiling on how many a configuration may start.
-    pub fn call_async(&self, method: &str, value: DbusValue) -> Result<PendingReply, String> {
+    pub fn call_async(&self, method: &str, value: DbusValue) -> Result<PendingReply, Error> {
         let proxy = self.clone();
         let method = method.to_owned();
         spawn_call(None, move || proxy.call_value_with(&method, &value))
     }
 
-    pub fn get_value(&self, property: &str) -> Result<DbusValue, String> {
-        let value: OwnedValue = self
-            .proxy
-            .get_property(property)
-            .map_err(|error| error.to_string())?;
-        basic_value(&value)
+    pub fn get_value(&self, property: &str) -> Result<DbusValue, Error> {
+        let value: OwnedValue = self.proxy.get_property(property)?;
+        basic_value(&value).map_err(Error::Bus)
     }
 
     /// Calls a no-argument method returning a supported value.
-    pub fn call_value(&self, method: &str) -> Result<DbusValue, String> {
-        let message = self
-            .proxy
-            .call_method(method, &())
-            .map_err(|error| error.to_string())?;
-        decode_message_value(&message)
+    pub fn call_value(&self, method: &str) -> Result<DbusValue, Error> {
+        let message = self.proxy.call_method(method, &())?;
+        decode_message_value(&message).map_err(Error::Bus)
     }
 
     /// Calls a method with one scalar or a list of positional scalar arguments.
-    pub fn call_value_with(&self, method: &str, value: &DbusValue) -> Result<DbusValue, String> {
-        let message = match positional_arguments(value)? {
+    pub fn call_value_with(&self, method: &str, value: &DbusValue) -> Result<DbusValue, Error> {
+        let message = match positional_arguments(value).map_err(Error::Invalid)? {
             Some(body) => self.proxy.call_method(method, &body),
             None => self.proxy.call_method(method, &()),
-        }
-        .map_err(|error| error.to_string())?;
-        decode_message_value(&message)
+        }?;
+        decode_message_value(&message).map_err(Error::Bus)
     }
 
     /// Writes one property for an interpreter-facing facade.
-    pub fn set_value(&self, property: &str, value: &DbusValue) -> Result<(), String> {
+    pub fn set_value(&self, property: &str, value: &DbusValue) -> Result<(), Error> {
         let result = match value {
-            DbusValue::Nil => return Err("D-Bus properties cannot be nil".to_owned()),
+            DbusValue::Nil => return Err(Error::invalid("D-Bus properties cannot be nil")),
             DbusValue::Bool(value) => self.set_property(property, *value),
             DbusValue::Integer(value) => self.set_property(property, *value),
             DbusValue::Unsigned(value) => self.set_property(property, *value),
             DbusValue::Number(value) => self.set_property(property, *value),
             DbusValue::String(value) => self.set_property(property, value.as_str()),
             DbusValue::Typed { .. } | DbusValue::Fd(_) | DbusValue::Bytes(_) => {
-                let value = dbus_argument_value(value)?;
+                let value = dbus_argument_value(value).map_err(Error::Invalid)?;
                 self.set_property(property, value)
             }
             // A list or a map needs its wire type stated, because there is no
@@ -271,13 +267,12 @@ impl DbusProxy {
             // why this was asymmetric, and why the answer is to ask rather than
             // to refuse.
             DbusValue::List(_) | DbusValue::Map(_) | DbusValue::Dictionary(_) => {
-                return Err(
-                    "a compound D-Bus property needs its signature stated: pass `{ signature = \"as\", value = ... }` rather than a bare table"
-                        .to_owned(),
-                );
+                return Err(Error::invalid(
+                    "a compound D-Bus property needs its signature stated: pass `{ signature = \"as\", value = ... }` rather than a bare table",
+                ));
             }
         };
-        result.map_err(|error| error.to_string())
+        Ok(result?)
     }
 
     /// Subscribes to one signal on a dedicated bus connection.

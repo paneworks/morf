@@ -13,10 +13,7 @@ impl Engine {
     pub fn reconcile_timers(&mut self, definitions_changed: bool) -> bool {
         let mut service_changed = false;
         let timer_definitions = if definitions_changed {
-            self.timer_callbacks
-                .iter()
-                .map(|(node, callback)| (*node, callback.clone()))
-                .collect::<Vec<_>>()
+            self.timers.node_handlers()
         } else {
             Vec::new()
         };
@@ -47,9 +44,8 @@ impl Engine {
                 Ok(source) => {
                     let id = self.timers.next_id();
                     let origin = self
-                        .timer_origins
-                        .get(&node)
-                        .cloned()
+                        .timers
+                        .origin_of(node)
                         .unwrap_or_else(|| format!("ui.Timer {node:?}").into());
                     self.timers.add(Timer {
                         id,
@@ -66,9 +62,7 @@ impl Engine {
             service_changed = true;
         }
         for node in stale_timers {
-            self.timer_callbacks.remove(&node);
-            self.timers.remove_node(node);
-            self.timer_origins.remove(&node);
+            self.timers.forget_node(node);
         }
         service_changed
     }

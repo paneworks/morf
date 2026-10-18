@@ -61,7 +61,8 @@ function M.edge(opts)
     return (not opts.enabled or opts.enabled())
       and (not opts.setting or config.get(opts.setting))
   end
-  local function on_strip() return strip.hovered end
+  -- The pointer over the strip, whatever is drawn above it.
+  local function on_strip() return strip.hovered or strip.contains_pointer end
   local function cancel_open()
     if opening then opening:cancel() opening = nil end
   end

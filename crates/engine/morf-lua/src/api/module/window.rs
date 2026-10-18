@@ -7,7 +7,7 @@ use super::*;
 /// The metatable every window handle shares.
 pub(super) fn window_metatable<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     limits: crate::Limits,
 ) -> luna::StashedTable {
     let window_visible = Callback::from_fn(&ctx, {
@@ -16,7 +16,7 @@ pub(super) fn window_metatable<'gc>(
             let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
             let visible = state
                 .borrow()
-                .windows
+                .windows()
                 .window_surfaces
                 .get(&surface.id)
                 .map(|surface| surface.visible)
@@ -31,13 +31,13 @@ pub(super) fn window_metatable<'gc>(
             let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
             let mut state = state.borrow_mut();
             let surface = state
-                .windows
+                .windows_mut()
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
             if !surface.visible {
                 surface.visible = true;
-                state.windows.window_surfaces_changed = true;
+                state.windows_mut().window_surfaces_changed = true;
             }
             Ok(CallbackReturn::Return)
         }
@@ -48,13 +48,13 @@ pub(super) fn window_metatable<'gc>(
             let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
             let mut state = state.borrow_mut();
             let surface = state
-                .windows
+                .windows_mut()
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
             if surface.visible {
                 surface.visible = false;
-                state.windows.window_surfaces_changed = true;
+                state.windows_mut().window_surfaces_changed = true;
             }
             Ok(CallbackReturn::Return)
         }
@@ -69,25 +69,25 @@ pub(super) fn window_metatable<'gc>(
         let state = Rc::clone(state);
         move |ctx, _, mut stack| {
             let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
-            let on_closed =
-                crate::window_events::destroy_window_surface(&mut state.borrow_mut(), surface.id);
-            crate::reactive_bindings::run_destroyed_hooks(&state, ctx, limits);
+            let on_closed = crate::api::window::events::destroy_window_surface(
+                &mut state.borrow_mut(),
+                surface.id,
+            );
+            crate::api::ui::bindings::run_destroyed_hooks(&state, ctx, limits);
             if let Some(callback) = on_closed {
-                state.borrow_mut().handler_depth += 1;
-                let result =
-                    crate::reactive_execute::execute_handler_args(ctx, &callback, &[], limits);
+                state.borrow_mut().tracking_mut().enter_handler();
+                let result = crate::vm::execute::execute_handler_args(ctx, &callback, &[], limits);
                 let mut guard = state.borrow_mut();
-                guard.handler_depth = guard.handler_depth.saturating_sub(1);
+                let flush = guard.tracking_mut().leave_handler();
                 if let Err(message) = result {
                     guard.log(
                         LogLevel::Warn,
                         format!("window {} on_closed: {message}", surface.id),
                     );
                 }
-                let flush = guard.handler_depth == 0 && std::mem::take(&mut guard.flush_pending);
                 drop(guard);
                 if flush {
-                    let _ = crate::reactive_bindings::flush_reactive(&state, ctx, limits);
+                    let _ = crate::api::ui::bindings::flush_reactive(&state, ctx, limits);
                 }
             }
             Ok(CallbackReturn::Return)
@@ -99,7 +99,7 @@ pub(super) fn window_metatable<'gc>(
             let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
             let kind = state
                 .borrow()
-                .windows
+                .windows()
                 .window_surfaces
                 .get(&surface.id)
                 .map(|surface| match surface.kind {
@@ -206,7 +206,7 @@ pub(super) fn window_metatable<'gc>(
         let surface: UserRef<WindowSurfaceToken> = stack.consume(ctx)?;
         let mut state = move_state.borrow_mut();
         let valid = state
-            .windows
+            .windows()
             .window_surfaces
             .get(&surface.id)
             .is_some_and(|surface| {
@@ -214,7 +214,7 @@ pub(super) fn window_metatable<'gc>(
             });
         if valid {
             state
-                .windows
+                .windows_mut()
                 .window_surface_actions
                 .push(WindowSurfaceAction::Move { id: surface.id });
         }
@@ -240,7 +240,7 @@ pub(super) fn window_metatable<'gc>(
         }
         let mut state = resize_state.borrow_mut();
         let valid = state
-            .windows
+            .windows()
             .window_surfaces
             .get(&surface.id)
             .is_some_and(|surface| {
@@ -248,7 +248,7 @@ pub(super) fn window_metatable<'gc>(
             });
         if valid {
             state
-                .windows
+                .windows_mut()
                 .window_surface_actions
                 .push(WindowSurfaceAction::Resize {
                     id: surface.id,
@@ -264,11 +264,11 @@ pub(super) fn window_metatable<'gc>(
         "configure",
         window_configure_method(ctx, Rc::clone(state)),
     );
-    for event in crate::window_events::WindowEvent::ALL {
+    for event in crate::api::window::events::WindowEvent::ALL {
         window_methods.set_field(
             ctx,
             event.method(),
-            crate::window_events::window_handler_method(ctx, Rc::clone(state), event),
+            crate::api::window::events::window_handler_method(ctx, Rc::clone(state), event),
         );
     }
     // Methods first; on a layer surface any other name reads that layer
@@ -293,13 +293,13 @@ pub(super) fn window_metatable<'gc>(
             // A popup's or floating window's `width`/`height` is the size the
             // compositor configured it to, tracked by the binding reading it.
             if let Some(value) =
-                crate::window_events::window_size_field(&mut state, surface.id, &key)
+                crate::api::window::events::window_size_field(&mut state, surface.id, &key)
             {
                 stack.replace(ctx, value);
                 return Ok(CallbackReturn::Return);
             }
             let value = match state
-                .windows
+                .windows()
                 .window_surfaces
                 .get(&surface.id)
                 .map(|s| &s.kind)

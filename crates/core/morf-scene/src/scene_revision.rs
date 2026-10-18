@@ -6,9 +6,66 @@ impl Scene {
     /// Conservative on purpose: a spurious bump costs one extra layout pass, a
     /// missed one leaves the scene drawn at stale geometry.
     pub(crate) fn touch_layout(&mut self, node: NodeId, property: &str) {
+        if property.starts_with("glass") {
+            self.glass_nodes.insert(node);
+        }
         if affects_layout(property) {
             self.bump_layout(node);
+        } else {
+            self.bump_paint(node);
+            if affects_input(property) {
+                self.bump_input(node);
+            }
         }
+    }
+
+    /// Records that where input lands may have moved on `node` without a
+    /// new layout, stamping it and every ancestor with a new input revision.
+    pub(crate) fn bump_input(&mut self, node: NodeId) {
+        self.input_revision = self.input_revision.wrapping_add(1);
+        let revision = self.input_revision;
+        let mut current = Some(node);
+        while let Some(id) = current {
+            let Some(entry) = self.nodes.get_mut(id) else {
+                break;
+            };
+            entry.input = revision;
+            current = entry.parent;
+        }
+    }
+
+    /// The newest input revision in `node`'s subtree: the input region found
+    /// for it at a revision at least this is still where input lands, given
+    /// the same layout.
+    pub fn input_stamp(&self, node: NodeHandle) -> Result<u64, SceneError> {
+        Ok(self.nodes[self.live(node)?].input)
+    }
+
+    /// Records that something paint reads has moved on `node`, stamping it
+    /// and every ancestor with a new paint revision.
+    pub(crate) fn bump_paint(&mut self, node: NodeId) {
+        self.paint_revision = self.paint_revision.wrapping_add(1);
+        let revision = self.paint_revision;
+        let mut current = Some(node);
+        while let Some(id) = current {
+            let Some(entry) = self.nodes.get_mut(id) else {
+                break;
+            };
+            entry.paint = revision;
+            current = entry.parent;
+        }
+    }
+
+    /// How many times something paint reads has changed, anywhere.
+    pub fn paint_revision(&self) -> u64 {
+        self.paint_revision
+    }
+
+    /// The newest paint revision in `node`'s subtree: a draw list made for
+    /// it at a revision at least this is still what it would draw, given the
+    /// same layout and the same surroundings.
+    pub fn paint_stamp(&self, node: NodeHandle) -> Result<u64, SceneError> {
+        Ok(self.nodes[self.live(node)?].paint)
     }
 
     /// Moves the layout revision, for the whole scene and for the tree
@@ -22,6 +79,8 @@ impl Scene {
     /// anyway, so an incremental layout can find what moved by descending
     /// only into subtrees stamped since it was made.
     pub(crate) fn bump_layout(&mut self, node: NodeId) {
+        self.bump_paint(node);
+        self.bump_input(node);
         self.layout_revision = self.layout_revision.wrapping_add(1);
         let revision = self.layout_revision;
         let Some(entry) = self.nodes.get_mut(node) else {
@@ -117,7 +176,9 @@ impl Scene {
         let Some(node) = self.nodes.get(key.node) else {
             return Ok(());
         };
-        let slot = node.properties[key.property];
+        let Some(slot) = node.properties.get(key.property).copied() else {
+            return Ok(());
+        };
         let settled = self.properties.read(slot.current)?.clone();
         if self.properties.read(slot.target)? != &settled {
             self.properties.write(slot.target, settled)?;

@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::backend::wayland::LayerClient;
+use crate::backend::wayland::{DesktopLink, LayerClient};
 use crate::backend::{Backend, Capabilities, RenderTarget, WindowKind, Woke};
 use crate::{Edge, Event, InputRect, KeyboardFocus, LayerConfig, Output, PopupConfig, WindowId};
 
@@ -22,11 +22,16 @@ impl Backend for LayerClient {
             text_input: self.supports_text_input(),
             input_method: self.supports_input_method(),
             backdrop_blur: self.supports_backdrop_blur(),
+            color: self.state.color.support,
         }
     }
 
     fn outputs(&self) -> &[Output] {
         self.screens()
+    }
+
+    fn output_color(&self, id: u32) -> Option<crate::OutputColor> {
+        self.state.color.outputs.get(&id).cloned()
     }
 
     fn open(&mut self, id: WindowId, kind: WindowKind) -> Result<(), String> {
@@ -172,12 +177,12 @@ impl Backend for LayerClient {
     fn has_queued_events(&self) -> bool {
         LayerClient::has_queued_events(self)
     }
-    fn set_waker(&mut self, waker: fn()) {
+    fn set_waker(&mut self, waker: crate::transfer::Wakeup) {
         LayerClient::set_waker(self, waker)
     }
 
-    fn as_wayland(&self) -> Option<&LayerClient> {
-        Some(self)
+    fn desktop_link(&self) -> Option<DesktopLink> {
+        Some(LayerClient::desktop_link(self))
     }
 
     fn screens(&self) -> &[Output] {
@@ -210,6 +215,16 @@ impl Backend for LayerClient {
     }
     fn layer_logical_size(&self, id: u64) -> Option<(u32, u32)> {
         LayerClient::layer_logical_size(self, id)
+    }
+    fn layer_space(&self, id: u64) -> Option<crate::LayerSpace> {
+        let record = self.state.layers.get(&id)?;
+        record.surface.as_layer()?;
+        record.configured.then(|| crate::LayerSpace {
+            namespace: record.namespace.clone(),
+            width: record.width,
+            height: record.height,
+            local_scale: 1.0,
+        })
     }
     fn layer_scale_120(&self, id: u64) -> Option<u32> {
         LayerClient::layer_scale_120(self, id)

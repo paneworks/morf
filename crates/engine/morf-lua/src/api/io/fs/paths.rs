@@ -11,7 +11,7 @@ pub(super) fn install_paths<'gc>(ctx: Context<'gc>, fs: Table<'gc>) {
         "glob",
         Callback::from_fn(&ctx, |ctx, _, mut stack| {
             let pattern: String = stack.consume(ctx)?;
-            ops::check_pattern(&pattern).map_err(HostError)?;
+            ops::check_pattern(&pattern).map_err(HostError::from)?;
             let (found, truncated) = ops::glob(&pattern);
             let out = Table::new(&ctx);
             for (index, path) in found.iter().enumerate() {

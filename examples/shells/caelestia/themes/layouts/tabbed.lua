@@ -63,6 +63,19 @@ function M.new(spec)
 
   -- --------------------------------------------------------------- pages --
 
+  -- The chosen tab's page is built ahead of time while the shell is idle;
+  -- the others when the panel first shows them. Each stays once built.
+  local opened = morf.signal("caelestia." .. spec.id .. ".opened", false)
+  local seen = {}
+  for i in ipairs(tabs) do seen[i] = morf.signal("caelestia." .. spec.id .. ".seen." .. i, false) end
+  morf.effect("caelestia." .. spec.id .. ".seen", function()
+    if not opened:get() then return end
+    local now = tab:get()
+    -- A phone drags the neighbours in by hand: they are seen as it does.
+    for i = now - (phone and 1 or 0), now + (phone and 1 or 0) do
+      if seen[i] and not seen[i]:get() then seen[i]:set(true) end
+    end
+  end)
   local pages = {}
   for i, t in ipairs(tabs) do
     pages[i] = ui.Item {
@@ -70,7 +83,12 @@ function M.new(spec)
       width = page_w, height = page_h,
       x=page_wipe and (i-1)*(page_w+2*PAD) or nil,
       visible=function() return not page_wipe or display:get()==i end,
-      t.build(page_w, page_h),
+      ui.Loader {
+        anchors = { fill = true }, keep = true,
+        preload = function() return tab:get() == i end,
+        active = function() return seen[i]:get() end,
+        source = function() return t.build(page_w, page_h) end,
+      },
     }
   end
   local track = (page_wipe and ui.Item or ui.Row) {
@@ -122,6 +140,7 @@ function M.new(spec)
     -- effect to selection: an unchanged open state must not cancel its wipe.
     if shown == open then return end
     shown = open
+    if open then opened:set(true) end
     presented:set(open)
     if wipe then wipe(function() present(tab:get()) end, true) else present(tab:get()) end
     if running then for _, h in ipairs(running) do h:stop() end end

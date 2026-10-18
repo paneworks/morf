@@ -3,7 +3,12 @@ use morf_vector::svg::SvgOutlines;
 
 use crate::{DrawList, SdfFieldInstance, SdfFieldLayer, SdfFieldMaterial, ShaderBinding};
 
+mod kept;
+
+pub(crate) use kept::{FieldCopier, KeptFields};
+
 /// Everything one frame's fields need, gathered in one walk of the list.
+#[derive(Default)]
 pub(crate) struct FieldBatch {
     /// The instances each draw command is drawn as — one, or a large field's
     /// tiles — or `None` if the command is not a field.
@@ -17,6 +22,16 @@ pub(crate) struct FieldBatch {
     /// Parallel to `instances`: which pipeline draws each, which is not
     /// instance data because it selects the pipeline rather than riding in it.
     pub(crate) shaders: Vec<Option<ShaderBinding>>,
+    /// Per command, and once past the last: where its layers, materials and
+    /// outlines begin.
+    pub(crate) starts: Vec<[usize; 3]>,
+}
+
+impl FieldBatch {
+    fn mark(&mut self) {
+        self.starts
+            .push([self.layers.len(), self.materials.len(), self.outlines.len()]);
+    }
 }
 
 /// Groups every field and quad command, and the layers and materials they
@@ -24,34 +39,42 @@ pub(crate) struct FieldBatch {
 ///
 /// A rectangle is a field of one layer, so there is one collector rather than
 /// two: each instance records where its own run of layers begins, and its
-/// material is found by its own instance index.
+/// material is found by its own instance index. A command `copier` has from
+/// the last frame is read from there instead of made again.
 pub(crate) fn collect_field_instances(
     list: &DrawList,
     scale_120: u32,
     text: &mut TextSystem,
     drawings: &mut SvgOutlines,
+    mut copier: Option<FieldCopier<'_>>,
 ) -> FieldBatch {
-    let mut indices = vec![None; list.commands.len()];
-    let mut instances = Vec::new();
-    let mut layers = Vec::new();
-    let mut materials = Vec::new();
-    let mut outlines = Vec::new();
-    // Parallel to `instances`, because which pipeline draws an instance is not
-    // instance data: it selects the pipeline itself.
-    let mut shaders = Vec::new();
+    let mut batch = FieldBatch {
+        indices: vec![None; list.commands.len()],
+        starts: Vec::with_capacity(list.commands.len() + 1),
+        ..FieldBatch::default()
+    };
     for (command_index, command) in list.commands.iter().enumerate() {
+        batch.mark();
+        if let Some(copier) = &mut copier
+            && copier.copy(command_index, &mut batch)
+        {
+            continue;
+        }
         // Shading a rectangle that shows nothing would cost its whole area.
         if command.draws_nothing() {
             continue;
         }
+        let FieldBatch {
+            indices,
+            instances,
+            layers,
+            materials,
+            outlines,
+            shaders,
+            ..
+        } = &mut batch;
         if let Some(instance) = SdfFieldInstance::from_command(
-            command,
-            scale_120,
-            &mut layers,
-            &mut materials,
-            &mut outlines,
-            text,
-            drawings,
+            command, scale_120, layers, materials, outlines, text, drawings,
         ) {
             // Both a field and a rectangle can carry one: a rectangle is a
             // field of one layer, and that is the shape most configurations
@@ -96,7 +119,7 @@ pub(crate) fn collect_field_instances(
                         // An inner shadow darkens the inside, and layers of
                         // several colours mix across it: then every pixel
                         // has to walk them.
-                        solid: !*shadow_inner && crate::field::same_fill(sources),
+                        solid: !*shadow_inner && morf_paint::field::same_fill(sources),
                     },
                 ),
                 _ => None,
@@ -124,12 +147,6 @@ pub(crate) fn collect_field_instances(
             indices[command_index] = Some(start..instances.len() as u32);
         }
     }
-    FieldBatch {
-        indices,
-        instances,
-        layers,
-        materials,
-        outlines,
-        shaders,
-    }
+    batch.mark();
+    batch
 }

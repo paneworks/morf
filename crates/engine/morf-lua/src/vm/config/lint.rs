@@ -56,7 +56,7 @@ impl Runtime {
         }
         let mut state = self.reactive.borrow_mut();
         for (node, element, count) in found {
-            if !state.lint_warned.insert(node) {
+            if !state.logs_mut().first_lint(node) {
                 continue;
             }
             state.log(

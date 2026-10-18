@@ -11,14 +11,13 @@
 
 use luna::{Callback, CallbackReturn, Context, Function, Table, Value as LuaValue};
 use morf_scene::Element;
-use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::{configure::*, scene_bindings::*, state::*, types::*};
+use crate::{api::ui::configure::*, api::ui::scene::*, runtime::state::*, vm::types::*};
 
 pub(crate) fn layout_constructor<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     limits: Limits,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -55,7 +54,7 @@ pub(crate) fn layout_constructor<'gc>(
         };
         let node = create_node(&state, Element::Custom);
         configure_element(&state, ctx, limits, node, clean).map_err(HostError)?;
-        state.borrow_mut().custom_layouts.insert(
+        state.borrow_mut().layout_hooks_mut().set_custom(
             node,
             CustomLayoutFns {
                 measure: crate::vm::handler_store::register(measure),

@@ -7,7 +7,7 @@ use std::rc::Rc;
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::state::*;
+use crate::runtime::state::*;
 pub use morf_runtime::log::{LogEntry, LogLevel};
 pub use morf_runtime::reactive::ResourceStats;
 pub use morf_runtime::screens::Screen;
@@ -29,7 +29,7 @@ pub struct Limits {
     pub effect_fuel: u64,
     /// Maximum VM fuel granted to all effects in one recompute pass.
     pub frame_fuel: u64,
-    /// Maximum VM fuel granted to one view delegate. A delegate builds a
+    /// Maximum VM fuel granted to one view delegate or Loader source. Each builds a
     /// part of a view -- a row, or a whole panel or board shown on demand --
     /// which is loading's kind of work rather than a handler's, so it gets
     /// a budget nearer loading's: a board of widgets each drawing a face
@@ -38,6 +38,13 @@ pub struct Limits {
     /// Maximum VM fuel granted to loading one module (`require`). A module
     /// builds what it defines -- a whole panel's nodes, a table of
     /// outlines -- which is loading's kind of work, not a handler's.
+    ///
+    /// A `require` made from a handler or an effect runs on this budget and
+    /// is not charged to the caller's: a module that loads runs once and is
+    /// cached, so what goes uncharged is bounded by this budget per module
+    /// (one that fails is run again only by the next `require` of it), and
+    /// a binding's first `require` of a real module would otherwise exhaust
+    /// an effect's budget on loading's work.
     pub module_fuel: u64,
     /// Most `ui.Terminal` nodes that may exist at once: each is a program
     /// on a pseudo-terminal and a screen with its history.
@@ -149,20 +156,38 @@ impl fmt::Display for Error {
 impl StdError for Error {}
 
 /// The Luna VM owned behind morf's stable runtime boundary.
+pub(crate) type ControllerAuthorizer = std::sync::Arc<dyn Fn(&str) -> bool + Send + Sync>;
+pub(crate) type RecognizerGate = std::sync::Arc<dyn Fn() -> bool + Send + Sync>;
+pub(crate) type HandoffAuthorizer = std::sync::Arc<dyn Fn(&str, bool) -> bool + Send + Sync>;
+pub(crate) type PolicyRetirement = std::sync::Arc<dyn Fn() + Send + Sync>;
+
 pub struct Runtime {
     pub(crate) lua: Lua,
     pub(crate) limits: Limits,
-    pub(crate) reactive: Rc<RefCell<ReactiveState>>,
+    pub(crate) reactive: Rc<StateCell<ReactiveState>>,
+    pub(crate) controller_authorizer: Option<ControllerAuthorizer>,
+    pub(crate) recognizer_gate: Option<RecognizerGate>,
+    pub(crate) handoff_authorizer: Option<HandoffAuthorizer>,
+    pub(crate) policy_retirement: Option<PolicyRetirement>,
     pub(crate) module_roots: Rc<RefCell<Vec<PathBuf>>>,
+    /// The configuration being run, its modules' origins and declarations,
+    /// and the approvals they are checked against.
+    pub(crate) permissions: Rc<RefCell<crate::vm::permissions::Permissions>>,
     /// Lint findings waiting to be logged.
     ///
     /// Its own cell rather than a push straight into the log, because the
     /// lint runs while whoever laid the scene out still holds it borrowed --
     /// and the log lives behind the same borrow. Drained on the next poll.
     pub(crate) lint_queue: RefCell<Vec<(morf_scene::NodeHandle, String, usize)>>,
+    /// The engine-owned reload-error band, while one is shown: a failed
+    /// reload no `on_reload_failed` handler reported.
+    pub(crate) reload_error: RefCell<Option<crate::vm::config::reload_band::ReloadBand>>,
+    /// The engine-owned cover, while one is up: a picture of a surface laid
+    /// over it while it turns.
+    pub(crate) cover: RefCell<Option<crate::vm::config::cover::Cover>>,
 }
 
-pub use morf_runtime::requests::{ToplevelRequest, WorkspaceRequest};
+pub use morf_runtime::requests::{ReloadRequest, ToplevelRequest, WorkspaceRequest};
 
 #[derive(Clone, Copy)]
 pub(crate) enum StorageKind {

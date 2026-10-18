@@ -1,9 +1,9 @@
 //! Where a texture lands: its placement in its box, the field uniforms it is
 //! sampled with, and the instance that draws it.
 
-use crate::effects::color_array;
 use crate::{DistanceFieldStyle, ImageFillMode};
 use morf_layout::{Geometry, Transform2D};
+use morf_paint::effects::color_array;
 
 use super::super::glyphs::*;
 use super::{TextureBatch, TextureImage, TexturePlacement, TextureStyle};
@@ -142,7 +142,7 @@ pub(crate) fn push_texture_instance(
         color: [1.0, 1.0, 1.0, 1.0],
         color_overlay: color_array(style.overlay),
         mode: [
-            0.0,
+            f32::from(style.drawn),
             0.0,
             f32::from(style.distance_field),
             f32::from(style.distance_field),

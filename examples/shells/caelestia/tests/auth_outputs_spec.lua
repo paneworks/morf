@@ -2,10 +2,10 @@ local test=morf.test
 test.it("one lock conversation follows the pointer between differently sized output trees",function()
   test.load("../lock/init.lua",{size={1300,720},env={CAELESTIA_STYLE="tsugumori",CAELESTIA_DRY_RUN="1"},source=[[
     local ui=require("morf.ui")
-    morf.screens={{name="laptop",width=800,height=650},{name="external",width=500,height=720}}
+    morf.screens={{name="laptop",width=800,height=650,logical_width=800,logical_height=650},{name="external",width=500,height=720,logical_width=500,logical_height=720}}
     package.loaded["lib.services.accounts"]={me=function() return {name="fixture",label="Fixture",initial="F"} end}
     package.loaded["lib.services.keyboards"]={attached=function() return true end}
-    package.loaded["lib.integrations.lule"]={watch=function() return {get=function() return nil end} end}
+    package.loaded["lib.integrations.lule"]={watch=function() return {get=function() return nil end} end,read=function() return nil end}
     package.loaded["lib.integrations.hyprland"]={json=function(_,done) done({{name="laptop",focused=true}}) end}
     local submits=0
     package.loaded["lib.util.auth"]={lock_readers=function() return {} end,
@@ -46,7 +46,11 @@ test.it("one lock conversation follows the pointer between differently sized out
   end
   test.eq(#sheets,2)
   test.falsy(sheets[1].visible) test.truthy(sheets[2].visible)
-  test.truthy(sheets[1].height~=sheets[2].height,"outputs reused the first monitor's geometry")
+  -- Each sheet is laid out for its own output: centred on it, and as wide
+  -- as that output's shape allows (a portrait one spans its width).
+  test.near(sheets[1].x+sheets[1].width/2,400,1,"outputs reused the first monitor's geometry")
+  test.near(sheets[2].x+sheets[2].width/2,1050,1,"outputs reused the first monitor's geometry")
+  test.truthy(sheets[1].width~=sheets[2].width,"outputs reused the first monitor's geometry")
   test.truthy(sheets[1].x>=0 and sheets[1].x+sheets[1].width<=800)
   test.truthy(sheets[2].x>=800 and sheets[2].x+sheets[2].width<=1300)
   test.move(200,100) test.advance(800)
@@ -56,36 +60,39 @@ test.it("one lock conversation follows the pointer between differently sized out
 end)
 
 test.it("a greeter draft cleared before its grant never contacts authentication or leaves controls busy",function()
-  test.load("../greet/init.lua",{size={800,650},env={CAELESTIA_STYLE="tsugumori",CAELESTIA_DRY_RUN="1"},source=[[
-    morf.screens={{name="fixture",width=800,height=650},{name="other",width=800,height=650}}
+  -- The routing between greeter runtimes, its broadcasts delivered late as
+  -- the supervisor's are; the draft is a count the runtime clears.
+  test.load("../greet/init.lua",{size={800,650},source=[[
+    local ui=require("morf.ui")
+    morf.screens={{name="fixture"},{name="other"}}
     morf.primary=function() return true end
-    package.loaded["lib.services.accounts"]={list=function() return {{name="fixture",label="Fixture",initial="F"}} end}
-    package.loaded["lib.services.sessions"]={list=function() return {{name="Fixture",command={"false"}}} end,default_index=function() return 1 end}
-    package.loaded["lib.services.keyboards"]={attached=function() return true end}
-    local submits=0
-    package.loaded["lib.util.auth"]={greeter=function(options) return {available=true,switch=function() end,
-      submit=function() submits=submits+1 options.on_busy(true) end} end}
+    local submits,typed,busy=0,0,false
     local routing
-    local factory=require("models.greet_outputs")
-    package.loaded["models.greet_outputs"]=function(options) routing=factory(options) return routing end
     morf.broadcast=function(_,action,name,payload)
       morf.timer(35,function() routing.receive(action,name,payload) end,false)
       return true
     end
-    local ctx
-    local path=require("themes").current.greet local build=require(path)
-    package.loaded[path]=function(context) ctx=context return build(context) end
-    require("init")
-    morf.ipc.fixture=function() return {submits=submits,busy=ctx.busy:get(),typed=ctx.typed:get(),focus=morf.surface.keyboard_focus} end
+    routing=require("models.greet_outputs") {
+      clear=function() typed=0 end,
+      busy=function(value) busy=value end,
+      submit=function() submits=submits+1 end,
+      snapshot=function() return {stage="sheet",who=1,which=1} end,
+      restore=function() end,
+    }
+    ui.Item {width=800,height=650}
+    morf.ipc.draft=function() typed=10 routing.submit() end
+    morf.ipc.fixture=function() return {submits=submits,busy=busy,typed=typed,owner=routing.owner:get(),
+      focus=morf.surface.keyboard_focus} end
   ]]})
-  test.advance(500) test.ipc("stage","sheet") test.advance(500)
-  test.type("disposable") test.key("Return")
+  test.advance(500) test.ipc("greet-output","claim","fixture") test.advance(10)
+  test.eq(test.ipc("fixture").focus,"exclusive")
+  test.ipc("draft")
   test.ipc("greet-output","claim","other") test.advance(500)
   local state=test.ipc("fixture")
   test.eq(state.submits,0) test.falsy(state.busy) test.eq(state.typed,0) test.eq(state.focus,"none")
-  test.falsy(test.get("greet-sheet").visible)
+  test.eq(state.owner,"","a withdrawn request kept the submission")
   test.ipc("greet-output","claim","fixture") test.advance(500)
-  test.type("disposable") test.key("Return") test.advance(200)
+  test.ipc("draft") test.advance(200)
   state=test.ipc("fixture") test.eq(state.submits,1) test.truthy(state.busy)
   test.eq(#test.logs("error"),0)
 end)
@@ -134,9 +141,11 @@ test.it("greeter output arbitration grants one explicit submission and broadcast
 end)
 
 for _,style in ipairs {"material","tsugumori"} do
-  test.it(style.." greeter follows keyboard focus when Cage focuses a different output",function()
+  -- Cage shows one login window on the output it chose: that window owns the
+  -- keyboard from the start, and output claims or focus events move nothing.
+  test.it(style.." greeter keeps keyboard focus on the output Cage shows it on",function()
     test.load("../greet/init.lua",{size={800,650},args={"preview"},env={CAELESTIA_STYLE=style,CAELESTIA_DRY_RUN="1"},source=[[
-      morf.screens={{name="eDP-1",width=800,height=650},{name="DP-5",width=1920,height=1080}}
+      morf.screens={{name="eDP-1",width=800,height=650,logical_width=800,logical_height=650},{name="DP-5",width=1920,height=1080,logical_width=1920,logical_height=1080}}
       package.loaded["lib.services.accounts"]={list=function() return {{name="fixture",label="Fixture",initial="F"}} end}
       package.loaded["lib.services.sessions"]={list=function() return {{name="Fixture",command={"false"}}} end,default_index=function() return 1 end}
       package.loaded["lib.services.keyboards"]={attached=function() return true end}
@@ -155,16 +164,18 @@ for _,style in ipairs {"material","tsugumori"} do
       morf.ipc.fixture=function() return {typed=ctx.typed:get(),stage=ctx.stage:get(),main=ctx.main(),focus=morf.surface.keyboard_focus} end
     ]]})
     test.advance(1200)
-    test.falsy(test.ipc("fixture").main)
+    local state=test.ipc("fixture")
+    test.truthy(state.main) test.eq(state.focus,"exclusive")
     -- No pointer enter: the compositor delivers the first typed character
     -- to its focused toplevel, which is not the alphabetically first output.
     test.type("a") test.advance(100)
-    local state=test.ipc("fixture")
+    state=test.ipc("fixture")
     test.eq(state.typed,1) test.eq(state.stage,"sheet") test.truthy(state.main)
     test.ipc("greet-output","claim","DP-5") test.advance(100)
     test.ipc("focus_fixture") test.advance(100)
-    test.truthy(test.ipc("fixture").main)
-    test.type("b") test.eq(test.ipc("fixture").typed,1)
+    state=test.ipc("fixture")
+    test.truthy(state.main) test.eq(state.focus,"exclusive")
+    test.type("b") test.eq(test.ipc("fixture").typed,2,"a claim cleared the draft")
     test.eq(#test.logs("error"),0)
   end)
 end

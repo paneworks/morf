@@ -4,17 +4,24 @@
 use morf_app::Backend;
 use morf_app::{InputRect, WindowId};
 use morf_lua::{LayerSurfaceConfig, Runtime};
-use morf_render::{RenderEngine, WgpuBackend};
+use morf_paint::{Overlay, RenderEngine};
+use morf_render::WgpuBackend;
 use morf_scene::NodeHandle;
 use morf_value::region::{Rect as RegionRect, Region};
 
-use crate::{surface_layers::*, surfaces::*};
+use crate::host::reload_band::{band_for, band_input, band_overlay, band_region};
+use crate::host::{layers::*, surfaces::*};
 
-use super::{
-    CachedLayout, FrameSplit, MASK_SENTINEL, apply_blend, apply_subpixel, frame_log_wanted,
-    layout_for,
-};
+use super::cache::{CachedLayout, layout_for};
+use super::frame_log::{FrameSplit, frame_log_wanted};
+use super::renderer_settings::{apply_blend, apply_subpixel};
 
+/// Lays out, masks, and renders the scene subtree of one layer surface.
+///
+/// Every layer surface derives its input region the same way: an explicit mask
+/// when the configuration supplies one, and otherwise the live geometry of the
+/// interactive items, recomputed here so it tracks the surface as it changes.
+#[allow(clippy::too_many_arguments)]
 pub fn paint_layer(
     runtime: &mut Runtime,
     renderer: &mut RenderEngine<WgpuBackend>,
@@ -23,15 +30,18 @@ pub fn paint_layer(
     root: NodeHandle,
     config: &LayerSurfaceConfig,
     mut cache: Option<&mut CachedLayout>,
+    cover: Option<&crate::paint::cover::Shown>,
 ) -> Result<CachedLayout, String> {
     let (width, height) = client
         .layer_logical_size(layer)
         .ok_or_else(|| "layer surface disappeared while painting".to_owned())?;
+    let what = format!("layer {layer}");
+    crate::paint::recover::recover_lost_device(runtime, renderer, &what)?;
     // Read every paint like the keyboard focus below, so a configuration may
     // change it at any time; the renderer rebuilds only when it moved, and
     // its pipelines — the configuration's shaders among them — with it.
     if apply_blend(renderer, &config.blend) {
-        crate::surface_run::register_shaders(runtime, renderer)?;
+        crate::host::run::register_shaders(runtime, renderer)?;
     }
     let scale_120 = client.layer_scale_120(layer).unwrap_or(120);
     apply_subpixel(renderer, &config.subpixel_text, client, config.opaque);
@@ -69,8 +79,30 @@ pub fn paint_layer(
     split.mark("text inputs");
     runtime.observe_stretch(&layout);
     split.mark("stretch");
+    let band = (layer == morf_app::PRIMARY_LAYER)
+        .then(|| {
+            let previous = cache.as_deref().and_then(|cached| cached.band.as_ref());
+            band_for(runtime, previous, (width, height), renderer.backend_mut())
+        })
+        .flatten();
+    let cover = cover.and_then(|shown| {
+        let source = crate::paint::cover::COVER_SOURCE;
+        let size = (width, height);
+        let laid = runtime.pose_cover(source, shown.pose, size, renderer.backend_mut())?;
+        Some((laid, shown.conceals))
+    });
     let scene = runtime.scene();
-    let input = send_input_region(&scene, &layout, client, layer, config, cache.as_deref())?;
+    let painted = scene.paint_stamp(root).map_err(|error| error.to_string())?;
+    let stamp = (!fresh).then(|| scene.input_stamp(root).ok()).flatten();
+    let (input, input_paint) = send_input_region(
+        &scene,
+        &layout,
+        client,
+        layer,
+        config,
+        cache.as_deref(),
+        (stamp, band_input(band.as_ref())),
+    )?;
     split.mark("input region");
     let mut backdrop = Vec::new();
     // Where the compositor should blur what is behind this surface. Nothing is
@@ -141,9 +173,18 @@ pub fn paint_layer(
     }
     // A backend presenting through its own buffers declares the damage with
     // the buffer itself (`WgpuBackend::declares_damage`).
-    let declare = !renderer.backend_mut().declares_damage();
-    let damage = renderer
-        .render(&scene, &layout, scale_120, |damage| {
+    let render = |renderer: &mut RenderEngine<WgpuBackend>| {
+        let declare = !renderer.backend_mut().declares_damage();
+        let overlays: Vec<_> = cover
+            .iter()
+            .map(|(laid, conceals)| Overlay {
+                root: laid.root,
+                layout: &laid.layout,
+                conceals: *conceals,
+            })
+            .chain(band_overlay(band.as_ref()))
+            .collect();
+        renderer.render_over(&scene, &layout, &overlays, scale_120, |damage| {
             if !declare {
                 return;
             }
@@ -161,7 +202,16 @@ pub fn paint_layer(
                 );
             }
         })
-        .map_err(|error| error.to_string())?;
+    };
+    // A device lost during this frame is replaced and the frame drawn again
+    // on the new one, in full.
+    let damage = match render(renderer) {
+        Err(_) if crate::paint::recover::recover_lost_device(runtime, renderer, &what)? => {
+            render(renderer)
+        }
+        rendered => rendered,
+    }
+    .map_err(|error| error.to_string())?;
     split.mark("render");
     // What the frame repainted, beside how long it took: the one number that
     // says whether a change cost its own area or the whole surface.
@@ -185,7 +235,7 @@ pub fn paint_layer(
         };
         eprintln!(
             "{} layer {layer} damaged {area} px in {} rect(s){rects}",
-            crate::wake_plan::stamp(),
+            crate::paint::wake_plan::stamp(),
             damage.len()
         );
     }
@@ -210,13 +260,16 @@ pub fn paint_layer(
     split.mark("observe layout");
     split.finish();
     Ok(CachedLayout {
+        painted: (!renderer.backend_mut().last_frame_skipped()).then_some(painted),
         layout,
         revision,
         size: (width, height),
         scale_120,
         input,
+        input_paint,
         backdrop,
         keyboard_focus: config.keyboard_focus.clone(),
+        band,
     })
 }
 
@@ -230,6 +283,7 @@ pub fn paint_layer_surface(
     surface: &mut Window,
     text: Option<&mut morf_text::TextSystem>,
 ) -> Result<(), String> {
+    let _stage = morf_lua::profile::stage(morf_lua::profile::Stage::Paint);
     if let Some(text) = text {
         return super::lay_out_layer_surface(runtime, text, client, surface);
     }
@@ -267,6 +321,7 @@ pub fn paint_layer_surface(
         surface.root,
         &config,
         surface.layout.as_mut(),
+        None,
     )?;
     // A binding on this tree's layout geometry (`layout_width`, ...) hears
     // the frame as it is observed, after the render, and may move the tree
@@ -279,9 +334,23 @@ pub fn paint_layer_surface(
     Ok(())
 }
 
+/// Stands in the input cache for "the configured mask, already sent".
+///
+/// A configured mask is not built from layout, so there is no rectangle list to
+/// compare; what the cache needs is only something that is equal to itself and
+/// unequal to any real region. The negative extent cannot arise from geometry,
+/// which is floored and ceiled from a non-negative rectangle.
+pub const MASK_SENTINEL: InputRect = InputRect {
+    x: i32::MIN,
+    y: i32::MIN,
+    width: -1,
+    height: -1,
+};
+
 /// Hands the compositor where the layer takes the pointer: the configured
-/// mask, or the live geometry of its interactive items. Sent only when it
-/// differs from what `cache` says was sent last.
+/// mask, or the live geometry of its interactive items, and the engine's
+/// reload-error band (`band`) over either. Sent only when it differs from
+/// what `cache` says was sent last.
 pub fn send_input_region(
     scene: &morf_scene::Scene,
     layout: &morf_layout::Layout,
@@ -289,8 +358,20 @@ pub fn send_input_region(
     layer: u64,
     config: &LayerSurfaceConfig,
     cache: Option<&CachedLayout>,
-) -> Result<Vec<InputRect>, String> {
-    Ok(if let Some(regions) = &config.input_regions {
+    (stamp, band): (Option<u64>, Option<InputRect>),
+) -> Result<(Vec<InputRect>, u64), String> {
+    // The same layout (`stamp` is only given when it was not redone) and a
+    // tree whose input stamp has not moved: what takes input is where it
+    // was, and the walk that finds it is the one thing every frame paid.
+    if let (Some(stamp), Some(cached)) = (stamp, cache)
+        && config.input_regions.is_none()
+        && cached.input_paint == stamp
+        && band_input(cached.band.as_ref()) == band
+    {
+        return Ok((cached.input.clone(), stamp));
+    }
+    let derived_at = stamp.unwrap_or(u64::MAX);
+    let input = if let Some(regions) = &config.input_regions {
         // A configured mask is a static surface setting — nothing animates it —
         // so rasterising it and re-sending it every paint asks the compositor
         // to rebuild an identical region sixty times a second. The branch below
@@ -300,10 +381,14 @@ pub fn send_input_region(
         // The sentinel is what the cache compares: an empty vector would match
         // a surface that genuinely has no interactive area, so a shape that
         // stands for "the configured mask, unchanged" is stored instead.
-        let input = vec![MASK_SENTINEL];
+        let input = std::iter::once(MASK_SENTINEL)
+            .chain(band)
+            .collect::<Vec<_>>();
         if cache.is_none_or(|cached| cached.input != input) {
+            let mut regions = regions.clone();
+            regions.extend(band.map(band_region));
             client
-                .set_layer_composed_input_region(layer, regions)
+                .set_layer_composed_input_region(layer, &regions)
                 .map_err(|error| error.to_string())?;
         }
         input
@@ -324,10 +409,12 @@ pub fn send_input_region(
                     height: bottom - top,
                 }
             })
+            .chain(band)
             .collect::<Vec<_>>();
         if cache.is_none_or(|cached| cached.input != input) {
             client.set_input_region(WindowId::Layer(layer), Some(&input));
         }
         input
-    })
+    };
+    Ok((input, derived_at))
 }

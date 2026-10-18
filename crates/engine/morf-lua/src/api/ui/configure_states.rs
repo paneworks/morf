@@ -5,15 +5,16 @@
 
 use luna::{Closure, Context, Executor, Function, Table, Value as LuaValue, Variadic};
 use morf_scene::{Behavior, NodeHandle, Value as SceneValue};
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::configure::parse_rotation_direction;
-use crate::reactive_execute::drive_executor;
-use crate::states::*;
-use crate::{lua_values::*, reactive_bindings::*, state::*, table_menu::*, types::*};
+use crate::api::ui::configure::parse_rotation_direction;
+use crate::runtime::states::*;
+use crate::vm::execute::drive_executor;
+use crate::{
+    api::ui::bindings::*, runtime::state::*, value::lua::*, value::table::*, vm::types::*,
+};
 
 /// Parses `states` and `transitions`.
 ///
@@ -22,7 +23,7 @@ use crate::{lua_values::*, reactive_bindings::*, state::*, table_menu::*, types:
 /// state named `default`, else nothing -- in which case the node keeps the
 /// state it has.
 pub(crate) fn configure_states<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     limits: Limits,
     node: NodeHandle,
@@ -61,7 +62,7 @@ pub(crate) fn configure_states<'gc>(
                         let property = property.display_lossy().to_string();
                         if !state
                             .borrow()
-                            .scene
+                            .scene()
                             .has_property(node, &property)
                             .map_err(|error| error.to_string())?
                         {
@@ -152,7 +153,7 @@ pub(crate) fn configure_states<'gc>(
     } else if !matches!(transitions, LuaValue::Nil) {
         return Err("transitions must be an array table".into());
     }
-    state.borrow_mut().states.insert(
+    state.borrow_mut().states_mut().declare(
         node,
         StateSet {
             definitions,
@@ -196,7 +197,7 @@ fn build_state_selector<'gc>(
             .set(
                 ctx,
                 index as i64 + 1,
-                ctx.fetch(&crate::vm::handler_store::stashed(when)),
+                ctx.fetch(&crate::vm::handler_store::stashed(when)?),
             )
             .map_err(|error| error.to_string())?;
     }

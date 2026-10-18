@@ -91,6 +91,7 @@
 ---@field screencopy Morf.Screencopy
 ---@field screens Morf.Screens
 ---@field screens_revision fun(...): any
+---@field service fun(...): any
 ---@field session_lock any
 ---@field session_lock_state fun(...): any
 ---@field session_paths fun(...): any
@@ -681,6 +682,7 @@
 ---@field Text fun(...): any
 ---@field TextInput fun(...): any
 ---@field Timer fun(...): any
+---@field claims fun(node: morf.Node, claims: morf.ui.ClaimSet): table<string, morf.ui.ClaimHandle>
 ---@field destroy fun(...): any
 ---@field each fun(...): any
 ---@field follow fun(...): any
@@ -713,6 +715,26 @@
 
 ---@class Morf.Xkb
 ---@field compile fun(...): any
+---@field include_paths fun(...): any
+
+---@class morf.ui.ClaimSet
+---@field motion table? the behaviour every claim of the set moves by, unless it has its own
+---@field [string] morf.ui.Claim
+
+---@class morf.ui.Claim
+---@field class ("state"|"asked"|"reflex"|"posture"|"ambient")?
+---@field when (boolean|morf.ReadOnlySignal|fun(): any)?
+---@field set table<string, any> each property claimed, to a value, a signal or a function
+---@field motion table? a behaviour table: `{ duration = ms, easing = ... }` or `ui.spring { ... }`
+
+---@class morf.ui.ClaimHandle
+---@field presence morf.ReadOnlySignal 0 while the claim yields, 1 while it owns every property it sets
+---@field ask fun()? an asked claim's: hold it
+---@field release fun()? an asked claim's: let it go
+---@field remove fun(): boolean take the claim out; false when it already was
+
+---@class morf.ReadOnlySignal
+---@field get fun(self: morf.ReadOnlySignal): any
 
 ---@class morf.Color
 ---@field r number

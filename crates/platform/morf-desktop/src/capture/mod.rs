@@ -17,7 +17,7 @@ use wayland_protocols::ext::image_copy_capture::v1::client::{
 };
 use wayland_protocols_wlr::screencopy::v1::client::zwlr_screencopy_frame_v1::ZwlrScreencopyFrameV1;
 
-use crate::{Desktop, DesktopState};
+use crate::{DesktopState, WaylandDesktop};
 
 /// Pixel encoding returned by a compositor screencopy.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -113,7 +113,7 @@ pub(crate) struct PendingCapture {
     pub(crate) dmabuf_buffer: Option<(wl_buffer::WlBuffer, u32)>,
 }
 
-impl Desktop {
+impl WaylandDesktop {
     /// Whether the newer capture protocol is available, with an output source.
     pub fn supports_image_capture(&self) -> bool {
         self.state.capture_manager.is_some() && self.state.output_source_manager.is_some()

@@ -1,11 +1,10 @@
 use luna::{Callback, CallbackReturn, Context, Table, UserRef};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use morf_layout::Geometry;
 use morf_scene::NodeHandle;
 
-use crate::{runtime_helpers::*, scene_bindings::*, state::*, surface_types::*};
+use crate::{api::ui::scene::*, runtime::helpers::*, runtime::host_types::*, runtime::state::*};
 
 pub(crate) fn checked_window_node(
     state: &ReactiveState,
@@ -13,11 +12,11 @@ pub(crate) fn checked_window_node(
     node: NodeHandle,
 ) -> Result<NodeHandle, HostError> {
     let surface = state
-        .windows
+        .windows()
         .window_surfaces
         .get(&surface)
         .ok_or_else(|| HostError("window destroyed".into()))?;
-    if !scene_node_in_subtree(&state.scene, surface.root, node) {
+    if !scene_node_in_subtree(state.scene(), surface.root, node) {
         return Err(HostError(
             "item does not belong to the window surface".into(),
         ));
@@ -41,7 +40,7 @@ pub(crate) fn geometry_table(ctx: Context<'_>, geometry: Geometry) -> Table<'_> 
 
 pub(crate) fn window_item_position_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, node): (UserRef<WindowSurfaceToken>, UserRef<NodeToken>) =
@@ -49,8 +48,8 @@ pub(crate) fn window_item_position_method<'gc>(
         let state = state.borrow();
         let node = checked_window_node(&state, surface.id, node.handle)?;
         let point = state
-            .transform_tracker
-            .map_from_node(&state.scene, node, 0.0, 0.0)
+            .transform_tracker()
+            .map_from_node(state.scene(), node, 0.0, 0.0)
             .map_err(|error| HostError(error.to_string()))?
             .ok_or_else(|| HostError("item has not been laid out".into()))?;
         stack.replace(ctx, point_table(ctx, point));
@@ -60,7 +59,7 @@ pub(crate) fn window_item_position_method<'gc>(
 
 pub(crate) fn window_item_rect_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, node): (UserRef<WindowSurfaceToken>, UserRef<NodeToken>) =
@@ -68,13 +67,13 @@ pub(crate) fn window_item_rect_method<'gc>(
         let state = state.borrow();
         let node = checked_window_node(&state, surface.id, node.handle)?;
         let size = state
-            .transform_tracker
+            .transform_tracker()
             .geometry(node)
             .ok_or_else(|| HostError("item has not been laid out".into()))?;
         let geometry = state
-            .transform_tracker
+            .transform_tracker()
             .map_rect_from_node(
-                &state.scene,
+                state.scene(),
                 node,
                 Geometry {
                     x: 0.0,
@@ -92,7 +91,7 @@ pub(crate) fn window_item_rect_method<'gc>(
 
 pub(crate) fn window_map_from_item_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, node, x, y): (UserRef<WindowSurfaceToken>, UserRef<NodeToken>, f64, f64) =
@@ -103,8 +102,8 @@ pub(crate) fn window_map_from_item_method<'gc>(
         let state = state.borrow();
         let node = checked_window_node(&state, surface.id, node.handle)?;
         let point = state
-            .transform_tracker
-            .map_from_node(&state.scene, node, x, y)
+            .transform_tracker()
+            .map_from_node(state.scene(), node, x, y)
             .map_err(|error| HostError(error.to_string()))?
             .ok_or_else(|| HostError("item has not been laid out".into()))?;
         stack.replace(ctx, point_table(ctx, point));
@@ -114,7 +113,7 @@ pub(crate) fn window_map_from_item_method<'gc>(
 
 pub(crate) fn window_map_rect_from_item_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (surface, node, x, y, width, height): WindowMapRectArgs<'gc> = stack.consume(ctx)?;
@@ -130,9 +129,9 @@ pub(crate) fn window_map_rect_from_item_method<'gc>(
         let state = state.borrow();
         let node = checked_window_node(&state, surface.id, node.handle)?;
         let geometry = state
-            .transform_tracker
+            .transform_tracker()
             .map_rect_from_node(
-                &state.scene,
+                state.scene(),
                 node,
                 Geometry {
                     x,
@@ -150,7 +149,7 @@ pub(crate) fn window_map_rect_from_item_method<'gc>(
 
 pub(crate) fn floating_state_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     property: &'static str,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -158,7 +157,7 @@ pub(crate) fn floating_state_method<'gc>(
         let mut state = state.borrow_mut();
         let (current, changed) = {
             let surface = state
-                .windows
+                .windows_mut()
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -178,7 +177,7 @@ pub(crate) fn floating_state_method<'gc>(
             (*current, changed)
         };
         if changed {
-            state.windows.window_surfaces_changed = true;
+            state.windows_mut().window_surfaces_changed = true;
         }
         stack.replace(ctx, current);
         Ok(CallbackReturn::Return)
@@ -187,7 +186,7 @@ pub(crate) fn floating_state_method<'gc>(
 
 pub(crate) fn floating_string_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     property: &'static str,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -201,7 +200,7 @@ pub(crate) fn floating_string_method<'gc>(
         let mut state = state.borrow_mut();
         let (current, changed) = {
             let surface = state
-                .windows
+                .windows_mut()
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -219,7 +218,7 @@ pub(crate) fn floating_string_method<'gc>(
             }
             (current.clone(), changed)
         };
-        state.windows.window_surfaces_changed |= changed;
+        state.windows_mut().window_surfaces_changed |= changed;
         stack.replace(ctx, current);
         Ok(CallbackReturn::Return)
     })
@@ -227,7 +226,7 @@ pub(crate) fn floating_string_method<'gc>(
 
 pub(crate) fn floating_size_method<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     property: &'static str,
 ) -> Callback<'gc> {
     Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -253,7 +252,7 @@ pub(crate) fn floating_size_method<'gc>(
         let mut state = state.borrow_mut();
         let (width, height, changed) = {
             let surface = state
-                .windows
+                .windows_mut()
                 .window_surfaces
                 .get_mut(&surface.id)
                 .ok_or_else(|| HostError("window destroyed".into()))?;
@@ -308,7 +307,7 @@ pub(crate) fn floating_size_method<'gc>(
             };
             (after.0, after.1, before != after)
         };
-        state.windows.window_surfaces_changed |= changed;
+        state.windows_mut().window_surfaces_changed |= changed;
         let result = Table::new(&ctx);
         result.set_field(ctx, "width", i64::from(width));
         result.set_field(ctx, "height", i64::from(height));

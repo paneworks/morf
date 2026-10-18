@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use crate::{lock::*, paint::*, services::*, supervisor::*, surfaces::*};
+use crate::{host::surfaces::*, lock::*, paint::*, process::services::*, process::supervisor::*};
 
 pub fn handle_ipc(
     workers: &BTreeMap<String, Worker>,
@@ -21,6 +21,14 @@ pub fn handle_ipc(
             // (`morf.screens[1]` names the one each instance draws). The
             // reply is the first output's that answered with something, so
             // an instance that stayed quiet does not hide the one that spoke.
+            if target == TEST_WAKES && std::env::var_os("MORF_TEST_HOOKS").is_some() {
+                return IpcReply::success(
+                    morf_io::wake_counts()
+                        .into_iter()
+                        .map(|(thread, rings)| WireValue::String(format!("{thread}={rings}")))
+                        .collect(),
+                );
+            }
             if workers.is_empty() {
                 return IpcReply::refused("shell has no active output");
             }
@@ -128,7 +136,32 @@ pub fn handle_ipc(
     }
 }
 
-#[derive(Clone, Copy, Default)]
+/// A hidden verb that panics the worker it reaches, for testing recovery.
+/// Answered only with `MORF_TEST_HOOKS` set; its one optional argument
+/// names the output whose worker panics.
+const TEST_PANIC: &str = "@panic";
+
+/// A hidden verb that destroys the process's GPU devices, as a driver losing
+/// them would, for testing in-place recovery. Gated and addressed like
+/// [`TEST_PANIC`]; the devices are the process's, so one output asking loses
+/// them for every output.
+const TEST_DEVICE_LOST: &str = "@device-lost";
+
+/// A hidden verb answered by the supervisor without waking any output: each
+/// loop's thread and how often its alarm was rung. Gated like [`TEST_PANIC`].
+const TEST_WAKES: &str = "@wakes";
+
+fn test_panic_here(screen: Option<&Screen>, args: &[morf_lua::IpcValue]) -> bool {
+    if std::env::var_os("MORF_TEST_HOOKS").is_none() {
+        return false;
+    }
+    match args.first() {
+        Some(morf_lua::IpcValue::String(name)) => screen.is_some_and(|screen| screen.name == *name),
+        _ => true,
+    }
+}
+
+#[derive(Default)]
 pub struct WorkerUpdate {
     pub repaint: bool,
     pub reset_input: bool,
@@ -137,6 +170,10 @@ pub struct WorkerUpdate {
     /// A new configuration replaced the old one: what the old one set on
     /// the outputs (their gamma) goes with it.
     pub reloaded: bool,
+    /// The runtime a reload replaced. Tearing a large one down takes tens
+    /// of milliseconds, which a host spends after the new one's first
+    /// frame rather than before it.
+    pub retired: Option<Runtime>,
 }
 
 pub fn handle_worker_command(
@@ -151,17 +188,22 @@ pub fn handle_worker_command(
             args,
             reply,
         } => {
-            let result = runtime
-                .call_ipc(&target, &args)
-                .map_err(|error| error.to_string());
-            let repaint = result.is_ok();
-            let _ = reply.send(result);
+            if target == TEST_PANIC && test_panic_here(screen, &args) {
+                panic!("{TEST_PANIC} asked for by IPC");
+            }
+            let lost = (target == TEST_DEVICE_LOST && test_panic_here(screen, &args))
+                .then(morf_render::lose_devices);
+            if let Some(count) = lost {
+                eprintln!("morf: {TEST_DEVICE_LOST}: destroyed {count} GPU device(s)");
+            }
+            let (result, repaint) = match lost {
+                Some(count) => (Ok(vec![morf_lua::IpcValue::Integer(count as i64)]), true),
+                None => runtime.call_ipc_with_repaint(&target, &args),
+            };
+            let _ = reply.send(result.map_err(|error| error.to_string()));
             WorkerUpdate {
                 repaint,
-                reset_input: false,
-                refresh_idle: false,
-                recreate_surface: false,
-                reloaded: false,
+                ..WorkerUpdate::default()
             }
         }
         WorkerCommand::Screens(screens) => {
@@ -214,6 +256,7 @@ pub fn handle_worker_command(
             reply,
         } => {
             // The outputless runtime has no output of its own.
+            runtime.retire_native_policy();
             let mut candidate = match screen {
                 Some(screen) => Runtime::for_screen(Limits::from_env().0, screen.clone()),
                 None => Runtime::new(Limits::from_env().0),
@@ -230,7 +273,10 @@ pub fn handle_worker_command(
             // replaces still held it would be given back a moment later, to
             // nobody.
             runtime.release_bus_names();
-            let result = execute_config(&mut candidate, &path, &source, policy)
+            let result = candidate
+                .inherit_native_policy(runtime)
+                .map_err(|error| error.to_string())
+                .and_then(|()| execute_config(&mut candidate, &path, &source, policy))
                 // With no output there is nothing to draw, so no root is owed.
                 .and_then(|()| match screen {
                     Some(_) => primary_surface_root(&candidate).map(|_| ()),
@@ -242,25 +288,68 @@ pub fn handle_worker_command(
                         .map(|_| ())
                         .map_err(|error| error.to_string())
                 });
+            let succeeded = result.is_ok();
+            let mut retired = None;
             let repaint = match &result {
                 Ok(()) => {
                     candidate.dispatch_reload_completed();
-                    *runtime = candidate;
+                    retired = Some(std::mem::replace(runtime, candidate));
                     true
                 }
-                Err(error) => {
-                    runtime.dispatch_reload_failed(error.clone());
-                    false
-                }
+                // Reported by the configuration's own handlers, or shown on
+                // the engine's band: never both, and never neither.
+                Err(error) => runtime.report_reload_failure(error, &path),
             };
             let _ = reply.send(result);
             WorkerUpdate {
                 repaint,
-                reset_input: repaint,
-                refresh_idle: repaint,
-                recreate_surface: repaint && hard,
-                reloaded: repaint,
+                reset_input: succeeded,
+                refresh_idle: succeeded,
+                recreate_surface: succeeded && hard,
+                reloaded: succeeded,
+                retired,
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod repaint_tests {
+    use super::*;
+
+    #[test]
+    fn worker_repaints_visual_ipc_changes_including_changes_before_an_error() {
+        let mut runtime = Runtime::default();
+        runtime
+            .execute(
+                "worker-ipc.lua",
+                br##"
+            local node=require("morf.ui").Rect {width=10,height=10}
+            morf.ipc.status=function() return "ready" end
+            morf.ipc.resize=function() node.width=20 end
+            morf.ipc.partial=function() node.width=30 error("partial") end
+        "##,
+            )
+            .unwrap();
+        for (verb, repaint, success) in [
+            ("status", false, true),
+            ("resize", true, true),
+            ("partial", true, false),
+            ("missing", false, false),
+        ] {
+            let (reply, receive) = mpsc::sync_channel(1);
+            let update = handle_worker_command(
+                &mut runtime,
+                None,
+                LoadPolicy::default(),
+                WorkerCommand::Call {
+                    target: verb.into(),
+                    args: vec![],
+                    reply,
+                },
+            );
+            assert_eq!(update.repaint, repaint, "{verb}");
+            assert_eq!(receive.recv().unwrap().is_ok(), success, "{verb}");
         }
     }
 }

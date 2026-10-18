@@ -60,13 +60,7 @@ impl Scene {
         };
         let element = self.nodes[id].element;
         for (property, value) in &mut exit.values {
-            let slot = *self.nodes[id]
-                .properties
-                .get(property.as_str())
-                .ok_or_else(|| SceneError::UnknownProperty {
-                    element: element.name(),
-                    property: property.clone(),
-                })?;
+            let (_, slot) = self.lookup(id, property)?;
             *value = coerce(element, property, slot.kind, value.clone())?;
         }
         self.exit_specs.insert(id, exit);
@@ -111,11 +105,7 @@ impl Scene {
         }
         let mut restore = Vec::with_capacity(spec.values.len());
         for (property, to) in &spec.values {
-            let (name, slot) = self.nodes[id]
-                .properties
-                .get_key_value(property.as_str())
-                .map(|(name, slot)| (*name, *slot))
-                .expect("checked when the exit was declared");
+            let (name, slot) = self.lookup(id, property)?;
             let target = self.properties.read(slot.target)?.clone();
             let from = self.properties.read(slot.current)?.clone();
             restore.push((name, target));
@@ -153,7 +143,7 @@ impl Scene {
             return Ok(false);
         };
         for (name, back) in exiting.restore {
-            let slot = self.nodes[id].properties[name];
+            let (_, slot) = self.lookup(id, name)?;
             let from = self.properties.read(slot.current)?.clone();
             if interpolatable(&from, &back) {
                 self.animate_from(node, name, from, back, exiting.behavior)?;

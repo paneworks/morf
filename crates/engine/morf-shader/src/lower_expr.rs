@@ -265,7 +265,7 @@ impl Lowerer<'_> {
         // Only the one-argument form reads what is underneath; sampling a
         // declared texture does not make a node into a layer.
         if builtin == Builtin::Texture && lowered.len() == 1 {
-            self.samples_behind = true;
+            self.samples_behind.get_or_insert(line);
         }
         if matches!(
             builtin,
@@ -279,7 +279,7 @@ impl Lowerer<'_> {
                 | Builtin::FwidthCoarse
                 | Builtin::FwidthFine
         ) {
-            self.takes_derivative = true;
+            self.takes_derivative.get_or_insert(line);
         }
         let types: Vec<Type> = lowered.iter().map(Expr::ty).collect();
         match builtins::resolve(name, shape, &types) {

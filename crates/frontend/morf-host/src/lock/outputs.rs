@@ -23,11 +23,12 @@ use morf_app::Backend;
 use morf_app::{Output, WindowId};
 use morf_layout::{Layout, Size};
 use morf_lua::Runtime;
-use morf_render::{RenderEngine, WgpuBackend};
+use morf_paint::RenderEngine;
+use morf_render::WgpuBackend;
 use morf_scene::{Element, NodeHandle};
 
 use crate::host::windows::{Kind, Windows};
-use crate::{supervisor::lua_screen, surfaces::*};
+use crate::{host::surfaces::*, process::supervisor::lua_screen};
 
 /// The lock surface of output `index`, drawing `root`: a window like any
 /// other, keyed `WindowId::Lock(index)` in the lock's `Windows`.
@@ -233,6 +234,8 @@ pub fn paint_lock(
         .lock_size(index)
         .ok_or_else(|| "lock surface disappeared while painting".to_owned())?;
     size_lock_root(runtime, root, (width, height))?;
+    let what = format!("lock surface {index}");
+    crate::paint::recover::recover_lost_device(runtime, renderer, &what)?;
     // The lock screen is `morf.surface` too, so it blends the way that says.
     crate::paint::apply_blend(renderer, &runtime.layer_surface_config().blend);
     let scene = runtime.scene();
@@ -261,9 +264,13 @@ pub fn paint_lock(
     let scene = runtime.scene();
     client.request_frame(WindowId::Lock(index));
     let scale = client.lock_scale_120(index).unwrap_or(120);
-    let damage = renderer
-        .render(&scene, &layout, scale, |_| {})
-        .map_err(|error| error.to_string())?;
+    let damage = match renderer.render(&scene, &layout, scale, |_| {}) {
+        Err(_) if crate::paint::recover::recover_lost_device(runtime, renderer, &what)? => {
+            renderer.render(&scene, &layout, scale, |_| {})
+        }
+        rendered => rendered,
+    }
+    .map_err(|error| error.to_string())?;
     if damage.is_empty() {
         client.commit(WindowId::Lock(index));
     }

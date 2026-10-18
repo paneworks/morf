@@ -12,20 +12,26 @@ impl WgpuBackend {
     /// The offscreen target's pixels, tightly packed as RGBA8.
     ///
     /// Rows come back with no padding, so a caller can index by `(y * width +
-    /// x) * 4`. The target is sRGB, which is what an image file wants anyway.
+    /// x) * 4`. The target is sRGB, which is what an image file wants anyway;
+    /// a deep one is brought down to eight bits.
     pub fn read_pixels(&mut self) -> Vec<u8> {
         let texture = self.texture.clone();
-        self.read_texture(&texture)
+        let bytes = self.read_texture(&texture);
+        if texture.format() == wgpu::TextureFormat::Rgba16Float {
+            return half_to_rgba8(&bytes, self.space.blend == crate::BlendSpace::Linear);
+        }
+        bytes
     }
 
-    /// A texture's bytes as it stores them, tightly packed, four a pixel.
+    /// A texture's bytes as it stores them, tightly packed.
     pub(crate) fn read_texture(&self, texture: &wgpu::Texture) -> Vec<u8> {
         let width = texture.width();
         let height = texture.height();
-        // Copies out of a texture want rows aligned to 256 bytes, which is 64
-        // pixels — so the buffer is wider than the image and the rows are
-        // repacked afterwards.
-        let bytes_per_row = width.next_multiple_of(64) * 4;
+        let texel = texture.format().block_copy_size(None).unwrap_or(4);
+        // Copies out of a texture want rows aligned to 256 bytes, so the
+        // buffer is wider than the image and the rows are repacked
+        // afterwards.
+        let bytes_per_row = (width * texel).next_multiple_of(256);
         let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("morf readback"),
             size: u64::from(bytes_per_row) * u64::from(height),
@@ -69,12 +75,51 @@ impl WgpuBackend {
             .expect("the queue drains");
         receive.recv().expect("the map completes").expect("mapped");
         let mapped = slice.get_mapped_range().expect("the range is readable");
-        let mut out = Vec::with_capacity((width * height * 4) as usize);
+        let mut out = Vec::with_capacity((width * height * texel) as usize);
         for row in 0..height {
             let start = (row * bytes_per_row) as usize;
-            out.extend_from_slice(&mapped[start..start + (width * 4) as usize]);
+            out.extend_from_slice(&mapped[start..start + (width * texel) as usize]);
         }
         out
+    }
+}
+
+/// A half-float target's pixels as sRGB-encoded RGBA8: encoded on the way
+/// when the target holds linear light.
+fn half_to_rgba8(bytes: &[u8], linear: bool) -> Vec<u8> {
+    bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .enumerate()
+        .map(|(index, half)| {
+            let value = half_to_f32(u16::from_le_bytes(*half)).clamp(0.0, 1.0);
+            let value = if linear && index % 4 != 3 {
+                encode_srgb(value)
+            } else {
+                value
+            };
+            (value * 255.0).round() as u8
+        })
+        .collect()
+}
+
+pub(crate) fn half_to_f32(bits: u16) -> f32 {
+    let sign = if bits & 0x8000 != 0 { -1.0 } else { 1.0 };
+    let exponent = i32::from((bits >> 10) & 0x1f);
+    let mantissa = f32::from(bits & 0x3ff);
+    sign * match exponent {
+        0 => mantissa * 2f32.powi(-24),
+        31 => f32::INFINITY,
+        _ => (1.0 + mantissa / 1024.0) * 2f32.powi(exponent - 15),
+    }
+}
+
+pub(crate) fn encode_srgb(linear: f32) -> f32 {
+    if linear <= 0.003_130_8 {
+        linear * 12.92
+    } else {
+        1.055 * linear.powf(1.0 / 2.4) - 0.055
     }
 }
 

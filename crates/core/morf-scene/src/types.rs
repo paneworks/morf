@@ -19,7 +19,7 @@ impl NodeHandle {
 }
 
 /// Element kinds implemented by the first scene milestone.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Element {
     /// Non-painting container.
     Item,
@@ -175,7 +175,15 @@ pub struct Scene {
     /// What each `Terminal` node's screen shows, by node: a side table for
     /// the same reason `shaders` is one. See [`crate::TerminalScreen`].
     pub(crate) terminal_screens: FastMap<NodeId, std::sync::Arc<crate::TerminalScreen>>,
+    /// Every node one of whose `glass` properties has ever moved: the only
+    /// nodes paint asks for the material (see [`Scene::may_have_glass`]).
+    pub(crate) glass_nodes: FastSet<NodeId>,
     pub(crate) properties: crate::property_store::PropertyStore,
+    /// Each element's properties as nothing has set them: one slot per
+    /// property, shared by every node of the element and never written. A
+    /// node holds slots of its own only for what was set on it, so a
+    /// rectangle with three properties set carries three, not seventy.
+    pub(crate) defaults: FastMap<Element, FastMap<&'static str, PropertySlot>>,
     pub(crate) behaviors: FastMap<PropertyKey, Behavior>,
     pub(crate) animations: FastMap<PropertyKey, Animation>,
     pub(crate) physics: FastMap<PropertyKey, PhysicsAnimation>,
@@ -202,6 +210,12 @@ pub struct Scene {
     /// against the root of the tree it happened in, so a surface re-lays out
     /// only when its own tree moved; see [`Scene::layout_revision_of`].
     pub(crate) root_revisions: FastMap<NodeId, u64>,
+    /// Bumped whenever something paint reads changes: any property, the
+    /// shape of the tree, a shader, a terminal's screen, a stretch.
+    pub(crate) paint_revision: u64,
+    /// Bumped whenever something that decides where input lands changes
+    /// without a new layout: a transform, a stretch, a node starting to exit.
+    pub(crate) input_revision: u64,
     /// The layout revision each tree last lost a node at, by its root: a
     /// node removed, or moved out to somewhere else. An incremental layout
     /// cannot tell which of the nodes it knows are gone, so a loss since it
@@ -284,6 +298,10 @@ pub(crate) struct Node {
     pub(crate) properties: FastMap<&'static str, PropertySlot>,
     /// When layout last had a reason to look at this node, and at what.
     pub(crate) stamps: LayoutStamps,
+    /// The newest paint revision in this node's subtree, itself included.
+    pub(crate) paint: u64,
+    /// The newest input revision in this node's subtree, itself included.
+    pub(crate) input: u64,
 }
 
 /// The layout revisions a node was last touched at, which is what lets a

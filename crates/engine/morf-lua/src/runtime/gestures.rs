@@ -18,7 +18,7 @@ impl Runtime {
     /// declines it; failures never capture a contact.
     pub fn offer_pan(&mut self, node: NodeHandle, event: UiEvent, args: &[IpcValue]) -> bool {
         use morf_runtime::events::EventHost;
-        let handler = self.reactive.borrow().events.handler(node, event);
+        let handler = self.reactive.borrow().events().handler(node, event);
         let Some(handler) = handler else {
             return false;
         };
@@ -33,7 +33,7 @@ impl Runtime {
 
     /// Forget the gesture when its contact is canceled or claimed elsewhere.
     pub fn cancel_gesture(&mut self) {
-        self.reactive.borrow_mut().gestures.cancel();
+        self.reactive.borrow_mut().gestures_mut().cancel();
     }
 
     /// Watches one pointer event. Returns false for a click a long press
@@ -45,8 +45,8 @@ impl Runtime {
         point: EventPoint,
     ) -> bool {
         let mut state = self.reactive.borrow_mut();
-        let now = clock(state.timers.virtual_now());
-        state.gestures.watch(now, node, event, point)
+        let now = clock(state.timers().virtual_now());
+        state.gestures_mut().watch(now, node, event, point)
     }
 
     /// The events a pointer event completes, delivered after it: a double
@@ -59,8 +59,8 @@ impl Runtime {
     ) -> bool {
         let completed = {
             let mut state = self.reactive.borrow_mut();
-            let now = clock(state.timers.virtual_now());
-            state.gestures.finish(now, node, event, point)
+            let now = clock(state.timers().virtual_now());
+            state.gestures_mut().finish(now, node, event, point)
         };
         let (event, args) = match completed {
             Some(Completed::DoubleClicked(point)) => (
@@ -107,11 +107,8 @@ impl Runtime {
     pub(crate) fn poll_gestures(&mut self) -> bool {
         let due = {
             let mut state = self.reactive.borrow_mut();
-            let now = clock(state.timers.virtual_now());
-            let morf_runtime::Engine {
-                gestures, events, ..
-            } = &mut state.engine;
-            gestures.take_long_press(now, |node| events.has(node, UiEvent::LongPressed))
+            let now = clock(state.timers().virtual_now());
+            state.take_long_press(now)
         };
         match due {
             Some((node, point)) => self.dispatch_ui_event_with_args(
@@ -127,7 +124,7 @@ impl Runtime {
 impl Runtime {
     /// Whether `node` has a handler for `event`.
     pub fn handles(&self, node: NodeHandle, event: UiEvent) -> bool {
-        self.reactive.borrow().engine.events.has(node, event)
+        self.reactive.borrow().events().has(node, event)
     }
 
     /// Calls `node`'s handler for a gesture the host recognised (a pinch, an

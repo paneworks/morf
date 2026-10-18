@@ -11,14 +11,15 @@
 //!
 //! Numbers are the fastest of several batches. Background load only ever adds
 //! time, so the minimum is the closest estimate of the work itself; an average
-//! would mostly measure whatever else the machine was doing.
+//! would mostly measure whatever else the machine was doing. `gpu-time [WxH]
+//! [frames]` after the configuration times whole frames on the GPU instead.
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use morf_layout::{Layout, Size, TextMeasurer, TextOptions};
 use morf_lua::{Limits, Runtime, Screen};
-use morf_render::DrawList;
+use morf_paint::DrawList;
 use morf_scene::{Element, NodeHandle};
 
 #[path = "frame_bench/gpu.rs"]
@@ -114,7 +115,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let gpu_size = args
         .get(3)
-        .filter(|_| args.get(2).map(String::as_str) == Some("gpu"))
+        .filter(|_| matches!(args.get(2).map(String::as_str), Some("gpu" | "gpu-time")))
         .and_then(|value| value.split_once('x'))
         .and_then(|(w, h)| Some((w.parse::<f64>().ok()?, h.parse::<f64>().ok()?)));
     let argument = |index: usize, fallback: f64| {
@@ -254,7 +255,7 @@ fn main() {
             .and_then(|value| value.parse::<usize>().ok());
         match index {
             Some(index) => *roots.get(index).expect("FRAME_BENCH_ROOT is out of range"),
-            None => morf_host::surfaces::primary_surface_root(&runtime)
+            None => morf_host::host::surfaces::primary_surface_root(&runtime)
                 .expect("configuration has a primary surface"),
         }
     };
@@ -263,6 +264,11 @@ fn main() {
     // `gpu` renders one frame on a real adapter instead of timing anything: a
     // shader the driver refuses looks fine from the CPU side, and the only way
     // to find out is to build the pipelines and draw, headless.
+    if std::env::args().nth(2).as_deref() == Some("gpu-time") {
+        let frames = args.get(4).and_then(|value| value.parse().ok());
+        gpu::time(&mut runtime, root, size, &config, frames.unwrap_or(100));
+        return;
+    }
     if std::env::args().nth(2).as_deref() == Some("gpu") {
         let picture = args.get(if gpu_size.is_some() { 4 } else { 3 });
         gpu::run(&mut runtime, root, size, &config, picture);
@@ -329,10 +335,10 @@ fn main() {
         .filter(|command| {
             matches!(
                 command,
-                morf_render::DrawCommand::Field {
+                morf_paint::DrawCommand::Field {
                     shader: Some(_),
                     ..
-                } | morf_render::DrawCommand::Quad {
+                } | morf_paint::DrawCommand::Quad {
                     shader: Some(_),
                     ..
                 }
@@ -456,8 +462,8 @@ fn main() {
     }
     println!(
         "  DrawCommand size   {} bytes  ({} KiB for this scene)",
-        std::mem::size_of::<morf_render::DrawCommand>(),
-        std::mem::size_of::<morf_render::DrawCommand>() * nodes / 1024
+        std::mem::size_of::<morf_paint::DrawCommand>(),
+        std::mem::size_of::<morf_paint::DrawCommand>() * nodes / 1024
     );
     println!("  poll_services      {idle:?}");
     println!(

@@ -30,7 +30,7 @@ fn a_configuration_finds_its_projects_library_above_it() {
         "the project's library comes next: {roots:?}"
     );
     assert_eq!(
-        crate::serialization::load_runtime_module(&roots, "lib.greeting").unwrap(),
+        crate::vm::loader::load_runtime_module(&roots, "lib.greeting").unwrap(),
         b"return 'from the project'"
     );
     // Asked to look nowhere else, it does not.

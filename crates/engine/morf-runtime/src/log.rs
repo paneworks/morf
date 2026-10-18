@@ -106,9 +106,17 @@ impl LogEntry {
 #[derive(Default)]
 pub struct Log {
     entries: Vec<LogEntry>,
+    /// Nodes the lint has already complained about, so a bar that paints
+    /// sixty times a second says it once.
+    linted: std::collections::HashSet<morf_scene::NodeHandle>,
 }
 
 impl Log {
+    /// Whether this is the lint's first complaint about `node`.
+    pub fn first_lint(&mut self, node: morf_scene::NodeHandle) -> bool {
+        self.linted.insert(node)
+    }
+
     /// Records one line, stamped with when it happened.
     ///
     /// The one way in, so every entry gets a level and a time rather than the

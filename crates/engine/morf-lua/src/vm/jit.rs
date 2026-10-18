@@ -9,7 +9,7 @@
 //! anything else (or unset) turns the native tier on where the target
 //! supports it. Without the feature every function here does nothing.
 
-use crate::types::Runtime;
+use crate::vm::types::Runtime;
 
 /// Whether `MORF_JIT` asks for the interpreter alone.
 #[cfg(feature = "jit")]

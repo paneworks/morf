@@ -22,7 +22,7 @@ use wayland_protocols_wlr::gamma_control::v1::client::{
     zwlr_gamma_control_v1::{self, ZwlrGammaControlV1},
 };
 
-use crate::{Desktop, DesktopState};
+use crate::{DesktopState, WaylandDesktop};
 
 /// What an output's ramps should do.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -176,7 +176,7 @@ impl GammaState {
     }
 }
 
-impl Desktop {
+impl WaylandDesktop {
     /// Whether the compositor offers gamma control.
     pub fn supports_gamma_control(&self) -> bool {
         self.state.gamma.manager.is_some()

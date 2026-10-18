@@ -36,7 +36,7 @@ impl Engine {
     /// Hands the graph what removed nodes left behind, when it is here to
     /// take them; while a flush holds it they wait for the next call.
     pub fn collect_graph_garbage(&mut self) {
-        if self.reactive.flushing {
+        if self.reactive.is_flushing() {
             return;
         }
         self.model_revisions.collect_dead(&mut self.reactive);
@@ -56,51 +56,39 @@ impl Engine {
             nodes.extend_from_slice(children);
             index += 1;
         }
-        self.revisions.scene_revision = self.revisions.scene_revision.wrapping_add(1);
+        self.revisions.bump_scene();
         if self.scene.remove(node).is_err() {
             return None;
         }
         // Deepest first, so a child lets go of what it holds before the
         // parent that may have lent it.
         for removed in nodes.iter().rev() {
-            if let Some(hook) = self.destroy_hooks.remove(removed) {
-                self.pending_destroyed.push(hook);
-            }
+            self.destroy_hooks.removed(removed);
         }
         let removed = nodes.into_iter().collect::<HashSet<_>>();
         for node in &removed {
             self.retained.forget(node);
-            self.states.remove(node);
+            self.states.forget(node);
             self.views.remove(node);
-            self.timer_callbacks.remove(node);
-            self.linked_texts.remove(node);
-            self.shortcuts.remove(node);
+            self.layout_hooks.forget(node);
+            self.shortcuts.forget(node);
         }
         // A removed field cannot keep the keyboard. The node that had focus
         // is handed on by the focus check, which still needs to know it went.
         self.editing.forget(&removed);
-        self.focus
-            .memory
-            .retain(|scope, node| !removed.contains(scope) && !removed.contains(node));
+        self.focus.forget(&removed);
         self.animation.forget(&removed);
+        let presences = self.animation.claims.forget(&removed);
         self.events.forget(&removed);
         self.timers.retain_nodes(|node| !removed.contains(&node));
         // Bindings that drive a removed node, and the signals that tracked
         // its properties' reads: the graph forgets both, or every one of them
         // keeps re-running and growing for the life of the shell.
         self.reactive.forget_effects_of(&removed);
-        let dead_signals = self
-            .property_signals
-            .iter()
-            .filter(|((node, _, _), _)| removed.contains(node))
-            .map(|(_, signal)| *signal)
-            .collect::<HashSet<_>>();
+        let mut dead_signals = self.tracking.forget_nodes(&removed);
+        dead_signals.extend(presences);
         self.reactive.forget_signals(dead_signals);
         self.collect_graph_garbage();
-        self.property_signals
-            .retain(|(node, _, _), _| !removed.contains(node));
-        self.current_property_names
-            .retain(|_, (node, _)| !removed.contains(node));
         let windows = &mut self.windows;
         windows.window_surfaces_changed |= crate::layout::forget_windows_of(
             &removed,
@@ -121,7 +109,7 @@ impl Engine {
             node,
         );
         if start == crate::animation::exits::ExitStart::Started {
-            self.revisions.scene_revision = self.revisions.scene_revision.wrapping_add(1);
+            self.revisions.bump_scene();
         }
         start.leaving()
     }
@@ -137,8 +125,43 @@ impl Engine {
         ) {
             return false;
         }
-        self.revisions.scene_revision = self.revisions.scene_revision.wrapping_add(1);
+        self.revisions.bump_scene();
         true
+    }
+
+    /// Registers a node's claims, all of them or none.
+    pub fn register_claims(
+        &mut self,
+        node: NodeHandle,
+        specs: Vec<crate::animation::claims::ClaimSpec>,
+    ) -> Result<Vec<crate::animation::claims::ClaimId>, String> {
+        self.animation.claims.register(&self.scene, node, specs)
+    }
+
+    /// A claim's condition or target, as the binding that gives it ran:
+    /// a condition holds by Lua's truth, a target is checked against the
+    /// property.
+    pub fn feed_claim(
+        &mut self,
+        sink: &crate::reactive::ClaimSink,
+        value: morf_scene::Value,
+    ) -> Result<(), String> {
+        use crate::reactive::ClaimInput;
+        match &sink.input {
+            ClaimInput::Condition => {
+                let holds = !matches!(
+                    value,
+                    morf_scene::Value::Nil | morf_scene::Value::Bool(false)
+                );
+                self.animation.claims.set_holds(sink.claim, holds);
+                Ok(())
+            }
+            ClaimInput::Target(property) => {
+                self.animation
+                    .claims
+                    .set_target(&self.scene, sink.claim, property, value)
+            }
+        }
     }
 
     /// A value kept across reloads by `name`: its signal, starting from what
@@ -152,11 +175,11 @@ impl Engine {
         // One rule for every way in: what counts as a legal name used to
         // depend on which door you came through.
         validate_scope_part(&name)?;
-        if self.reloadable.contains_key(&name) {
+        if self.lifecycle.is_reloadable(&name) {
             return Err(format!("reloadable id `{name}` is already registered"));
         }
         let mut restored = false;
-        let value = match self.reload_seed.remove(&name) {
+        let value = match self.lifecycle.take_seed(&name) {
             Some(value) if std::mem::discriminant(&value) == std::mem::discriminant(&initial) => {
                 restored = true;
                 value
@@ -172,13 +195,9 @@ impl Engine {
         };
         let id = self
             .reactive
-            .graph
-            .as_mut()
-            .ok_or_else(|| "reactive graph is already running".to_owned())?
-            .signal(format!("reloadable.{name}"), value.clone());
-        self.reactive.values.insert(id, value);
-        self.reactive.signals.push(id);
-        self.reloadable.insert(name, id);
+            .signal(format!("reloadable.{name}"), value)
+            .ok_or(crate::reactive::GRAPH_RUNNING)?;
+        self.lifecycle.keep(name, id);
         Ok((id, restored))
     }
 }
@@ -204,22 +223,41 @@ mod tests {
         let root = engine.scene.create(Element::Item);
         let child = engine.scene.create(Element::Rect);
         engine.scene.reparent(child, Some(root)).unwrap();
-        engine.linked_texts.insert(child);
+        engine.layout_hooks.link_text(child);
         let hook = crate::Handler::new(HandlerId(1), std::rc::Rc::new(Nowhere));
-        engine.destroy_hooks.insert(child, hook);
+        engine.destroy_hooks.set(child, hook);
         let removed = engine.remove_subtree(root).expect("it was there");
         assert_eq!(removed.len(), 2);
-        assert!(engine.linked_texts.is_empty());
-        assert_eq!(engine.pending_destroyed.len(), 1);
+        assert!(engine.layout_hooks.linked_texts().is_empty());
+        assert_eq!(engine.destroy_hooks.pending(), 1);
         assert!(engine.remove_subtree(root).is_none());
+    }
+
+    #[test]
+    fn what_a_node_owns_goes_with_it_unless_let_go_first() {
+        let mut engine = Engine::new();
+        let node = engine.scene.create(Element::Item);
+        let hook = |id| crate::Handler::new(HandlerId(id), std::rc::Rc::new(Nowhere));
+        engine.destroy_hooks.set(node, hook(1));
+        let kept = engine.destroy_hooks.own(node, hook(2));
+        let dropped = engine.destroy_hooks.own(node, hook(3));
+        assert_eq!(engine.destroy_hooks.owned_count(), 2);
+        assert!(engine.destroy_hooks.disown(dropped));
+        assert!(!engine.destroy_hooks.disown(dropped), "once");
+        engine.remove_subtree(node).expect("it was there");
+        let pending = engine.destroy_hooks.take_pending();
+        let ids = pending.iter().map(|hook| hook.id().0).collect::<Vec<_>>();
+        assert_eq!(ids, vec![1, 2], "on_destroyed, then what it owned");
+        assert_eq!(engine.destroy_hooks.owned_count(), 0);
+        assert!(!engine.destroy_hooks.disown(kept), "already run");
     }
 
     #[test]
     fn a_reloadable_value_comes_back_only_as_the_same_kind() {
         let mut engine = Engine::new();
         engine
-            .reload_seed
-            .insert("a.b".into(), IpcValue::Integer(7));
+            .lifecycle
+            .seed([("a.b".into(), IpcValue::Integer(7))]);
         let (_, restored) = engine
             .register_reloadable("a.b".into(), IpcValue::Integer(1))
             .unwrap();
@@ -230,8 +268,8 @@ mod tests {
                 .is_err()
         );
         engine
-            .reload_seed
-            .insert("c".into(), IpcValue::Boolean(true));
+            .lifecycle
+            .seed([("c".into(), IpcValue::Boolean(true))]);
         let (_, restored) = engine
             .register_reloadable("c".into(), IpcValue::Integer(1))
             .unwrap();

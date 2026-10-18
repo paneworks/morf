@@ -58,6 +58,10 @@ function M.new(spec)
 
   local props = spec.props or {}
   props.id = "drawer-" .. spec.name
+  if spec.name ~= "keyboard" then
+    props.input_context = { role = (authentication or spec.name == "session")
+      and "secure_overlay" or "local_control" }
+  end
   -- A landmark a screen reader walks: what the drawer is, by name.
   local landmark = LANDMARKS[spec.name] or { "region", spec.name:sub(1, 1):upper() .. spec.name:sub(2) }
   props.accessible_role = props.accessible_role or spec.role or landmark[1]
@@ -79,6 +83,22 @@ function M.new(spec)
   -- the reference's pace.
   props.behavior.height = props.behavior.height
     or { duration = theme.duration.normal, easing = theme.ease.emphasized_decel }
+  -- Content given as a builder is made the first time the drawer opens, or
+  -- ahead of that while the shell is idle, and kept from then on.
+  if type(spec.content) == "function" then
+    local wanted = morf.signal("caelestia.drawer." .. spec.name .. ".built", d.open:get())
+    morf.effect("caelestia.drawer." .. spec.name .. ".build", function()
+      if d.open:get() and not wanted:get() then wanted:set(true) end
+    end)
+    spec.content = ui.Item {
+      anchors = { fill = true },
+      ui.Loader {
+        anchors = { fill = true }, keep = true, preload = true,
+        active = function() return wanted:get() end,
+        source = spec.content,
+      },
+    }
+  end
   props[#props + 1] = spec.content
   local panel = ui.Item(props)
   d.panel = panel

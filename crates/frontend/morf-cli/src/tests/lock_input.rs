@@ -2,12 +2,12 @@
 // through the same hit test and handlers a layer surface's do.
 
 use morf_app::{Event, WindowId};
+use morf_host::host::surfaces::PointerInput;
 use morf_host::host::windows::{Kind, Windows};
-use morf_host::lock_outputs::lock_window;
+use morf_host::input::cursor::CursorShapes;
+use morf_host::input::pointer::handle_pointer_event;
+use morf_host::lock::outputs::lock_window;
 use morf_host::paint::CachedLayout;
-use morf_host::pointer_cursor::CursorShapes;
-use morf_host::surface_pointer::handle_pointer_event;
-use morf_host::surfaces::PointerInput;
 use morf_layout::{Layout, Size};
 use morf_lua::Runtime;
 use morf_scene::NodeHandle;
@@ -273,7 +273,7 @@ fn pointer_entry_before_the_first_lock_frame_selects_that_surface_after_layout()
     assert_eq!(count(&mut runtime, "inside"), IpcValue::Boolean(false));
     outputs.get_mut(Kind::Lock, 0).unwrap().layout =
         Some(CachedLayout::uncached(laid_out(&runtime)));
-    assert!(morf_host::surface_pointer::answer_new_containment(
+    assert!(morf_host::input::pointer::answer_new_containment(
         &mut runtime,
         &input,
         &outputs,

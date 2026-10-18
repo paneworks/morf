@@ -12,12 +12,14 @@
 use luna::{Callback, CallbackReturn, Context, Function, Table, Value as LuaValue};
 use morf_io::FileView;
 use morf_scene::reactive::SignalId;
-use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use crate::{api_state::build, scene_bindings::*, state::*, surface_types::*, types::*};
+use crate::{
+    api::ui::scene::*, api::ui::state::build, runtime::host_types::*, runtime::state::*,
+    vm::types::*,
+};
 
 /// Whether text is written the way a colour is: `#` or `0x` hex, a
 /// functional form, or a bare name. Digits alone are a number someone
@@ -94,7 +96,7 @@ pub(crate) fn read_tokens(path: &Path) -> Result<BTreeMap<String, IpcValue>, Str
 
 pub(crate) fn install_theme_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     _limits: Limits,
 ) {
@@ -124,7 +126,7 @@ pub(crate) fn install_theme_api<'gc>(
                         }
                     };
                     let easing =
-                        crate::lua_values::parse_easing(ctx, spec.get_value(ctx, "easing"))
+                        crate::value::lua::parse_easing(ctx, spec.get_value(ctx, "easing"))
                             .map_err(HostError)?;
                     Some((
                         std::time::Duration::from_secs_f64(duration / 1000.0),
@@ -193,8 +195,8 @@ pub(crate) fn install_theme_api<'gc>(
             }
             let metatable = state
                 .borrow()
-                .state_metatable
-                .clone()
+                .metatables()
+                .state()
                 .ok_or_else(|| HostError("states are not installed".to_owned()))?;
             let userdata = build(
                 ctx,
@@ -218,11 +220,10 @@ pub(crate) fn install_theme_api<'gc>(
                     .filter_map(|key| Some((key.clone(), *fields.scalars.get(key)?)))
                     .collect();
                 let watcher = FileView::new(&path).watch().ok();
-                state.borrow_mut().theme_sources.push(ThemeSource {
-                    path,
-                    watcher,
-                    fields: watched,
-                });
+                state
+                    .borrow_mut()
+                    .theme_sources_mut()
+                    .watch(path, watcher, watched);
             }
             drop(fields);
             stack.replace(ctx, userdata);

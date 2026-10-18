@@ -2,12 +2,14 @@
 
 pub mod archive;
 mod broadcast;
+mod child_signals;
 pub mod codec;
 mod dbus_decode;
 mod dbus_encode;
 mod dbus_handlers;
 mod dbus_serve;
 mod dbus_types;
+mod error;
 mod files;
 mod files_options;
 mod fsops;
@@ -29,10 +31,12 @@ mod watch_hub;
 mod watch_sysfs;
 
 pub use broadcast::*;
+pub use child_signals::restore_ignored_signals;
 pub use dbus_decode::{DbusSignal, DbusSignalEvent};
 pub use dbus_handlers::*;
 pub use dbus_serve::{DbusCall, DbusService, NameOutcome};
 pub use dbus_types::*;
+pub use error::{Error, ErrorKind};
 pub use files::*;
 pub use files_options::*;
 pub use http::*;
@@ -63,5 +67,7 @@ mod http_tests;
 mod reactor_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod wake_tests;
 #[cfg(test)]
 mod watch_tests;

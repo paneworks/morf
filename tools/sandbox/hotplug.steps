@@ -1,6 +1,6 @@
 # hotplug.steps: outputs unplugged and plugged back, five times; the
 # shell's threads, sockets and bus connections after each. OUT/cpu.log.
-PID=$(pgrep -n -x morf)
+PID=$(shell_pid morf) || return
 count() {
   thr=$(ls /proc/$PID/task | wc -l)
   socks=$(ls -l /proc/$PID/fd 2>/dev/null | grep -c socket)

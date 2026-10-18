@@ -61,7 +61,7 @@ function M.build(model, w, h)
   local failure = widgets.message(function() return model.error:get() end, w, 64)
   failure.visible = function() return (model.error:get() or "") ~= "" end
 
-  local page = P.page { id = "planner-scroll", width = w, height = h,
+  local page = P.page { id = "planner-scroll", width = w, height = h, active = model.active,
     P.section { id = "planner-month", width = w,
       month,
       ui.Row { gap = 8, align = "center", today, plan },

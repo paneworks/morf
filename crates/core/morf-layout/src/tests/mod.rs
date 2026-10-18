@@ -84,6 +84,7 @@ mod contains;
 mod custom;
 mod exit;
 mod flex;
+mod flex_tree;
 mod hidden;
 mod incremental;
 mod masks;

@@ -18,6 +18,12 @@ use morf_value::IpcValue;
 
 use crate::Handler;
 
+mod access;
+pub use access::GRAPH_RUNNING;
+
+/// What a flush step fails with when the graph is not where it belongs.
+const GRAPH_AWAY: &str = "reactive graph left its place during a flush";
+
 /// A node property an effect drives.
 #[derive(Clone)]
 pub struct PropertySink {
@@ -32,6 +38,23 @@ pub enum EffectSink {
     State(NodeHandle),
     /// A `loop` binding: what it returns is the node's loops.
     Loop(NodeHandle),
+    /// A claim's condition or one of its targets (`ui.claims`).
+    Claim(ClaimSink),
+}
+
+/// The input of a claim on `node` an effect gives.
+#[derive(Clone)]
+pub struct ClaimSink {
+    pub node: NodeHandle,
+    pub claim: crate::animation::claims::ClaimId,
+    pub input: ClaimInput,
+}
+
+/// A claim's condition, or its target for one property.
+#[derive(Clone)]
+pub enum ClaimInput {
+    Condition,
+    Target(String),
 }
 
 /// One effect a configuration declared: a binding or a free-standing
@@ -49,28 +72,30 @@ pub struct Effect {
 pub struct Reactive {
     /// The graph. It stays in place through a flush; only its end takes it
     /// out for a moment.
-    pub graph: Option<Graph<IpcValue>>,
+    graph: Option<Graph<IpcValue>>,
     /// The mirror handlers read signals from.
-    pub values: HashMap<SignalId, IpcValue>,
-    pub signals: Vec<SignalId>,
+    values: HashMap<SignalId, IpcValue>,
+    signals: Vec<SignalId>,
     /// Signals the effects of the flush under way wrote, for the flush to
     /// confirm against the graph when it ends.
-    pub flush_writes: Vec<SignalId>,
+    flush_writes: Vec<SignalId>,
     /// The graph's handle for each effect token, so an effect can be
     /// forgotten when the node it drives is removed.
-    pub effect_ids: HashMap<u64, EffectId>,
+    effect_ids: HashMap<u64, EffectId>,
     /// Effects and signals whose owners are gone, waiting for the graph: a
     /// node removed while a flush runs is forgotten after it.
-    pub dead_effects: Vec<EffectId>,
-    pub dead_signals: Vec<SignalId>,
+    dead_effects: Vec<EffectId>,
+    dead_signals: Vec<SignalId>,
     /// Effects registered while a flush held the graph -- a binding on a
     /// node built inside an effect, or an effect made by a binding. Each is
     /// `(token, name)`, handed to the graph when the flush ends and run by
     /// the flush that follows.
-    pub pending_effects: Vec<(u64, String)>,
+    pending_effects: Vec<(u64, String)>,
     /// A flush is under way.
-    pub flushing: bool,
-    pub effects: HashMap<u64, Effect>,
+    flushing: bool,
+    effects: HashMap<u64, Effect>,
+    /// What the effects raised, counted per effect.
+    errors: crate::effect_errors::EffectErrors,
 }
 
 /// A flush under way.
@@ -160,7 +185,7 @@ impl Reactive {
     pub fn next_effect(&mut self, run: &mut FlushRun) -> Result<Option<PendingEffect>, String> {
         self.graph
             .as_mut()
-            .expect("the graph stays in place during a flush")
+            .ok_or(GRAPH_AWAY)?
             .next_effect(&mut run.flush)
             .map_err(|error| error.to_string())
     }
@@ -172,27 +197,30 @@ impl Reactive {
         pending: PendingEffect,
         capture: EffectCapture<IpcValue>,
         outcome: Result<(), String>,
-    ) {
-        self.graph
-            .as_mut()
-            .expect("the graph stays in place during a flush")
-            .complete_effect(&mut run.flush, pending, capture, outcome);
+    ) -> Result<(), String> {
+        self.graph.as_mut().ok_or(GRAPH_AWAY)?.complete_effect(
+            &mut run.flush,
+            pending,
+            capture,
+            outcome,
+        );
+        Ok(())
     }
 
     /// Ends a flush: brings the mirror in line with the graph and hands the
     /// graph its garbage. `stepped` is how stepping through the effects
-    /// ended. Returns the errors the effects raised, as one message.
+    /// ended. Returns the errors the effects raised, each as the effect's
+    /// name and its message; an error of the flush itself is `Err`.
     pub fn finish_flush(
         &mut self,
         run: FlushRun,
         stepped: Result<(), String>,
-    ) -> Result<(), String> {
+    ) -> Result<Vec<(String, String)>, String> {
         let result = stepped.map(|()| run.flush.finish());
         self.flushing = false;
-        let graph = self
-            .graph
-            .take()
-            .expect("the graph stays in place during a flush");
+        let Some(graph) = self.graph.take() else {
+            return Err(GRAPH_AWAY.to_owned());
+        };
         // Every write mirrors itself as it is made, so a clean flush only
         // has to confirm what its effects wrote -- the graph may still have
         // refused a write the effect already mirrored. A flush that failed
@@ -214,16 +242,13 @@ impl Reactive {
             }
         }
         self.graph = Some(graph);
-        match result {
-            Ok(report) if report.errors.is_empty() => Ok(()),
-            Ok(report) => Err(report
+        result.map(|report| {
+            report
                 .errors
                 .into_iter()
-                .map(|error| format!("{}: {}", error.effect, error.message))
-                .collect::<Vec<_>>()
-                .join("; ")),
-            Err(error) => Err(error),
-        }
+                .map(|error| (error.effect, error.message))
+                .collect()
+        })
     }
 }
 
@@ -293,38 +318,6 @@ pub struct ResourceStats {
     pub handlers: usize,
 }
 
-/// How far the scene has moved, and how far each reader of it has seen.
-pub struct Revisions {
-    /// Moves on with every property write a binding may have read.
-    pub property_revision: i64,
-    /// Advances whenever the scene actually changes: a property lands on a
-    /// new value, or a node is created, reparented, or removed. This is what
-    /// tells the host a repaint is due -- a service callback merely running
-    /// is not.
-    pub scene_revision: u64,
-    /// The scene's revision when the services were last polled: a scene that
-    /// moved on since may hold a timer to start or a loader to fill.
-    pub polled_revision: u64,
-    /// The revision seen before timers and loaders were reconciled, which can
-    /// itself unload a tree that must preload again on the next turn.
-    pub service_definitions_revision: u64,
-    /// How many of the scene's revisions were a property of a node nothing
-    /// shows: work for the loop, not a reason to paint.
-    pub hidden_revisions: u64,
-}
-
-impl Default for Revisions {
-    fn default() -> Self {
-        Self {
-            property_revision: 0,
-            scene_revision: 0,
-            polled_revision: 0,
-            service_definitions_revision: u64::MAX,
-            hidden_revisions: 0,
-        }
-    }
-}
-
 impl Reactive {
     /// Forgets the bindings that drive a removed node -- a property, a state
     /// or a loop of it -- and the effects owned by one: the graph lets go of
@@ -336,6 +329,7 @@ impl Reactive {
             .filter(|(_, effect)| match &effect.sink {
                 Some(EffectSink::Property(sink)) => removed.contains(&sink.node),
                 Some(EffectSink::State(node) | EffectSink::Loop(node)) => removed.contains(node),
+                Some(EffectSink::Claim(sink)) => removed.contains(&sink.node),
                 // A `morf.effect` given `owner = node` goes with its node.
                 None => effect.owner.is_some_and(|owner| removed.contains(&owner)),
             })

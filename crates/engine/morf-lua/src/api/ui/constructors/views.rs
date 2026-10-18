@@ -5,7 +5,7 @@ use super::*;
 
 pub(crate) fn view_constructor<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     limits: Limits,
     kind: ViewKind,
 ) -> Callback<'gc> {
@@ -21,7 +21,7 @@ pub(crate) fn view_constructor<'gc>(
 /// `ui.ListView`, `ui.GridView` and `ui.each`.
 pub(crate) fn construct_view<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     limits: Limits,
     kind: ViewKind,
     properties: Table<'gc>,
@@ -117,7 +117,11 @@ pub(crate) fn construct_view<'gc>(
                 view.set_offset(offset);
                 if let LuaValue::String(field) = properties.get_value(ctx, "size_field") {
                     let field = field.display_lossy().to_string();
-                    view.set_extents(&crate::views::row_extents(&model, &field, item_extent));
+                    view.set_extents(&crate::runtime::views::row_extents(
+                        &model,
+                        &field,
+                        item_extent,
+                    ));
                 }
                 let range = view.visible_range(model.len());
                 configured_view = Some(view);
@@ -168,7 +172,7 @@ pub(crate) fn construct_view<'gc>(
                     .as_ref()
                     .expect("a virtual view has its list");
                 position_view_child(
-                    &mut state.borrow_mut().scene,
+                    state.borrow_mut().scene_mut(),
                     child.node,
                     index,
                     placing,
@@ -179,7 +183,7 @@ pub(crate) fn construct_view<'gc>(
             }
             state
                 .borrow_mut()
-                .scene
+                .scene_mut()
                 .reparent(child.node, Some(node))
                 .map_err(|error| HostError(error.to_string()))?;
             active.insert(id, child);
@@ -187,7 +191,7 @@ pub(crate) fn construct_view<'gc>(
         drop(model);
         if let Some(mut view) = configured_view {
             let _ = view.sync(&model_handle.borrow(), &[]);
-            state.borrow_mut().views.insert(
+            state.borrow_mut().views_mut().insert(
                 node,
                 VirtualView {
                     model: model_handle,

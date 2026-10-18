@@ -80,6 +80,10 @@ M.drawer = require("drawer").new {
 }
 -- It belongs to the physical bottom edge, outside the shrinking desktop.
 M.drawer.docked = true
+-- A role on the real laid-out panel, never a caller-supplied rectangle.
+M.drawer.panel.input_context = function()
+  return { role = "keyboard", layout = M.keys.mode:get() }
+end
 morf.effect("caelestia.keyboard.reserve",function()
   require("themes.keyboard").inset:set(M.drawer.open:get()
     and math.ceil(view.height()+require("theme").BORDER) or 0)

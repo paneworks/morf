@@ -1,7 +1,7 @@
 -- Notifications: the server, the popups at the top, and the list the
 -- control center shows.
 --
--- The server is `library/lib/notifications.lua`, which takes the
+-- The server is `library/lib/services/notifications.lua`, which takes the
 -- `org.freedesktop.Notifications` name and hands over a list. This keeps two
 -- views of it: `popups`, the ones still fresh enough to float under the
 -- pill, and `history`, everything since the shell started, newest first,
@@ -230,7 +230,7 @@ function notify.build(top)
     direction = "row",
     justify = "center",
     align = "start",
-    anchors = { left = true, right = true, top = true, top_margin = top },
+    anchors = { left = true, right = true, top = true, bottom = true, top_margin = top },
     ui.Repeater {
       as = "column",
       gap = S(10),

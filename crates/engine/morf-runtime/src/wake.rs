@@ -193,16 +193,10 @@ impl Clocks {
         let mut changed = false;
         for (signal, text) in writes {
             let text = IpcValue::String(text);
-            if reactive.values.get(&signal) == Some(&text) {
+            if reactive.value(signal) == Some(&text) {
                 continue;
             }
-            reactive
-                .graph
-                .as_mut()
-                .ok_or_else(|| "reactive graph is already running".to_owned())?
-                .write(signal, text.clone())
-                .map_err(|error| error.to_string())?;
-            reactive.values.insert(signal, text);
+            reactive.write(signal, text)?;
             changed = true;
         }
         Ok(changed)
@@ -211,7 +205,7 @@ impl Clocks {
     /// The finest clock anything currently reads, or nothing when no binding
     /// shows the time: the grain the loop has to wake at for the clock.
     pub fn precision(&self, reactive: &Reactive) -> Option<ClockPrecision> {
-        let graph = reactive.graph.as_ref()?;
+        let graph = reactive.graph()?;
         [
             (self.seconds, ClockPrecision::Seconds),
             (self.minutes, ClockPrecision::Minutes),
@@ -231,13 +225,12 @@ mod clock_tests {
     fn only_the_grains_that_turned_over_are_written() {
         let mut graph = Graph::default();
         let (clocks, values) = Clocks::new(&mut graph);
-        let mut reactive = Reactive {
-            graph: Some(graph),
-            values: values.into_iter().collect(),
-            ..Reactive::default()
-        };
+        let mut reactive = Reactive::new(graph);
+        for (signal, value) in values {
+            reactive.adopt(signal, value);
+        }
         assert!(clocks.update(&mut reactive, "10:15:00".to_owned()).unwrap());
-        let read = |reactive: &Reactive, signal| reactive.values[&signal].clone();
+        let read = |reactive: &Reactive, signal| reactive.value(signal).unwrap().clone();
         assert_eq!(
             read(&reactive, clocks.minutes),
             IpcValue::String("10:15".to_owned())

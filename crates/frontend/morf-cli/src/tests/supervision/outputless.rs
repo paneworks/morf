@@ -4,10 +4,12 @@
 
 use crate::config::LoadPolicy;
 use morf_app::Output;
-use morf_host::lock::{SupervisorMessage, Worker, WorkerCommand, WorkerMessage, WorkerSender};
-use morf_host::outputless::{OUTPUTLESS, Outputless, outputless_screen, run_outputless};
-use morf_host::services::stop_workers;
-use morf_host::workers::{
+use morf_host::lock::{
+    SupervisorMessage, Worker, WorkerAlarm, WorkerCommand, WorkerMessage, WorkerSender,
+};
+use morf_host::paint::outputless::{OUTPUTLESS, Outputless, outputless_screen, run_outputless};
+use morf_host::process::services::stop_workers;
+use morf_host::process::workers::{
     Handover, Seed, WorkerStart, desired_workers, handle_ipc, handle_worker_command, reconcile_with,
 };
 use morf_io::{IpcReply, IpcRequest, IpcValue as WireValue};
@@ -70,6 +72,7 @@ pub(super) fn spawner<'a>(
             .push((name.to_owned(), seed.clone()));
         let stop = Arc::new(AtomicBool::new(false));
         let (commands, command_rx) = mpsc::channel();
+        let alarm = WorkerAlarm::default();
         let start = WorkerStart {
             path: Arc::new(PathBuf::from("shell.lua")),
             source: Arc::from(source.as_bytes()),
@@ -80,18 +83,19 @@ pub(super) fn spawner<'a>(
             seed,
             handover: handover.clone(),
             primary,
+            alarm: alarm.clone(),
         };
         let join = if name == OUTPUTLESS {
             thread::spawn(move || {
                 run_outputless(start, false).unwrap();
             })
         } else {
-            let screen = morf_host::supervisor::lua_screen(screen);
+            let screen = morf_host::process::supervisor::lua_screen(screen);
             thread::spawn(move || stand_in(start, screen))
         };
         Worker {
             stop,
-            commands: WorkerSender::new(commands),
+            commands: WorkerSender::new(commands, alarm),
             join,
             screen: screen.clone(),
         }
@@ -104,8 +108,13 @@ pub(super) fn stand_in(start: WorkerStart, screen: Screen) {
         runtime.restore_reloadable_state(seed);
     }
     runtime.set_primary(start.primary);
-    morf_host::supervisor::execute_config(&mut runtime, &start.path, &start.source, start.policy)
-        .unwrap();
+    morf_host::process::supervisor::execute_config(
+        &mut runtime,
+        &start.path,
+        &start.source,
+        start.policy,
+    )
+    .unwrap();
     while !start.stop.load(Ordering::Acquire) {
         if let Ok(command) = start.commands.recv_timeout(Duration::from_millis(5)) {
             handle_worker_command(&mut runtime, Some(&screen), start.policy, command);
@@ -331,6 +340,7 @@ fn a_configuration_that_needs_a_screen_is_not_a_failed_shell() {
         seed: None,
         handover,
         primary: true,
+        alarm: WorkerAlarm::default(),
     };
     assert_eq!(run_outputless(start, false), Ok(()));
     assert!(matches!(

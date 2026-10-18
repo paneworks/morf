@@ -11,6 +11,7 @@ use crate::pam_conversation::PamPrompt;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 
 /// A confdir with one service whose auth step asks for a password and checks
 /// it against `hunter2`, through `pam_exec` -- which prompts through the
@@ -20,7 +21,13 @@ fn service_dir(name: &str, lines: &str) -> PathBuf {
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     let check = dir.join("check.sh");
-    fs::write(&check, "#!/bin/sh\ntest \"$(cat)\" = hunter2\n").unwrap();
+    // Builtins only: pam_exec gives the script no PATH, and a system without
+    // /bin/cat (NixOS) would fail it as a system error.
+    fs::write(
+        &check,
+        "#!/bin/sh\nIFS= read -r answer\ntest \"$answer\" = hunter2\n",
+    )
+    .unwrap();
     fs::set_permissions(&check, fs::Permissions::from_mode(0o755)).unwrap();
     fs::write(dir.join("notice.txt"), "touch the sensor\n").unwrap();
     let service = lines
@@ -35,10 +42,76 @@ auth required pam_exec.so expose_authtok quiet CHECK
 account required pam_permit.so
 ";
 
+fn secret(text: &str) -> Secret {
+    Zeroizing::new(text.as_bytes().to_vec())
+}
+
 fn next(session: &mut PamSession) -> PamEvent {
     session
         .next(Duration::from_secs(10))
         .expect("the transaction said something within ten seconds")
+}
+
+mod stub {
+    use crate::pam::transaction::{PamApi, PamConversation, PamHandle, Start};
+    use std::ffi::{c_char, c_int};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    pub(super) static ENDED: AtomicUsize = AtomicUsize::new(0);
+    static mut HANDLE: u8 = 0;
+
+    unsafe extern "C" fn failing_start(
+        _: *const c_char,
+        _: *const c_char,
+        _: *const PamConversation,
+        handle: *mut *mut PamHandle,
+    ) -> c_int {
+        unsafe { handle.write((&raw mut HANDLE).cast()) };
+        4
+    }
+
+    unsafe extern "C" fn unreachable(_: *mut PamHandle, _: c_int) -> c_int {
+        panic!("a transaction that never started is not authenticated");
+    }
+
+    unsafe extern "C" fn end(handle: *mut PamHandle, status: c_int) -> c_int {
+        assert_eq!(handle.cast::<u8>(), &raw mut HANDLE);
+        assert_eq!(status, 4);
+        ENDED.fetch_add(1, Ordering::SeqCst);
+        0
+    }
+
+    unsafe extern "C" fn strerror(_: *mut PamHandle, _: c_int) -> *const c_char {
+        std::ptr::null()
+    }
+
+    pub(super) fn failing_api() -> PamApi {
+        PamApi {
+            start: Start::System(failing_start),
+            authenticate: unreachable,
+            account: unreachable,
+            end,
+            strerror,
+        }
+    }
+}
+
+#[test]
+fn a_failed_start_still_ends_the_handle_it_got() {
+    let (events, _receiver) = mpsc::channel();
+    let bridge = Bridge {
+        events,
+        answers: Answers::Fixed(Credentials {
+            username: c"nobody".to_owned(),
+            password: Zeroizing::new(b"secret".to_vec()),
+        }),
+        cancelled: Arc::new(AtomicBool::new(false)),
+        waker: morf_io::waker(),
+    };
+    let api = stub::failing_api();
+    let error = unsafe { transaction::run(&api, c"stub", c"nobody", None, bridge) }.unwrap_err();
+    assert_eq!(error.code(), Some(4));
+    assert_eq!(stub::ENDED.load(Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -50,7 +123,8 @@ fn rejects_embedded_nulls_before_starting_pam() {
 
 #[test]
 fn asynchronous_authentication_returns_without_blocking_caller() {
-    let mut task = PamAuthenticator::authenticate_async("morf\0test", "user", "secret", None);
+    let mut task =
+        PamAuthenticator::authenticate_async("morf\0test", "user", secret("secret"), None);
     let error = task
         .wait(Duration::from_secs(1))
         .expect("PAM worker returned")
@@ -71,7 +145,7 @@ fn a_session_relays_the_prompt_and_takes_the_answer() {
     };
     assert!(!echo, "a password prompt says it is secret: {text:?}");
     assert!(
-        session.respond("hunter2"),
+        session.respond(secret("hunter2")),
         "the prompt was open to an answer"
     );
     assert!(
@@ -79,7 +153,7 @@ fn a_session_relays_the_prompt_and_takes_the_answer() {
         "and the right answer is accepted"
     );
     assert!(
-        !session.respond("again"),
+        !session.respond(secret("again")),
         "a prompt takes one answer; a second has nothing to answer"
     );
 
@@ -88,7 +162,7 @@ fn a_session_relays_the_prompt_and_takes_the_answer() {
         next(&mut wrong),
         PamEvent::Message(PamPrompt::Prompt { .. })
     ));
-    wrong.respond("hunter3");
+    wrong.respond(secret("hunter3"));
     assert!(
         matches!(next(&mut wrong), PamEvent::Finished(Err(_))),
         "and a wrong one is refused"
@@ -110,7 +184,7 @@ fn a_message_that_wants_no_answer_still_reaches_the_caller() {
     };
     assert_eq!(text.trim(), "touch the sensor");
     assert!(
-        !session.respond("anything"),
+        !session.respond(secret("anything")),
         "and a notice is not open to an answer -- an answer nobody asked for is not queued"
     );
     assert!(matches!(next(&mut session), PamEvent::Finished(Ok(()))));
@@ -132,7 +206,7 @@ fn cancelling_ends_a_transaction_that_is_waiting_on_a_prompt() {
         panic!("a cancelled transaction finishes, and not successfully");
     };
     assert_eq!(error.code(), Some(PAM_CANCELLED), "{error}");
-    assert!(!session.respond("too late"));
+    assert!(!session.respond(secret("too late")));
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -143,10 +217,10 @@ fn the_password_path_answers_the_same_prompt_itself() {
     // from somewhere else.
     let dir = service_dir("fixed", ASKS_FOR_A_PASSWORD);
     let mut right =
-        PamAuthenticator::authenticate_async("fixed", "nobody", "hunter2", dir.to_str());
+        PamAuthenticator::authenticate_async("fixed", "nobody", secret("hunter2"), dir.to_str());
     assert_eq!(right.wait(Duration::from_secs(10)), Some(Ok(())));
     let mut wrong =
-        PamAuthenticator::authenticate_async("fixed", "nobody", "hunter3", dir.to_str());
+        PamAuthenticator::authenticate_async("fixed", "nobody", secret("hunter3"), dir.to_str());
     assert!(matches!(wrong.wait(Duration::from_secs(10)), Some(Err(_))));
     let _ = fs::remove_dir_all(&dir);
 }
@@ -182,7 +256,7 @@ fn a_prompt_and_the_verdict_ring_the_loop() {
         prompt,
         PamEvent::Message(PamPrompt::Prompt { .. })
     ));
-    session.respond("hunter2");
+    session.respond(secret("hunter2"));
     let verdict = loop {
         if let Some(event) = session.next(Duration::ZERO) {
             break event;

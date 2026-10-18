@@ -40,7 +40,10 @@ private input pipe closes and the bridge exits, so the system's original
 D-Bus activation service is available as a fallback. No service files change.
 
 Passwords only travel through the UI's local input buffers and the bridge's
-private stdin pipe or answer socket. The socket has mode 0600 inside a random
+private stdin pipe or answer socket. Stdin answers carry a password only when
+stdin is a pipe from the spawning shell; a terminal or file there can cancel
+prompts but not fill one. Both inputs are read in place into fixed buffers
+that are wiped, never into growable or library-owned ones. The socket has mode 0600 inside a random
 0700 directory in the user's runtime directory and checks the peer UID.
 Connections have a five-second deadline and bounded input; stale request IDs
 cannot answer a newer prompt. Shutdown removes the socket and its directory.

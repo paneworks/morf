@@ -6,10 +6,9 @@
 //! joins them. `morf.log.info(...)` and its siblings are the same call.
 
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::{scene_bindings::*, state::*, types::*};
+use crate::{api::ui::scene::*, runtime::state::*, vm::types::*};
 
 fn level_of(name: &[u8]) -> Option<LogLevel> {
     match name {
@@ -38,7 +37,7 @@ fn text_of(value: LuaValue<'_>) -> String {
 
 pub(crate) fn install_log_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let log = Table::new(&ctx);

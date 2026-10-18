@@ -1,6 +1,8 @@
 use morf_scene::{NodeHandle, Value as SceneValue};
 
-use crate::{events::*, surface_types::*, types::*};
+use crate::api::ui::flush::flush_reactive;
+use crate::api::ui::scene::{CONTAINS_POINTER, bump_property_signal};
+use crate::{runtime::events::*, runtime::host_types::*, vm::types::*};
 
 /// The held modifiers as a pointer handler is told them: `"ctrl+shift"`.
 pub(crate) use morf_runtime::events::held;
@@ -48,7 +50,7 @@ impl Runtime {
             event,
             UiEvent::TouchPressed | UiEvent::TouchMoved | UiEvent::TouchReleased
         ) {
-            self.reactive.borrow_mut().gestures.touch();
+            self.reactive.borrow_mut().gestures_mut().touch();
         }
         self.dispatch_ui_event_with_args(node, event, &args::touch_args(id, point))
     }
@@ -109,12 +111,14 @@ impl Runtime {
             {
                 let mut state = self.reactive.borrow_mut();
                 match event {
-                    UiEvent::Pressed => crate::text_inputs::press(&mut *state, node, local),
+                    UiEvent::Pressed => {
+                        crate::runtime::text_inputs::press(&mut *state, node, local)
+                    }
                     UiEvent::PointerMoved | UiEvent::Dragged | UiEvent::DragStarted => {
-                        crate::text_inputs::drag(&mut *state, node, local);
+                        crate::runtime::text_inputs::drag(&mut *state, node, local);
                     }
                     UiEvent::Released | UiEvent::DragFinished => {
-                        crate::text_inputs::release(&mut *state, node);
+                        crate::runtime::text_inputs::release(&mut *state, node);
                     }
                     _ => {}
                 }
@@ -127,10 +131,10 @@ impl Runtime {
         };
         // A click on a link in a text's runs is the link's.
         if event == UiEvent::Clicked
-            && self.reactive.borrow().scene.element(node).ok() == Some(morf_scene::Element::Text)
+            && self.reactive.borrow().scene().element(node).ok() == Some(morf_scene::Element::Text)
         {
             let href = morf_layout::link_at(
-                &self.reactive.borrow().scene,
+                self.reactive.borrow().scene(),
                 node,
                 point.local_x,
                 point.local_y,
@@ -233,7 +237,7 @@ impl Runtime {
     /// A host hit-testing a Flickable should also ask whether it has room to
     /// move; see [`Runtime::scroll_flickable`].
     pub fn takes_wheel(&self, node: NodeHandle) -> bool {
-        self.reactive.borrow().engine.takes_wheel(node)
+        self.reactive.borrow().takes_wheel(node)
     }
 
     /// Scrolls a Flickable by a wheel's pixel delta, keeping its
@@ -250,8 +254,8 @@ impl Runtime {
         let mut moved = false;
         {
             let mut state = self.reactive.borrow_mut();
-            for (property, next) in routing::flickable_scroll(&state.scene, node, pixels, max) {
-                if crate::scene_bindings::assign_scene_property(
+            for (property, next) in routing::flickable_scroll(state.scene(), node, pixels, max) {
+                if crate::api::ui::scene::assign_scene_property(
                     &mut state,
                     node,
                     property,
@@ -271,9 +275,60 @@ impl Runtime {
 
     /// Returns whether a MouseArea accepts one Linux input button code.
     pub fn accepts_pointer_button(&self, node: NodeHandle, button: u32) -> bool {
+        self.reactive.borrow().accepts_pointer_button(node, button)
+    }
+
+    /// Whether anything has read a node's `contains_pointer`: when nothing
+    /// has, a pointer event has no containment to work out.
+    pub fn has_pointer_watchers(&self) -> bool {
+        !self.reactive.borrow().events().pointer_watch.is_empty()
+    }
+
+    /// Every node something has read `contains_pointer` of: the ones the
+    /// host tests against the pointer when it moves.
+    pub fn pointer_watchers(&self) -> Vec<NodeHandle> {
+        self.reactive.borrow().events().pointer_watch.watched()
+    }
+
+    /// The nodes first read since this was last asked, for the host to
+    /// answer where the pointer is now rather than at its next motion.
+    pub fn take_fresh_pointer_watchers(&mut self) -> Vec<NodeHandle> {
         self.reactive
-            .borrow()
-            .engine
-            .accepts_pointer_button(node, button)
+            .borrow_mut()
+            .events_mut()
+            .pointer_watch
+            .take_fresh()
+    }
+
+    /// Records whether the pointer is inside each node, as the host worked
+    /// it out. A node nothing has read is ignored. The bindings that read
+    /// one that changed run at the next flush -- a handler's return, or
+    /// [`Runtime::flush_after_event`]. Returns whether any changed.
+    pub fn set_contains_pointer(&mut self, answers: &[(NodeHandle, bool)]) -> bool {
+        let mut changed = false;
+        {
+            let mut state = self.reactive.borrow_mut();
+            for node in state.events_mut().pointer_watch.answer(answers) {
+                changed = true;
+                state.tracking_mut().defer_flush();
+                let _ = bump_property_signal(&mut state, node, CONTAINS_POINTER, false);
+            }
+        }
+        changed
+    }
+
+    /// Runs the bindings a host-side write made stale, when no handler
+    /// will: the flush a handler's return would otherwise have been.
+    pub fn flush_after_event(&mut self) {
+        let flush = self.reactive.borrow_mut().tracking_mut().take_flush();
+        if flush
+            && let Err(message) = self
+                .lua
+                .enter(|ctx| flush_reactive(&self.reactive, ctx, self.limits))
+        {
+            self.reactive
+                .borrow_mut()
+                .log(LogLevel::Warn, format!("after pointer: {message}"));
+        }
     }
 }

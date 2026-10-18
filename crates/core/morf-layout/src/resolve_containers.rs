@@ -8,7 +8,7 @@
 use morf_scene::{FastMap, NodeHandle, Scene};
 
 use crate::custom::CustomLayout;
-use crate::flex::FlexTree;
+use crate::flex::Purpose;
 use crate::geometry::{Geometry, Size, TextMeasurer};
 use crate::helpers::LayoutError;
 use crate::incremental::Local;
@@ -25,8 +25,10 @@ impl Layout {
         text: &mut impl TextMeasurer,
         host: &mut dyn CustomLayout,
     ) -> Result<(), LayoutError> {
-        let mut flex = FlexTree::build(scene, root)?;
-        flex.set_root_size(geometry.width, geometry.height)?;
+        let flex = self
+            .flex
+            .get(scene, root, Purpose::Place, &self.requested)?;
+        flex.set_root_size(Some((geometry.width, geometry.height)))?;
         flex.compute(
             scene,
             taffy::prelude::Size {
@@ -36,7 +38,7 @@ impl Layout {
             &self.requested,
             text,
         )?;
-        let placed = flex.geometries(scene, geometry)?;
+        let placed = flex.geometries(geometry)?;
         if self.dirty.is_some() {
             self.forget_hidden_flex_children(scene, root)?;
         }

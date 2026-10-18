@@ -39,21 +39,105 @@ pub enum FocusRequest {
 #[derive(Default)]
 pub struct FocusState {
     /// The focused node of each scene root.
-    pub owner: HashMap<NodeHandle, NodeHandle>,
+    owner: HashMap<NodeHandle, NodeHandle>,
     /// The scopes the owner sat in when it took focus, innermost first: where
     /// focus goes when the owner is gone and its ancestry with it.
-    pub scopes: HashMap<NodeHandle, Vec<NodeHandle>>,
+    scopes: HashMap<NodeHandle, Vec<NodeHandle>>,
     /// The node in each scope that last had focus.
-    pub memory: HashMap<NodeHandle, NodeHandle>,
+    memory: HashMap<NodeHandle, NodeHandle>,
     /// Scene roots whose surface the keyboard has left: their owner keeps
     /// focus but does not show it.
-    pub inactive: HashSet<NodeHandle>,
+    inactive: HashSet<NodeHandle>,
     /// The root the last key or click went to, for `morf.focus.next()`.
-    pub last_root: Option<NodeHandle>,
-    pub requests: Vec<FocusRequest>,
+    last_root: Option<NodeHandle>,
+    requests: Vec<FocusRequest>,
 }
 
 impl FocusState {
+    /// The focused node under `root`.
+    pub fn owner(&self, root: NodeHandle) -> Option<NodeHandle> {
+        self.owner.get(&root).copied()
+    }
+
+    /// Every scene root with its focused node.
+    pub fn owners(&self) -> impl Iterator<Item = (NodeHandle, NodeHandle)> + '_ {
+        self.owner.iter().map(|(root, owner)| (*root, *owner))
+    }
+
+    /// The scopes the owner under `root` sat in, innermost first.
+    pub fn scopes(&self, root: NodeHandle) -> &[NodeHandle] {
+        self.scopes.get(&root).map_or(&[], Vec::as_slice)
+    }
+
+    /// The node in each scope that last had focus.
+    pub fn memory(&self) -> &HashMap<NodeHandle, NodeHandle> {
+        &self.memory
+    }
+
+    /// `node` takes focus under `root`, remembered by each scope around it,
+    /// innermost first.
+    pub fn give(&mut self, root: NodeHandle, node: NodeHandle, scopes: Vec<NodeHandle>) {
+        self.owner.insert(root, node);
+        for scope in &scopes {
+            self.memory.insert(*scope, node);
+        }
+        self.scopes.insert(root, scopes);
+    }
+
+    /// Nothing has focus under `root`.
+    pub fn clear(&mut self, root: NodeHandle) {
+        self.owner.remove(&root);
+        self.scopes.remove(&root);
+    }
+
+    /// Whether the keyboard is on the surface whose tree is `root`.
+    pub fn is_active(&self, root: NodeHandle) -> bool {
+        !self.inactive.contains(&root)
+    }
+
+    /// The keyboard came to `root`'s surface or left it; whether it was
+    /// there before.
+    pub fn set_active(&mut self, root: NodeHandle, active: bool) -> bool {
+        let was = self.is_active(root);
+        if active {
+            self.inactive.remove(&root);
+        } else {
+            self.inactive.insert(root);
+        }
+        was
+    }
+
+    /// The root the last key or click went to.
+    pub fn last_root(&self) -> Option<NodeHandle> {
+        self.last_root
+    }
+
+    /// A key or click went to `root`.
+    pub fn note_root(&mut self, root: NodeHandle) {
+        self.last_root = Some(root);
+    }
+
+    /// Queues what a configuration asked of focus.
+    pub fn request(&mut self, request: FocusRequest) {
+        self.requests.push(request);
+    }
+
+    /// Whether anything was asked of focus.
+    pub fn has_requests(&self) -> bool {
+        !self.requests.is_empty()
+    }
+
+    /// What was asked of focus, in order.
+    pub fn take_requests(&mut self) -> Vec<FocusRequest> {
+        std::mem::take(&mut self.requests)
+    }
+
+    /// Forgets what scopes remember of removed nodes.
+    pub fn forget(&mut self, removed: &HashSet<NodeHandle>) {
+        self.memory
+            .retain(|scope, node| !removed.contains(scope) && !removed.contains(node));
+    }
+
     /// Queues what a write to a node's `focus` asks.
     pub fn request_by_property(&mut self, node: NodeHandle, on: bool) {
         self.requests.push(if on {

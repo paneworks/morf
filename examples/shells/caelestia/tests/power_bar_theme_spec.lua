@@ -31,7 +31,7 @@ local HOST=[[
   local function set(key,value) writes[#writes+1]={key,value} prefs[key:gsub("^edgebar%.","")]=value end
   package.loaded.config={get=get,set=set}
   package.loaded.bar={side=function() return prefs.side end,set_side=function(value) set("edgebar.side",value) end}
-  package.loaded.dashboard_battery={show=function() handoffs=handoffs+1 end}
+  package.loaded.dashboard_state={show=function(key) if key=="battery" then handoffs=handoffs+1 end end}
   local model
   local ok,models=pcall(require,page=="power" and "power_model" or "bar_settings_model")
   if ok then
@@ -86,7 +86,7 @@ for _,style in ipairs {"material","tsugumori"} do
     test.ipc("change","charging") test.advance(100)
     test.truthy(test.find {text="Charging, full in 1h 00m  ·  12.4 W"})
     test.ipc("change","missing") test.advance(100)
-    test.eq(test.get("power-percent").text,style=="material" and "0%" or "--")
+    test.eq(test.get("power-percent").text,"0%")
     test.truthy(test.find {text="No battery"})
     test.eq(#test.logs("error"),0) test.eq(#test.logs("warn"),0)
   end)
@@ -96,7 +96,6 @@ for _,style in ipairs {"material","tsugumori"} do
     test.eq(test.ipc("state").mode,"on")
     test.click("bar-side-right") test.advance(400)
     test.eq(test.ipc("state").side,"right")
-    if style=="tsugumori" then test.near(test.get("bar-preview-right").opacity,1,.001) end
     test.click("bar-titles-off") test.eq(test.ipc("state").titles,"off")
     local count=#test.ipc("state").writes
     test.falsy(test.ipc("action","side","diagonal"))

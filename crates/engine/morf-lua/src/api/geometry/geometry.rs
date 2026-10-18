@@ -1,5 +1,5 @@
 //! Native, theme-independent geometry. Lua owns nodes and animation policy.
-use crate::scene_bindings::HostError;
+use crate::api::ui::scene::HostError;
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
 use morf_vector::{
     geometry::{self, Cubic, Options, SEGMENTS},

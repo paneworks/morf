@@ -50,6 +50,17 @@ impl fmt::Display for XkbError {
 
 impl StdError for XkbError {}
 
+/// The directories xkbcommon searches for its data (`rules/`, `symbols/`,
+/// ...), in its own order: where this machine keeps them, whatever the
+/// distribution.
+pub fn xkb_include_paths() -> Vec<String> {
+    let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
+    context
+        .include_paths()
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect()
+}
+
 impl XkbKeymap {
     /// Compiles XKB names into serialized keymap and per-level labels.
     pub fn compile(
@@ -125,5 +136,16 @@ mod tests {
         assert_eq!(key.layouts[0][1][0].text, "A");
         assert!(key.repeats);
         assert!(keymap.source.contains("xkb_keymap"));
+    }
+
+    #[test]
+    fn include_paths_hold_the_rules_xkb_compiles_with() {
+        let paths = xkb_include_paths();
+        assert!(!paths.is_empty());
+        assert!(
+            paths
+                .iter()
+                .any(|path| std::path::Path::new(path).join("rules").is_dir())
+        );
     }
 }

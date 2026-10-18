@@ -1,6 +1,6 @@
 -- The launcher's lists: installed applications, ranked by `morf.text.fuzzy`
 -- and lifted by how often and how lately each was launched from here
--- (lib/frecency.lua); and, after the action prefix (">"), the shell's own
+-- (lib/util/frecency.lua); and, after the action prefix (">"), the shell's own
 -- actions, and the pickers some of them open: "> scheme " (source
 -- colours), "> variant " (Material 3 scheme variants), "> wallpaper " (the
 -- pictures in ~/Pictures/Wallpapers) and "> calc " (calc.lua).
@@ -85,7 +85,7 @@ for _, a in ipairs(M.ACTIONS) do a.kind = "action" end
 -- ---------------------------------------------------------------- pickers --
 
 --- The source colours "> scheme " offers: the wallpaper's, then named
---- ones. Each builds a Material 3 scheme through lib/material.lua.
+--- ones. Each builds a Material 3 scheme through lib/util/material.lua.
 M.SCHEMES = {
   { id = "wallpaper", name = "Dynamic", description = "Colours from the wallpaper", color = nil },
   { id = "#ffb0ca", name = "Rosé", description = "A soft pink" },
@@ -99,7 +99,7 @@ M.SCHEMES = {
   { id = "#9e9e9e", name = "Graphite", description = "Hardly any colour" },
 }
 
---- The variants "> variant " offers, in lib/material.lua's names.
+--- The variants "> variant " offers, in lib/util/material.lua's names.
 M.VARIANTS = {
   { id = "vibrant", name = "Vibrant", icon = "sentiment_very_dissatisfied",
     description = "Colours at their fullest, the accents pushed to the edge of the gamut." },

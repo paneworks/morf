@@ -12,7 +12,7 @@ pub(crate) fn execute_dbus_handler(
     let argument = dbus_value_to_lua(ctx, value)?;
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&stashed(closure)).into(),
+        ctx.fetch(&stashed(closure)?).into(),
         Variadic(vec![argument]),
     );
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
@@ -68,7 +68,7 @@ pub(crate) fn execute_dbus_signal_handler(
             vec![body, LuaValue::Table(info)]
         }
     };
-    let executor = Executor::start(ctx, ctx.fetch(&stashed(closure)).into(), Variadic(args));
+    let executor = Executor::start(ctx, ctx.fetch(&stashed(closure)?).into(), Variadic(args));
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
     match executor.take_result::<()>(ctx) {
         Ok(Ok(())) => Ok(()),
@@ -82,17 +82,17 @@ pub(crate) fn execute_dbus_signal_handler(
 pub(crate) fn execute_dbus_reply_handler(
     ctx: Context<'_>,
     closure: &Handler,
-    reply: Result<DbusValue, String>,
+    reply: Result<DbusValue, morf_io::Error>,
     limits: Limits,
 ) -> Result<(), String> {
     let args = match reply {
         Ok(value) => vec![LuaValue::Boolean(true), dbus_value_to_lua(ctx, value)?],
         Err(error) => vec![
             LuaValue::Boolean(false),
-            LuaValue::String(ctx.intern(error.as_bytes())),
+            LuaValue::String(ctx.intern(error.message().as_bytes())),
         ],
     };
-    let executor = Executor::start(ctx, ctx.fetch(&stashed(closure)).into(), Variadic(args));
+    let executor = Executor::start(ctx, ctx.fetch(&stashed(closure)?).into(), Variadic(args));
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
     match executor.take_result::<()>(ctx) {
         Ok(Ok(())) => Ok(()),
@@ -123,7 +123,7 @@ pub(crate) fn execute_dbus_call_handler(
     table.set_field(ctx, "arguments", dbus_value_to_lua(ctx, call.arguments)?);
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&stashed(closure)).into(),
+        ctx.fetch(&stashed(closure)?).into(),
         Variadic(vec![LuaValue::Table(table)]),
     );
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
@@ -177,7 +177,7 @@ pub(crate) fn execute_greetd_handler(
     }
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&stashed(closure)).into(),
+        ctx.fetch(&stashed(closure)?).into(),
         Variadic(vec![LuaValue::Table(table)]),
     );
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
@@ -228,7 +228,7 @@ pub(crate) fn execute_pam_session_handler(
     }
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&stashed(closure)).into(),
+        ctx.fetch(&stashed(closure)?).into(),
         Variadic(vec![LuaValue::Table(table)]),
     );
     drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;

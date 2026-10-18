@@ -6,12 +6,12 @@
 //! compositor and no frame callbacks. Nothing here changes how a shell runs:
 //! each is off until a runner asks for it.
 
-use crate::ipc_table::{IpcFromLua, IpcToLua};
+use crate::value::ipc::{IpcFromLua, IpcToLua};
 use luna::{Callback, CallbackReturn, Table, Value as LuaValue, Variadic};
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::{scene_bindings::HostError, surface_types::IpcValue, types::Runtime};
+use crate::{IpcValue, api::ui::scene::HostError, vm::types::Runtime};
 
 /// A function a runner hands to Lua: primitive values and JSON-like tables
 /// in, the same out, and an error raised in Lua as one.
@@ -25,25 +25,25 @@ impl Runtime {
     /// `ui.Timer` it makes is on that clock. Animations need nothing: they
     /// already advance by the delta [`Runtime::tick_animations`] is given.
     pub fn use_virtual_clock(&mut self) {
-        self.reactive.borrow_mut().timers.use_virtual_clock();
+        self.reactive.borrow_mut().timers_mut().use_virtual_clock();
     }
 
     /// The virtual clock's reading, or nothing when timers run off the wall.
     pub fn virtual_clock(&self) -> Option<Duration> {
-        self.reactive.borrow().timers.virtual_now()
+        self.reactive.borrow().timers().virtual_now()
     }
 
     /// Moves the virtual clock forward. Timers that came due fire on the
     /// next [`Runtime::poll_services`], exactly as a wall timer's tick waits
     /// for the loop to come round.
     pub fn advance_virtual_clock(&mut self, by: Duration) {
-        self.reactive.borrow_mut().timers.advance(by);
+        self.reactive.borrow_mut().timers_mut().advance(by);
     }
 
     /// When the earliest virtual timer comes due, so a runner advancing a
     /// long way can stop at each one rather than stepping past it.
     pub fn next_virtual_deadline(&self) -> Option<Duration> {
-        self.reactive.borrow().timers.next_virtual_deadline()
+        self.reactive.borrow().timers().next_virtual_deadline()
     }
 
     /// Replaces `morf.args`, `morf.options` and `morf.operands` with another
@@ -55,7 +55,7 @@ impl Runtime {
             let Ok(morf) = ctx.get_global::<Table>("morf") else {
                 return;
             };
-            crate::api_shell::set_argument_fields(ctx, morf, &arguments);
+            crate::api::window::surface::set_argument_fields(ctx, morf, &arguments);
         });
     }
 

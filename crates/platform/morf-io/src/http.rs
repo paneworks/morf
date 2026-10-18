@@ -1,7 +1,7 @@
 //! HTTP(S) requests, run where a slow server cannot stall a frame.
 //!
 //! A request is handed to a small pool of worker threads and answered through
-//! a channel, with [`crate::wake_all`] poking the loop when the answer lands,
+//! a channel, with the asking loop's [`crate::Waker`] poking it when the answer lands,
 //! the same way a child's output or a D-Bus signal arrives. Nothing here
 //! blocks the caller: [`HttpTask::start`] queues and returns, and
 //! [`HttpTask::poll`] only looks.
@@ -21,6 +21,8 @@ use std::sync::mpsc;
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
+
+use crate::Error;
 
 /// Requests on the wire at once, across every runtime in the process.
 pub const MAX_WORKERS: usize = 16;
@@ -72,12 +74,14 @@ pub struct HttpResponse {
     pub url: String,
 }
 
-type Outcome = Result<HttpResponse, String>;
+type Outcome = Result<HttpResponse, Error>;
 
 struct Job {
     request: HttpRequest,
     cancelled: Arc<AtomicBool>,
     reply: mpsc::Sender<Outcome>,
+    /// The loop that asked.
+    waker: crate::Waker,
 }
 
 struct Pool {
@@ -109,6 +113,7 @@ impl HttpTask {
             request,
             cancelled: Arc::clone(&cancelled),
             reply,
+            waker: crate::waker(),
         };
         let spawn = {
             let mut pool = POOL.lock().unwrap_or_else(|error| error.into_inner());
@@ -159,9 +164,9 @@ impl HttpTask {
                 // Also the cancelled case, when the worker had not started:
                 // it drops the job, and with it the sender, unanswered.
                 if self.cancelled.load(Ordering::Relaxed) {
-                    Err("cancelled".to_owned())
+                    Err(cancelled_error())
                 } else {
-                    Err("request failed without an answer".to_owned())
+                    Err(Error::Http("request failed without an answer".to_owned()))
                 }
             }
         };
@@ -210,7 +215,7 @@ fn worker() {
         // Rings the loop when this job is done with, answered or not: a
         // request that panicked leaves its reply channel hung up, and the
         // runtime should see that now rather than at some later wake.
-        let _answered = crate::WakeOnDrop;
+        let _answered = crate::WakeOnDropOf(job.waker.clone());
         // Rebound after the guard, so its reply channel is dropped first and
         // the ring comes after the hang-up.
         let job = job;
@@ -241,17 +246,17 @@ fn perform(request: &HttpRequest, cancelled: &AtomicBool) -> Outcome {
     let max_bytes = request.max_bytes.min(MAX_BODY_LIMIT);
     let deadline = Instant::now() + timeout;
     let method = ureq::http::Method::from_bytes(request.method.to_ascii_uppercase().as_bytes())
-        .map_err(|_| format!("invalid method {:?}", request.method))?;
+        .map_err(|_| Error::Invalid(format!("invalid method {:?}", request.method)))?;
     let uri: ureq::http::Uri = request
         .url
         .parse()
-        .map_err(|error| format!("invalid url: {error}"))?;
+        .map_err(|error| Error::Invalid(format!("invalid url: {error}")))?;
     match uri.scheme_str() {
         Some("http") | Some("https") => {}
-        _ => return Err("url must start with http:// or https://".to_owned()),
+        _ => return Err(Error::invalid("url must start with http:// or https://")),
     }
     if uri.host().is_none() {
-        return Err("url has no host".to_owned());
+        return Err(Error::invalid("url has no host"));
     }
     let mut builder = ureq::http::Request::builder().method(method).uri(uri);
     for (name, value) in &request.headers {
@@ -260,7 +265,7 @@ fn perform(request: &HttpRequest, cancelled: &AtomicBool) -> Outcome {
     let body = request.body.clone().unwrap_or_default();
     let http_request = builder
         .body(body)
-        .map_err(|error| format!("invalid request: {error}"))?;
+        .map_err(|error| Error::Invalid(format!("invalid request: {error}")))?;
     let agent = agent();
     let http_request = agent
         .configure_request(http_request)
@@ -290,17 +295,17 @@ fn perform(request: &HttpRequest, cancelled: &AtomicBool) -> Outcome {
         && length > max_bytes as u64
         && !response.headers().contains_key("content-encoding")
     {
-        return Err(format!("body exceeds {max_bytes} bytes"));
+        return Err(Error::Http(format!("body exceeds {max_bytes} bytes")));
     }
     let mut reader = response.body_mut().with_config().limit(u64::MAX).reader();
     let mut body = Vec::new();
     let mut chunk = vec![0u8; 16 * 1024];
     loop {
         if cancelled.load(Ordering::Relaxed) {
-            return Err("cancelled".to_owned());
+            return Err(cancelled_error());
         }
         if Instant::now() >= deadline {
-            return Err("timed out".to_owned());
+            return Err(timed_out());
         }
         let read = match reader.read(&mut chunk) {
             Ok(0) => break,
@@ -308,7 +313,7 @@ fn perform(request: &HttpRequest, cancelled: &AtomicBool) -> Outcome {
             Err(error) => return Err(describe_io(error)),
         };
         if body.len() + read > max_bytes {
-            return Err(format!("body exceeds {max_bytes} bytes"));
+            return Err(Error::Http(format!("body exceeds {max_bytes} bytes")));
         }
         body.extend_from_slice(&chunk[..read]);
     }
@@ -321,28 +326,36 @@ fn perform(request: &HttpRequest, cancelled: &AtomicBool) -> Outcome {
 }
 
 /// A failure, said the way a configuration would log it.
-fn describe(error: ureq::Error) -> String {
+fn describe(error: ureq::Error) -> Error {
     match error {
-        ureq::Error::Timeout(_) => "timed out".to_owned(),
-        ureq::Error::TooManyRedirects => "too many redirects".to_owned(),
+        ureq::Error::Timeout(_) => timed_out(),
+        ureq::Error::TooManyRedirects => Error::Http("too many redirects".to_owned()),
         ureq::Error::Io(error) => describe_io(error),
-        error => error.to_string(),
+        error => Error::Http(error.to_string()),
     }
 }
 
-fn describe_io(error: std::io::Error) -> String {
+fn describe_io(error: std::io::Error) -> Error {
     if matches!(
         error.kind(),
         std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
     ) {
-        return "timed out".to_owned();
+        return timed_out();
     }
     // ureq wraps its own errors in io::Error when they surface through a
     // body reader; unwrap them so a timeout reads as one.
     match error.downcast::<ureq::Error>() {
         Ok(error) => describe(error),
-        Err(error) => error.to_string(),
+        Err(error) => Error::Http(error.to_string()),
     }
+}
+
+fn timed_out() -> Error {
+    Error::TimedOut("timed out".to_owned())
+}
+
+fn cancelled_error() -> Error {
+    Error::Other("cancelled".to_owned())
 }
 
 /// Percent-encodes everything but the RFC 3986 unreserved characters, which

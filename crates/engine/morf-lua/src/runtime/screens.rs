@@ -1,6 +1,6 @@
 use luna::{Table, Value as LuaValue};
 
-use crate::{api_host::*, types::*};
+use crate::{api::system::host::*, vm::types::*};
 
 impl Runtime {
     /// Replaces `morf.screens` with the compositor's current output list.
@@ -37,7 +37,7 @@ impl Runtime {
 
     fn update_screens(&mut self, screens: &[Screen], own_first: bool) {
         let mut own_scale = None;
-        let density = self.reactive.borrow().density;
+        let density = self.reactive.borrow().display().density();
         self.lua.enter(|ctx| {
             let Ok(morf) = ctx.get_global::<Table>("morf") else {
                 return;
@@ -100,19 +100,13 @@ impl Runtime {
     fn bump_screens_revision(&mut self, screens: &[Screen]) {
         {
             let mut state = self.reactive.borrow_mut();
-            let state = &mut *state;
-            if !state
-                .engine
-                .session
-                .screens_changed(&mut state.engine.reactive, screens)
-                || state.engine.session.screens_revision.is_none()
-            {
+            if !state.screens_changed(screens) || state.session().screens_revision.is_none() {
                 return;
             }
         }
         if let Err(message) = self
             .lua
-            .enter(|ctx| crate::reactive_bindings::flush_reactive(&self.reactive, ctx, self.limits))
+            .enter(|ctx| crate::api::ui::bindings::flush_reactive(&self.reactive, ctx, self.limits))
         {
             self.reactive
                 .borrow_mut()

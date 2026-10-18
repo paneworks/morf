@@ -92,6 +92,8 @@ pub(crate) enum FieldVariant {
     BoxesOpaque,
     Quad,
     BoxesUniform,
+    /// One whole box layer, with or without a shadow.
+    OneBox,
 }
 
 impl FieldVariant {
@@ -101,6 +103,13 @@ impl FieldVariant {
         match command {
             DrawCommand::Quad { .. } => Self::Quad,
             DrawCommand::Field { layers, .. } => {
+                if let [layer] = layers.as_slice()
+                    && layer.shape == Shape::Box
+                    && (layer.morph <= 0.0 || layer.morph_to == Shape::Box)
+                    && layer.opacity >= 1.0
+                {
+                    return Self::OneBox;
+                }
                 let fading = layers
                     .iter()
                     .any(|layer| layer.opacity > 0.0 && layer.opacity < 1.0);
@@ -109,7 +118,7 @@ impl FieldVariant {
                         && (layer.morph <= 0.0 || layer.morph_to == Shape::Box)
                 }) {
                     return if fading
-                        && crate::field::same_fill(layers)
+                        && morf_paint::field::same_fill(layers)
                         && layers
                             .iter()
                             .all(|layer| layer.opacity <= 0.0 || layer.blend_group == 0)
@@ -162,7 +171,7 @@ pub(crate) struct FieldPipeline<'a> {
     pub(crate) textures: Option<&'a wgpu::BindGroupLayout>,
     pub(crate) data: Option<&'a wgpu::BindGroupLayout>,
     /// The space it blends in, which decides its target and what it writes.
-    pub(crate) blend: crate::BlendSpace,
+    pub(crate) space: super::Space,
 }
 
 pub(crate) fn build_field_pipeline(
@@ -177,13 +186,13 @@ pub(crate) fn build_field_pipeline(
         vertex,
         textures,
         data,
-        blend,
+        space,
         variant,
     } = built;
     // Group two is a shader's own textures and three its data blocks, both
     // present only when it declared any — an empty group is still a group wgpu
     // would want filled.
-    let mut constants = super::blend_constants(blend).to_vec();
+    let mut constants = super::blend_constants(space).to_vec();
     constants.push((
         "MORF_ANALYTIC",
         if variant == FieldVariant::General {
@@ -196,7 +205,10 @@ pub(crate) fn build_field_pipeline(
         "MORF_LAYER_FADES",
         if matches!(
             variant,
-            FieldVariant::AnalyticOpaque | FieldVariant::BoxesOpaque | FieldVariant::Quad
+            FieldVariant::AnalyticOpaque
+                | FieldVariant::BoxesOpaque
+                | FieldVariant::Quad
+                | FieldVariant::OneBox
         ) {
             0.0
         } else {
@@ -211,6 +223,7 @@ pub(crate) fn build_field_pipeline(
                 | FieldVariant::BoxesOpaque
                 | FieldVariant::Quad
                 | FieldVariant::BoxesUniform
+                | FieldVariant::OneBox
         ) {
             1.0
         } else {
@@ -233,13 +246,20 @@ pub(crate) fn build_field_pipeline(
             0.0
         },
     ));
+    constants.push((
+        "MORF_ONE_BOX",
+        if variant == FieldVariant::OneBox {
+            1.0
+        } else {
+            0.0
+        },
+    ));
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("morf field pipeline layout"),
         bind_group_layouts: &[Some(layout), Some(shader_layout), textures, data],
         immediate_size: 0,
     });
-    let mut source =
-        field_shader_source(include_str!("../field.wgsl"), user, owns_coverage, vertex)?;
+    let mut source = field_shader_source(morf_paint::FIELD_WGSL, user, owns_coverage, vertex)?;
     if variant == FieldVariant::BoxesUniform && device.features().contains(wgpu::Features::SUBGROUP)
     {
         source = source.replace(
@@ -284,7 +304,7 @@ pub(crate) fn build_field_pipeline(
             module: &shader,
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
-                format: super::target_format(blend),
+                format: super::target_format(space),
                 blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
@@ -399,7 +419,7 @@ mod variant_tests {
         let node = scene.create(morf_scene::Element::Sdf);
         let mut layer = field_layer(0.0, 0.0, 100.0, Shape::Box);
         let variant = |layer| FieldVariant::for_command(&field_command(node, vec![layer]));
-        assert_eq!(variant(layer.clone()), FieldVariant::BoxesOpaque);
+        assert_eq!(variant(layer.clone()), FieldVariant::OneBox);
         layer.opacity = 0.5;
         assert_eq!(variant(layer.clone()), FieldVariant::BoxesUniform);
         layer.opacity = 0.0;

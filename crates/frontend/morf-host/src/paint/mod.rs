@@ -1,10 +1,12 @@
 //! Drawing a frame, pacing frames, and when the loop sleeps.
 
 pub mod backdrop;
+pub mod cover;
 pub mod outputless;
 pub mod pacing;
 pub mod paint;
 pub mod painter;
+pub mod recover;
 pub mod render_target;
 pub mod wake_plan;
 

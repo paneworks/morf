@@ -1,11 +1,11 @@
 //! `morf check` and `morf render`: a configuration run once, headless, and
 //! either reported on or drawn. `morf test` is in `test_runner`.
 
-use morf_host::morf_lua::{LogEntry, LogLevel};
+use morf_lua::{LogEntry, LogLevel};
 
 use crate::runner_args::{Runner, RunnerArgs};
+use morf_host::headless::env::{PrivateBus, isolate_from_session, isolate_home, scratch_dir};
 use morf_host::headless::{Headless, LoadOptions};
-use morf_host::headless_env::{PrivateBus, isolate_from_session, isolate_home, scratch_dir};
 
 /// Runs whichever runner was asked for. Isolation first, before anything
 /// starts a thread: the environment is only safely changed until then.
@@ -187,12 +187,12 @@ fn check_a11y(headless: &Headless) -> usize {
     }
     problems.sort();
     problems.dedup();
-    println!(
+    outln!(
         "  a11y    {nodes} accessible nodes, {} unnamed",
         problems.len()
     );
     for problem in &problems {
-        println!("  error: a11y: {problem}");
+        outln!("  error: a11y: {problem}");
     }
     problems.len()
 }
@@ -215,13 +215,13 @@ fn check_kit(headless: &mut Headless) -> usize {
         end
     "#;
     if let Err(error) = headless.runtime.execute("morf-kit-check", CHECK) {
-        println!("  error: kit: {error}");
+        outln!("  error: kit: {error}");
         return 1;
     }
     let lines = match headless.runtime.call_ipc("morf-kit-check", &[]) {
         Ok(values) => values,
         Err(error) => {
-            println!("  error: kit: {error}");
+            outln!("  error: kit: {error}");
             return 1;
         }
     };
@@ -232,19 +232,19 @@ fn check_kit(headless: &mut Headless) -> usize {
     let mut lines = lines.iter().map(text);
     let head = lines.next().unwrap_or_default();
     if !head.starts_with("stage ") {
-        println!("  error: kit: {head}");
+        outln!("  error: kit: {head}");
         return 1;
     }
-    println!("  kit     {head}");
+    outln!("  kit     {head}");
     let problems = lines.collect::<Vec<_>>();
     for problem in &problems {
-        println!("  error: kit: {problem}");
+        outln!("  error: kit: {problem}");
     }
     problems.len()
 }
 
 /// Counts the nodes under a root, itself included.
-fn node_count(headless: &Headless, root: morf_host::morf_scene::NodeHandle) -> usize {
+fn node_count(headless: &Headless, root: morf_scene::NodeHandle) -> usize {
     let scene = headless.runtime.scene();
     let mut count = 0;
     let mut pending = vec![root];
@@ -265,21 +265,25 @@ fn options(args: &RunnerArgs, screen_index: usize) -> LoadOptions {
     options.scale = args.scale as i32;
     options.args = args.args.clone();
     options.policy = args.policy;
+    options.gpu = args.gpu;
+    if args.runner == Runner::Check {
+        options.permissions = morf_lua::PermissionMode::HoldImported;
+    }
     options
 }
 
 /// `morf check`: loads, runs a little, lays everything out, and says what
 /// it found. True when nothing failed it.
-fn check(args: &RunnerArgs) -> Result<bool, String> {
+pub(crate) fn check(args: &RunnerArgs) -> Result<bool, String> {
     let config = args.files[0].display().to_string();
     let (mut errors, mut warnings) = (0usize, 0usize);
     // `--screens 0`: one pass, as the shell runs it once every output is gone.
     for screen_index in 0..args.screens.max(1) {
         let options = options(args, screen_index);
         if args.screens == 0 {
-            println!("{config} with no output");
+            outln!("{config} with no output");
         } else {
-            println!(
+            outln!(
                 "{config} on HEADLESS-{} ({}x{}, {} screen{})",
                 screen_index + 1,
                 args.size.0,
@@ -291,22 +295,31 @@ fn check(args: &RunnerArgs) -> Result<bool, String> {
         let mut headless = match Headless::load(&options) {
             Ok(headless) => headless,
             Err(failure) => {
-                println!("  error: {}", failure.error);
+                outln!("  error: {}", failure.error);
                 errors += 1;
                 for entry in failure.logs.iter().filter(|entry| is_error(entry)) {
-                    println!("  error: {}", entry.message);
+                    outln!("  error: {}", entry.message);
                     errors += 1;
                 }
                 continue;
             }
         };
         if let Err(error) = call_ipc(&mut headless, args) {
-            println!("  error: {error}");
+            outln!("  error: {error}");
             errors += 1;
         }
-        headless.advance(args.after, args.wait);
+        if let Some(host) = headless.host.as_mut().filter(|_| args.frames) {
+            host.take_frame_report();
+        }
+        match args.paced {
+            true => headless.run_paced(args.after, std::time::Duration::from_micros(16_667)),
+            false => headless.advance(args.after, args.wait),
+        }
+        if let Some(host) = headless.host.as_mut().filter(|_| args.frames) {
+            outln!("  frames  {}", host.take_frame_report());
+        }
         for surface in &headless.surfaces {
-            println!(
+            outln!(
                 "  surface {:<24} {:>5}x{:<5} at {},{}{}  {} nodes",
                 surface.label(),
                 surface.size.0,
@@ -319,17 +332,30 @@ fn check(args: &RunnerArgs) -> Result<bool, String> {
         }
         let verbs = headless.runtime.ipc_verbs();
         if !verbs.is_empty() {
-            println!("  ipc     {}", verbs.join(" "));
+            outln!("  ipc     {}", verbs.join(" "));
         }
+        let report = crate::permission_words::report(&mut headless.runtime, args.strict);
+        for line in &report.lines {
+            outln!("  {line}");
+        }
+        for error in &report.errors {
+            outln!("  error: {error}");
+        }
+        errors += report.errors.len();
         let found = findings(&headless);
         for error in &found.errors {
-            println!("  error: {error}");
+            outln!("  error: {error}");
         }
         for warning in &found.warnings {
-            println!("  warning: {warning}");
+            outln!("  warning: {warning}");
         }
         errors += found.errors.len();
         warnings += found.warnings.len();
+        let failed_effects = headless.runtime.effect_errors();
+        if args.strict && failed_effects > 0 {
+            outln!("  error: effects raised {failed_effects} error(s)");
+            errors += 1;
+        }
         if args.kit {
             errors += check_kit(&mut headless);
         }
@@ -337,7 +363,7 @@ fn check(args: &RunnerArgs) -> Result<bool, String> {
             errors += check_a11y(&headless);
         }
     }
-    println!(
+    outln!(
         "{errors} error{}, {warnings} warning{}",
         if errors == 1 { "" } else { "s" },
         if warnings == 1 { "" } else { "s" }
@@ -360,13 +386,13 @@ fn render(args: &RunnerArgs) -> Result<bool, String> {
     call_ipc(&mut headless, args)?;
     headless.advance(args.after, args.wait);
     let output = args.output.clone().expect("render has an output");
-    let (width, height, what) = morf_host::headless_render::render_to(
+    let (width, height, what) = morf_host::headless::render::render_to(
         &mut headless,
         args.surface.as_deref(),
         args.scale,
         &output,
     )?;
-    println!("{}: {what}, {width}x{height}", output.display());
+    outln!("{}: {what}, {width}x{height}", output.display());
     // The picture is what was asked for; what the configuration got wrong
     // on the way is said, but is `morf check`'s to fail on.
     for error in findings(&headless).errors {

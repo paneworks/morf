@@ -89,6 +89,7 @@ fn bound(
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_data_block_reaches_the_shader() {
+    require_gpu!();
     // §5.3. A read-only block the host fills each frame — larger than a uniform
     // can hold, and read-only because every pixel of the node runs this shader
     // and a writable one would be a race between all of them.
@@ -116,6 +117,7 @@ pub(crate) fn a_data_block_reaches_the_shader() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_vertex_shader_moves_the_quad() {
+    require_gpu!();
     // §5.2. It moves the quad, not the shape inside it — so a node displaced
     // sideways paints where it was sent, and nowhere near where it started.
     let fragment = morf_shader::compile(
@@ -208,6 +210,7 @@ pub(crate) fn a_vertex_shader_moves_the_quad() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_switch_and_an_exact_texel_read_reach_the_driver() {
+    require_gpu!();
     // The last two boxes, through an adapter. A `switch` naga rejects — a
     // duplicate case, a missing default, a case constant of the wrong width —
     // is refused with no line number, and an emitter that *generates* the
@@ -249,6 +252,7 @@ pub(crate) fn a_switch_and_an_exact_texel_read_reach_the_driver() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_loop_can_walk_a_data_block_by_a_computed_index() {
+    require_gpu!();
     // What `examples/demos/sdf/sdf-blobs-crt.lua` is built on. A merged distance field is
     // one draw and carries one shader, so the only way a shader can shade each
     // blob in that blob's own coordinates is to be told where the blobs are and

@@ -1,14 +1,13 @@
 use luna::{Context, Table, Value as LuaValue};
 use morf_system::desktop_entries::DesktopEntry;
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
 use morf_scene::Easing;
 use morf_system::{AuthMessageType, GreetdResponse};
 
-use crate::reactive_bindings::lua_to_scene;
-use crate::state::*;
+use crate::api::ui::bindings::lua_to_scene;
+use crate::runtime::state::*;
 
 pub(crate) fn string_table<'gc>(
     ctx: Context<'gc>,
@@ -98,7 +97,7 @@ pub(crate) fn greetd_response<'gc>(ctx: Context<'gc>, response: GreetdResponse) 
 }
 
 pub(crate) fn track_clock_dependency(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     enabled: bool,
     precision: crate::ClockPrecision,
 ) {
@@ -107,7 +106,7 @@ pub(crate) fn track_clock_dependency(
     }
     let mut state = state.borrow_mut();
     let clock = state.clock_signal(precision);
-    if let Some(active) = &mut state.active {
+    if let Some(active) = state.tracking_mut().capture() {
         active.reads.insert(clock);
     }
 }
@@ -162,7 +161,7 @@ pub(crate) fn parse_easing<'gc>(ctx: Context<'gc>, value: LuaValue<'gc>) -> Resu
         // so the points are read out of that model.
         LuaValue::UserData(userdata) => {
             let token = userdata
-                .downcast_static::<crate::state::StateToken>()
+                .downcast_static::<crate::runtime::state::StateToken>()
                 .map_err(
                     |_| "easing must be a string, a cubic Bezier table or { spline = { ... } }",
                 )?;

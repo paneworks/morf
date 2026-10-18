@@ -7,7 +7,7 @@
 use morf_layout::{Layout, Size, TextMeasurer};
 use morf_scene::NodeHandle;
 
-use crate::{reactive_bindings::*, scene_bindings::*, types::*};
+use crate::{api::ui::bindings::*, api::ui::scene::*, vm::types::*};
 
 pub use morf_runtime::layout::SettledLayout;
 
@@ -53,7 +53,7 @@ impl Runtime {
     /// a node sliding on `translate_x` moves without its layout changing.
     /// Free when nothing in the scene stretches.
     pub fn observe_stretch(&mut self, layout: &Layout) {
-        self.reactive.borrow_mut().engine.observe_stretch(layout);
+        self.reactive.borrow_mut().observe_stretch(layout);
     }
 
     /// Updates native transform watchers from one rendered surface layout.
@@ -73,19 +73,16 @@ impl Runtime {
         let moved = if geometry_changed {
             let state = self.reactive.borrow();
             morf_runtime::layout::moved_nodes(
-                state
-                    .property_signals
-                    .keys()
-                    .map(|(node, property, _)| (*node, property.as_str())),
+                state.tracking().tracked_properties(),
                 layout,
-                &state.transform_tracker,
+                state.transform_tracker(),
             )
         } else {
             Vec::new()
         };
         let mut state = self.reactive.borrow_mut();
         if geometry_changed {
-            state.transform_tracker.update(layout);
+            state.transform_tracker_mut().update(layout);
         }
         for (node, which) in &moved {
             let _ = bump_property_signal(&mut state, *node, which, false);
@@ -102,19 +99,9 @@ impl Runtime {
         }
         self.place_overlays(layout);
         let mut state = self.reactive.borrow_mut();
-        let state = &mut *state;
-        if morf_runtime::layout::place_popup_anchors(
-            &state.engine.windows.popup_node_anchors,
-            &state.engine.transform_tracker,
-            &mut state.engine.windows.window_surfaces,
-        ) {
-            state.engine.windows.window_surfaces_changed = true;
-        }
-        let (changed, errors) = morf_runtime::layout::observe_transform_watches(
-            &mut state.transform_watchers,
-            &state.engine.scene,
-            &state.engine.transform_tracker,
-        );
+        state.place_popup_anchors();
+        let (watchers, engine) = state.transform_watchers_and_engine();
+        let (changed, errors) = watchers.observe(engine.scene(), engine.transform_tracker());
         for error in errors {
             state.log(LogLevel::Warn, error);
         }

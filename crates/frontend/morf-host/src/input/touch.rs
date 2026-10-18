@@ -2,7 +2,7 @@ use morf_app::Event;
 use morf_lua::{EventPoint, FocusReason, Runtime, UiEvent};
 use morf_scene::NodeHandle;
 
-use crate::surfaces::*;
+use crate::host::surfaces::*;
 
 // Touch handling, split out of `surface_events.rs` to keep each file inside
 // the repository's 500-line limit. Touch is self-contained: it owns the
@@ -51,7 +51,7 @@ pub fn handle_touch_event(
                 if owned {
                     return Ok(repaint);
                 }
-                crate::surface_gesture::finger_down(runtime, input, layouts, id);
+                crate::input::gesture::finger_down(runtime, input, layouts, id);
                 if let Some(target) = runtime.click_focus_target(hit.node) {
                     input.focused.insert(surface, target);
                     let root = runtime.scene().root_of(target);
@@ -102,7 +102,7 @@ pub fn handle_touch_event(
                 // same handler, the same deltas, so a list scrolls under a
                 // finger as under a wheel.
                 repaint |= runtime.dispatch_pointer(node, UiEvent::Dragged, point, delta);
-                repaint |= crate::surface_gesture::finger_moved(runtime, input, layouts, id)?;
+                repaint |= crate::input::gesture::finger_moved(runtime, input, layouts, id)?;
             }
         }
         Event::TouchUp {
@@ -130,7 +130,7 @@ pub fn handle_touch_event(
             }
             let (claimed, changed) = super::pan::up(runtime, input, Some(id), time_ms);
             repaint |= changed;
-            repaint |= crate::surface_gesture::finger_up(runtime, input, Some(id));
+            repaint |= crate::input::gesture::finger_up(runtime, input, Some(id));
             if let Some((origin_surface, sx, sy)) = input.touch_overlay_origins.remove(&id)
                 && !claimed
                 && !suppress_tap
@@ -213,7 +213,7 @@ pub fn handle_touch_event(
             input.suppressed_taps.clear();
             repaint |= super::pan::up(runtime, input, None, None).1;
             runtime.cancel_gesture();
-            repaint |= crate::surface_gesture::finger_up(runtime, input, None);
+            repaint |= crate::input::gesture::finger_up(runtime, input, None);
             for (id, (_, hit, x, y, _)) in input.touches.drain() {
                 let point =
                     EventPoint::new((x, y), (hit.local_x, hit.local_y)).with_button(TOUCH_BUTTON);

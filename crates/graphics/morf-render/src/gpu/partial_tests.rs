@@ -166,6 +166,7 @@ pub(super) fn largest_difference(left: &[u8], right: &[u8], width: u32) -> (u8, 
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn frames_drawn_through_damage_match_frames_drawn_whole() {
+    require_gpu!();
     for scale_120 in [120, 180] {
         let physical = (LOGICAL * f64::from(scale_120) / 120.0).round() as u32;
         let mut desk = desk();
@@ -202,6 +203,7 @@ fn frames_drawn_through_damage_match_frames_drawn_whole() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn layers_take_targets_for_what_is_read_of_them_and_nothing_else() {
+    require_gpu!();
     let desk = desk();
     let physical = LOGICAL as u32;
     let layout = Layout::compute(

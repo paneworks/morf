@@ -6,7 +6,7 @@ use super::*;
 /// Brings the native timers in line with the `Timer` nodes, when the scene
 /// changed (`Engine::reconcile_timers`). Returns whether anything did.
 pub(super) fn reconcile_timers(state: &mut ReactiveState, definitions_changed: bool) -> bool {
-    state.engine.reconcile_timers(definitions_changed)
+    state.reconcile_timers(definitions_changed)
 }
 
 /// Brings each `Loader` node's item in line with what the node asks for:
@@ -20,9 +20,10 @@ pub(super) fn reconcile_loaders(
     loader_drops: &mut Vec<NodeHandle>,
 ) -> bool {
     let mut service_changed = false;
-    let loader_definitions = if definitions_changed || !state.retained.preload_pending.is_empty() {
+    let loader_definitions = if definitions_changed || !state.retained().preload_pending.is_empty()
+    {
         state
-            .retained
+            .retained()
             .loader_factories
             .iter()
             .map(|(node, factory)| (*node, factory.clone()))
@@ -35,16 +36,18 @@ pub(super) fn reconcile_loaders(
     // turn, and none while anything animates -- the frame a build
     // costs is exactly the frame a motion cannot spare. Something
     // that never stops (a spinner) holds a preload back only so long.
-    let still = !loader_definitions.is_empty() && !state.scene.has_motion();
+    let still = !loader_definitions.is_empty()
+        && !state.scene().has_motion()
+        && !state.retained().host_motion;
     let now = std::time::Instant::now();
     for (node, factory) in loader_definitions {
-        let Ok(active) = state.scene.bool_value(node, "active") else {
+        let Ok(active) = state.scene().bool_value(node, "active") else {
             stale_loaders.push(node);
             continue;
         };
-        let loading = state.scene.bool_value(node, "loading").unwrap_or(false);
+        let loading = state.scene().bool_value(node, "loading").unwrap_or(false);
         let active_async = state
-            .scene
+            .scene()
             .bool_value(node, "active_async")
             .unwrap_or(false);
         let requested = active || loading || active_async;
@@ -52,18 +55,18 @@ pub(super) fn reconcile_loaders(
         // and asked again; trying it every frame filled the log with
         // one error sixty times a second and spent a frame on it each.
         if !requested {
-            state.retained.failed_loaders.remove(&node);
-        } else if state.retained.failed_loaders.contains(&node) {
+            state.retained_mut().failed_loaders.remove(&node);
+        } else if state.retained().failed_loaders.contains(&node) {
             continue;
         }
-        let keep = state.scene.bool_value(node, "keep").unwrap_or(false);
-        let preload = state.scene.bool_value(node, "preload").unwrap_or(false);
+        let keep = state.scene().bool_value(node, "keep").unwrap_or(false);
+        let preload = state.scene().bool_value(node, "preload").unwrap_or(false);
         // A hidden item stays while the Loader holds it for a reason:
         // kept, or built ahead of being asked for.
-        let preloaded_and_waiting = preload && state.retained.dormant_loaders.contains(&node);
-        if requested && state.retained.dormant_loaders.remove(&node) {
+        let preloaded_and_waiting = preload && state.retained().dormant_loaders.contains(&node);
+        if requested && state.retained_mut().dormant_loaders.remove(&node) {
             // Built already: shown, not built again.
-            let children = state.scene.children(node).unwrap_or_default().to_vec();
+            let children = state.scene().children(node).unwrap_or_default().to_vec();
             for child in children {
                 let _ = assign_scene_property(state, child, "visible", SceneValue::Bool(true));
             }
@@ -73,19 +76,19 @@ pub(super) fn reconcile_loaders(
                 let _ = assign_scene_property(state, node, "active", SceneValue::Bool(true));
             }
             service_changed = true;
-        } else if requested && state.retained.loaded_loaders.insert(node) {
-            state.retained.preload_pending.remove(&node);
+        } else if requested && state.retained_mut().loaded_loaders.insert(node) {
+            state.retained_mut().preload_pending.remove(&node);
             // Let go and asked for again before its item had finished
             // leaving: that item is taken back rather than built anew.
             let leaving = state
-                .scene
+                .scene()
                 .children(node)
                 .unwrap_or_default()
                 .iter()
                 .copied()
-                .find(|child| state.scene.is_exiting(*child));
+                .find(|child| state.scene().is_exiting(*child));
             if let Some(child) = leaving
-                && crate::runtime_helpers::cancel_node_exit(state, child)
+                && crate::runtime::helpers::cancel_node_exit(state, child)
             {
                 for (property, value) in [
                     ("loading", false),
@@ -100,43 +103,47 @@ pub(super) fn reconcile_loaders(
             }
         } else if !requested
             && keep
-            && state.retained.loaded_loaders.contains(&node)
-            && !state.retained.dormant_loaders.contains(&node)
+            && state.retained().loaded_loaders.contains(&node)
+            && !state.retained().dormant_loaders.contains(&node)
         {
             // Let go, but kept: hidden until it is asked for again.
-            let children = state.scene.children(node).unwrap_or_default().to_vec();
+            let children = state.scene().children(node).unwrap_or_default().to_vec();
             for child in children {
                 let _ = assign_scene_property(state, child, "visible", SceneValue::Bool(false));
             }
-            state.retained.dormant_loaders.insert(node);
+            state.retained_mut().dormant_loaders.insert(node);
             service_changed = true;
         } else if !requested
-            && state.retained.loaded_loaders.contains(&node)
+            && state.retained().loaded_loaders.contains(&node)
             && !keep
             && !preloaded_and_waiting
         {
-            state.retained.loaded_loaders.remove(&node);
-            state.retained.dormant_loaders.remove(&node);
-            loader_drops.extend_from_slice(state.scene.children(node).unwrap_or_default());
+            state.retained_mut().loaded_loaders.remove(&node);
+            state.retained_mut().dormant_loaders.remove(&node);
+            loader_drops.extend_from_slice(state.scene().children(node).unwrap_or_default());
             service_changed = true;
-        } else if !requested && preload && !state.retained.loaded_loaders.contains(&node) {
-            let since = *state.retained.preload_pending.entry(node).or_insert(now);
+        } else if !requested && preload && !state.retained().loaded_loaders.contains(&node) {
+            let since = *state
+                .retained_mut()
+                .preload_pending
+                .entry(node)
+                .or_insert(now);
             let waited = now.duration_since(since) >= PRELOAD_PATIENCE;
             if (still || waited) && preloads.is_empty() {
-                state.retained.preload_pending.remove(&node);
-                state.retained.loaded_loaders.insert(node);
+                state.retained_mut().preload_pending.remove(&node);
+                state.retained_mut().loaded_loaders.insert(node);
                 preloads.push((node, factory));
             }
         } else if !preload {
-            state.retained.preload_pending.remove(&node);
+            state.retained_mut().preload_pending.remove(&node);
         }
     }
     for node in stale_loaders {
-        state.retained.loader_factories.remove(&node);
-        state.retained.loaded_loaders.remove(&node);
-        state.retained.failed_loaders.remove(&node);
-        state.retained.dormant_loaders.remove(&node);
-        state.retained.preload_pending.remove(&node);
+        state.retained_mut().loader_factories.remove(&node);
+        state.retained_mut().loaded_loaders.remove(&node);
+        state.retained_mut().failed_loaders.remove(&node);
+        state.retained_mut().dormant_loaders.remove(&node);
+        state.retained_mut().preload_pending.remove(&node);
     }
     service_changed
 }
@@ -156,15 +163,16 @@ impl Runtime {
             // left as it is.
             let preloaded = index >= asked_for;
             let _span = crate::profile::span(|| {
+                let origin =
+                    self.lua
+                        .enter(|ctx| match crate::vm::handler_store::stashed(&factory) {
+                            Ok(closure) => crate::profile::closure_origin(ctx.fetch(&closure)),
+                            Err(error) => error,
+                        });
                 let state = self.reactive.borrow();
-                let origin = self.lua.enter(|ctx| {
-                    crate::profile::closure_origin(
-                        ctx.fetch(&crate::vm::handler_store::stashed(&factory)),
-                    )
-                });
                 format!(
                     "loader build {} ({origin})",
-                    crate::runtime_config::lint_path(&state.scene, node)
+                    crate::vm::config::lint_path(state.scene(), node)
                 )
             });
             let result = self
@@ -173,16 +181,16 @@ impl Runtime {
             match result {
                 Ok(child) => {
                     let mut state = self.reactive.borrow_mut();
-                    if preloaded && state.scene.reparent(child, Some(node)).is_ok() {
+                    if preloaded && state.scene_mut().reparent(child, Some(node)).is_ok() {
                         let _ = assign_scene_property(
                             &mut state,
                             child,
                             "visible",
                             SceneValue::Bool(false),
                         );
-                        state.retained.dormant_loaders.insert(node);
+                        state.retained_mut().dormant_loaders.insert(node);
                         service_changed = true;
-                    } else if !preloaded && state.scene.reparent(child, Some(node)).is_ok() {
+                    } else if !preloaded && state.scene_mut().reparent(child, Some(node)).is_ok() {
                         let _ = assign_scene_property(
                             &mut state,
                             node,
@@ -204,22 +212,22 @@ impl Runtime {
                         service_changed = true;
                     } else {
                         remove_scene_subtree(&mut state, child);
-                        state.retained.loaded_loaders.remove(&node);
+                        state.retained_mut().loaded_loaders.remove(&node);
                     }
                 }
                 Err(error) if preloaded => {
                     // Not tried ahead of time again: built when asked for,
                     // where a failure is reported as any Loader's is.
                     let mut state = self.reactive.borrow_mut();
-                    state.retained.loaded_loaders.remove(&node);
+                    state.retained_mut().loaded_loaders.remove(&node);
                     let _ =
                         assign_scene_property(&mut state, node, "preload", SceneValue::Bool(false));
                     state.log(LogLevel::Warn, format!("Loader preload: {error}"));
                 }
                 Err(error) => {
                     let mut state = self.reactive.borrow_mut();
-                    state.retained.loaded_loaders.remove(&node);
-                    state.retained.failed_loaders.insert(node);
+                    state.retained_mut().loaded_loaders.remove(&node);
+                    state.retained_mut().failed_loaders.insert(node);
                     let _ =
                         assign_scene_property(&mut state, node, "loading", SceneValue::Bool(false));
                     let _ = assign_scene_property(

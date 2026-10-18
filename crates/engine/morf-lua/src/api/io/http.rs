@@ -23,14 +23,15 @@
 //! morf.http.query { q = "x y", n = 2 } --> "n=2&q=x%20y"
 //! ```
 //!
-//! A response is `{ ok, status, headers, body, url, error, json }`: `ok` is a
+//! A response is `{ ok, status, headers, body, url, error, error_kind, json }`: `ok` is a
 //! 2xx status; `headers` has lowercased names, a repeated one joined by `, `; `url` is where the answer came
 //! from after redirects; `json()` decodes the body and returns `nil, message`
 //! when it is not JSON. Any status is a response — a 404 is `ok = false` with
 //! its `status` and `body`. A request that got no response at all (bad URL,
 //! refused, timed out, too large, cancelled) is `ok = false`, `status = 0` and
 //! `error` saying why (`cancelled` is never seen: a cancelled request does
-//! not call back). Those are the failures a configuration should expect,
+//! not call back), with `error_kind` one of `timed_out`, `invalid`, `http`
+//! or `other`. Those are the failures a configuration should expect,
 //! so they arrive in the callback; only a malformed call raises.
 //!
 //! The request runs on a worker thread and `on_done` runs on the main loop,
@@ -45,11 +46,11 @@ use luna::{
     Table, UserData, UserRef, Value as LuaValue, Variadic,
 };
 use morf_io::{HttpRequest, HttpResponse, HttpTask};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{
-    Limits, reactive_execute::drive_executor, scene_bindings::*, serialization::*, state::*,
+    Limits, api::ui::scene::*, runtime::state::*, vm::execute::drive_executor, vm::loader::*,
+    vm::permissions::gated,
 };
 use morf_runtime::Handler;
 
@@ -80,7 +81,7 @@ struct HttpHandleToken {
 /// Installs `morf.http`.
 pub(crate) fn install_http_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     json: JsonKinds,
 ) {
@@ -105,6 +106,7 @@ pub(crate) fn install_http_api<'gc>(
     metatable.set_field(ctx, "__index", methods);
     let metatable = ctx.stash(metatable);
 
+    let gate_state = Rc::clone(&state);
     let start = Rc::new(Starter {
         state,
         json,
@@ -112,46 +114,64 @@ pub(crate) fn install_http_api<'gc>(
     });
 
     let request_start = Rc::clone(&start);
-    let request = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let options: Table = stack.consume(ctx)?;
-        let url = match options.get_value(ctx, "url") {
-            LuaValue::String(url) => url.display_lossy().to_string(),
-            _ => return Err(HostError("http request url must be a string".into()).into()),
-        };
-        let mut request = HttpRequest::get(url);
-        apply_options(ctx, &mut request, Some(options))?;
-        let callback = function_of(options.get_value(ctx, "on_done"))?;
-        stack.replace(ctx, request_start.start(ctx, request, callback)?);
-        Ok(CallbackReturn::Return)
-    });
+    let request = gated(
+        ctx,
+        &gate_state,
+        "http",
+        "morf.http.request",
+        move |ctx, _, mut stack| {
+            let options: Table = stack.consume(ctx)?;
+            let url = match options.get_value(ctx, "url") {
+                LuaValue::String(url) => url.display_lossy().to_string(),
+                _ => return Err(HostError("http request url must be a string".into()).into()),
+            };
+            let mut request = HttpRequest::get(url);
+            apply_options(ctx, &mut request, Some(options))?;
+            let callback = function_of(options.get_value(ctx, "on_done"))?;
+            stack.replace(ctx, request_start.start(ctx, request, callback)?);
+            Ok(CallbackReturn::Return)
+        },
+    );
     http.set_field(ctx, "request", request);
 
     let get_start = Rc::clone(&start);
-    let get = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (url, options, callback): (String, LuaValue, LuaValue) = stack.consume(ctx)?;
-        let (options, callback) = options_and_callback(ctx, options, callback)?;
-        let mut request = HttpRequest::get(url);
-        apply_options(ctx, &mut request, options)?;
-        stack.replace(ctx, get_start.start(ctx, request, callback)?);
-        Ok(CallbackReturn::Return)
-    });
+    let get = gated(
+        ctx,
+        &gate_state,
+        "http",
+        "morf.http.get",
+        move |ctx, _, mut stack| {
+            let (url, options, callback): (String, LuaValue, LuaValue) = stack.consume(ctx)?;
+            let (options, callback) = options_and_callback(ctx, options, callback)?;
+            let mut request = HttpRequest::get(url);
+            apply_options(ctx, &mut request, options)?;
+            stack.replace(ctx, get_start.start(ctx, request, callback)?);
+            Ok(CallbackReturn::Return)
+        },
+    );
     http.set_field(ctx, "get", get);
 
-    let post = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (url, payload, options, callback): (String, LuaValue, LuaValue, LuaValue) =
-            stack.consume(ctx)?;
-        let (options, callback) = options_and_callback(ctx, options, callback)?;
-        let mut request = HttpRequest::get(url);
-        request.method = "POST".into();
-        match payload {
-            LuaValue::Nil => {}
-            LuaValue::String(body) => request.body = Some(body.as_bytes().to_vec()),
-            payload => set_json_body(ctx, &mut request, payload)?,
-        }
-        apply_options(ctx, &mut request, options)?;
-        stack.replace(ctx, start.start(ctx, request, callback)?);
-        Ok(CallbackReturn::Return)
-    });
+    let post = gated(
+        ctx,
+        &gate_state,
+        "http",
+        "morf.http.post",
+        move |ctx, _, mut stack| {
+            let (url, payload, options, callback): (String, LuaValue, LuaValue, LuaValue) =
+                stack.consume(ctx)?;
+            let (options, callback) = options_and_callback(ctx, options, callback)?;
+            let mut request = HttpRequest::get(url);
+            request.method = "POST".into();
+            match payload {
+                LuaValue::Nil => {}
+                LuaValue::String(body) => request.body = Some(body.as_bytes().to_vec()),
+                payload => set_json_body(ctx, &mut request, payload)?,
+            }
+            apply_options(ctx, &mut request, options)?;
+            stack.replace(ctx, start.start(ctx, request, callback)?);
+            Ok(CallbackReturn::Return)
+        },
+    );
     http.set_field(ctx, "post", post);
 
     let url_encode = Callback::from_fn(&ctx, |ctx, _, mut stack| {
@@ -179,7 +199,7 @@ pub(crate) fn install_http_api<'gc>(
 /// Every entry point ends here: the request is queued, the callback kept
 /// alongside it, and the caller gets a handle.
 struct Starter {
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     json: JsonKinds,
     metatable: StashedTable,
 }
@@ -192,19 +212,12 @@ impl Starter {
         callback: Option<Closure<'gc>>,
     ) -> Result<UserData<'gc>, HostError> {
         let mut reactive = self.state.borrow_mut();
-        reactive
-            .http_requests
-            .retain(|entry| !entry.handle.cancelled.get());
-        morf_io::check_pending(reactive.http_requests.len()).map_err(HostError)?;
-        let handle = Rc::new(HttpHandleState::default());
-        reactive.http_requests.push(PendingHttp {
-            url: request.url.clone(),
-            task: HttpTask::start(request),
-            callback: callback
-                .map(|callback| crate::vm::handler_store::register(ctx.stash(callback))),
-            handle: Rc::clone(&handle),
-            json: self.json.clone(),
-        });
+        reactive.feeds_mut().make_room().map_err(HostError::from)?;
+        let callback =
+            callback.map(|callback| crate::vm::handler_store::register(ctx.stash(callback)));
+        let handle = reactive
+            .feeds_mut()
+            .request(request, callback, self.json.clone());
         let userdata = UserData::new_static(&ctx, HttpHandleToken { state: handle });
         userdata.set_metatable(ctx, Some(ctx.fetch(&self.metatable)));
         Ok(userdata)
@@ -268,7 +281,7 @@ fn apply_options<'gc>(
                 };
                 request
                     .set_header(name.display_lossy().to_string(), value)
-                    .map_err(HostError)?;
+                    .map_err(HostError::from)?;
             }
         }
         _ => return Err(HostError("http headers must be a table".into())),
@@ -293,7 +306,9 @@ fn apply_options<'gc>(
         LuaValue::String(method) => Some(method.display_lossy().to_string()),
         _ => return Err(HostError("http method must be a string".into())),
     };
-    request.set_method(method.as_deref()).map_err(HostError)?;
+    request
+        .set_method(method.as_deref())
+        .map_err(HostError::from)?;
     if let Some(timeout) = positive(ctx, options, "timeout_ms")? {
         request.set_timeout_ms(timeout);
     }
@@ -322,7 +337,7 @@ fn set_json_body<'gc>(
     value: LuaValue<'gc>,
 ) -> Result<(), HostError> {
     let mut entries = 0;
-    let value = lua_to_json(ctx, value, 0, &mut entries).map_err(HostError)?;
+    let value = lua_to_json(ctx, value, 0, &mut entries).map_err(HostError::from)?;
     let body = serde_json::to_vec(&value).map_err(|error| HostError(error.to_string()))?;
     request.set_json_body(body);
     Ok(())
@@ -363,7 +378,7 @@ fn encode_query<'gc>(ctx: Context<'gc>, values: Table<'gc>) -> Result<String, Ho
 pub(crate) fn execute_http_handler(
     ctx: Context<'_>,
     closure: &Handler,
-    outcome: Result<HttpResponse, String>,
+    outcome: Result<HttpResponse, morf_io::Error>,
     url: &str,
     json: &JsonKinds,
     limits: Limits,
@@ -390,7 +405,8 @@ pub(crate) fn execute_http_handler(
             response.set_field(ctx, "ok", false);
             response.set_field(ctx, "status", 0i64);
             response.set_field(ctx, "url", url);
-            response.set_field(ctx, "error", error.as_str());
+            response.set_field(ctx, "error", error.message());
+            response.set_field(ctx, "error_kind", error.kind().name());
             ctx.intern(b"")
         }
     };
@@ -422,7 +438,7 @@ pub(crate) fn execute_http_handler(
     response.set_field(ctx, "json", decode);
     let executor = Executor::start(
         ctx,
-        ctx.fetch(&crate::vm::handler_store::stashed(closure))
+        ctx.fetch(&crate::vm::handler_store::stashed(closure)?)
             .into(),
         Variadic(vec![LuaValue::Table(response)]),
     );

@@ -1,14 +1,17 @@
-use crate::states::StateValue;
+use crate::runtime::states::StateValue;
 use luna::{Closure, Context, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use morf_scene::{NodeHandle, Value as SceneValue};
 
-use crate::{reactive_execute::*, scene_bindings::*, state::*, surface_types::*, types::*};
+use crate::{
+    api::ui::scene::*, runtime::host_types::*, runtime::state::*, vm::execute::*, vm::types::*,
+};
+
+pub(crate) use super::flush::{flush_reactive, flush_status, run_destroyed_hooks};
 
 pub(crate) fn register_property_binding<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     limits: Limits,
     node: NodeHandle,
@@ -18,9 +21,8 @@ pub(crate) fn register_property_binding<'gc>(
     let name = format!("{node:?}.{property}");
     {
         let mut state = state.borrow_mut();
-        let token = state.next_effect;
-        state.next_effect = state.next_effect.wrapping_add(1);
-        state.reactive.effects.insert(
+        let token = state.tracking_mut().next_effect_token();
+        state.reactive_mut().add_effect(
             token,
             LuaEffect {
                 handler: crate::vm::handler_store::register(ctx.stash(closure)),
@@ -37,7 +39,7 @@ pub(crate) fn register_property_binding<'gc>(
 /// A binding given after construction (`node.width = function() ... end`):
 /// it takes the place of any the property had, and runs at once.
 pub(crate) fn rebind_property<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     node: NodeHandle,
     property: String,
@@ -46,25 +48,24 @@ pub(crate) fn rebind_property<'gc>(
     let limits = {
         let mut state = state.borrow_mut();
         let old = state
-            .reactive
-            .effects
-            .iter()
+            .reactive()
+            .effects()
             .filter(|(_, effect)| {
                 matches!(&effect.sink, Some(EffectSink::Property(sink))
                     if sink.node == node && sink.property == property)
             })
-            .map(|(token, _)| *token)
+            .map(|(token, _)| token)
             .collect::<Vec<_>>();
         for token in old {
-            crate::api_retention::dispose_effect(&mut state, token);
+            crate::api::ui::retention::dispose_effect(&mut state, token);
         }
-        state.limits
+        *state.limits()
     };
     register_property_binding(state, ctx, limits, node, property, closure);
 }
 
 pub(crate) fn register_state_binding<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     limits: Limits,
     node: NodeHandle,
@@ -83,7 +84,7 @@ pub(crate) fn register_state_binding<'gc>(
 
 /// A `loop` given as a function: each value it returns is the node's loops.
 pub(crate) fn register_loop_binding<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     limits: Limits,
     node: NodeHandle,
@@ -101,7 +102,7 @@ pub(crate) fn register_loop_binding<'gc>(
 }
 
 fn register_node_binding<'gc>(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'gc>,
     limits: Limits,
     node: NodeHandle,
@@ -111,9 +112,8 @@ fn register_node_binding<'gc>(
 ) {
     {
         let mut state = state.borrow_mut();
-        let token = state.next_effect;
-        state.next_effect = state.next_effect.wrapping_add(1);
-        state.reactive.effects.insert(
+        let token = state.tracking_mut().next_effect_token();
+        state.reactive_mut().add_effect(
             token,
             LuaEffect {
                 handler: crate::vm::handler_store::register(ctx.stash(closure)),
@@ -127,7 +127,7 @@ fn register_node_binding<'gc>(
 }
 
 pub(crate) fn apply_state(
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     ctx: Context<'_>,
     limits: Limits,
     frame_remaining: &mut u64,
@@ -137,8 +137,8 @@ pub(crate) fn apply_state(
     let (definition, old, transition) = {
         let state = state.borrow();
         let set = state
-            .states
-            .get(&node)
+            .states()
+            .get(node)
             .ok_or_else(|| format!("node has no states for `{name}`"))?;
         let definition = set
             .definitions
@@ -170,33 +170,27 @@ pub(crate) fn apply_state(
     }
     let mut state = state.borrow_mut();
     for (property, value) in properties {
-        let animated = transition.is_some()
-            && matches!(value, SceneValue::Number(_) | SceneValue::Color(_))
-            && matches!(
-                state.scene.current(node, &property),
-                Ok(SceneValue::Number(_) | SceneValue::Color(_))
-            );
-        if animated {
+        let animated = transition.filter(|_| {
+            matches!(value, SceneValue::Number(_) | SceneValue::Color(_))
+                && matches!(
+                    state.scene().current(node, &property),
+                    Ok(SceneValue::Number(_) | SceneValue::Color(_))
+                )
+        });
+        if let Some(transition) = animated {
             let from = state
-                .scene
+                .scene()
                 .current(node, &property)
                 .map_err(|error| error.to_string())?
                 .clone();
-            animate_scene_property(
-                &mut state,
-                node,
-                &property,
-                from,
-                value,
-                transition.unwrap(),
-            )?;
+            animate_scene_property(&mut state, node, &property, from, value, transition)?;
         } else {
             assign_scene_property(&mut state, node, &property, value)?;
         }
     }
     if old != name && (definition.parent.is_some() || definition.anchors.is_some()) {
         let parent = definition.parent.or(state
-            .scene
+            .scene()
             .parent(node)
             .map_err(|error| error.to_string())?);
         if let Some(parent) = parent {
@@ -205,12 +199,12 @@ pub(crate) fn apply_state(
                     assign_scene_property(&mut state, node, "anchors", SceneValue::Map(anchors))?;
                 }
                 state
-                    .scene
+                    .scene_mut()
                     .reparent(node, Some(parent))
                     .map_err(|error| error.to_string())?;
             } else {
                 state
-                    .windows
+                    .windows_mut()
                     .parent_transitions
                     .push(ParentTransitionRequest {
                         node,
@@ -221,7 +215,10 @@ pub(crate) fn apply_state(
             }
         }
     }
-    state.states.get_mut(&node).unwrap().current = Some(name.to_owned());
+    // A binding above may have removed the node, and its states with it.
+    if !state.states_mut().enter(node, name) {
+        return Err(format!("node lost its states while entering `{name}`"));
+    }
     Ok(())
 }
 
@@ -240,7 +237,7 @@ pub(crate) fn lua_to_scene<'gc>(
         LuaValue::Number(value) if value.is_finite() => Ok(SceneValue::Number(value)),
         LuaValue::String(value) => Ok(SceneValue::String(value.display_lossy().to_string())),
         LuaValue::UserData(userdata) => {
-            match userdata.downcast_static::<crate::api_color::ColorToken>() {
+            match userdata.downcast_static::<crate::api::color::color::ColorToken>() {
                 Ok(token) => Ok(SceneValue::Color(morf_scene::Color::from_pastel(
                     &token.color,
                 ))),
@@ -295,170 +292,5 @@ pub(crate) fn replace_status<'gc>(
     match result {
         Ok(()) => stack.replace(ctx, (true, LuaValue::Nil)),
         Err(message) => stack.replace(ctx, (false, message)),
-    }
-}
-
-/// How many times one flush re-runs to take in effects registered by the
-/// flush before it -- an effect that builds a node with a binding whose
-/// evaluation builds another, and so on. Past this the rest wait for the
-/// next flush rather than spinning here forever.
-const MAX_NESTED_FLUSHES: usize = 32;
-
-pub(crate) fn flush_reactive(
-    state: &Rc<RefCell<ReactiveState>>,
-    ctx: Context<'_>,
-    limits: Limits,
-) -> Result<(), String> {
-    let mut result = flush_graph(state, ctx, limits);
-    // Anything registered while the graph was away -- a path that still
-    // takes it for a moment -- is registered now and gets its first run
-    // here, so the caller sees it evaluated.
-    for _ in 0..MAX_NESTED_FLUSHES {
-        if state.borrow_mut().reactive.register_pending_effects() == 0 {
-            break;
-        }
-        let next = flush_graph(state, ctx, limits);
-        if result.is_ok() {
-            result = next;
-        }
-    }
-    // A flush is where most removals happen — a Loader let go, a Repeater's
-    // row gone — and the end of one is the first moment their hooks can run.
-    run_destroyed_hooks(state, ctx, limits);
-    result
-}
-
-/// Runs the `on_destroyed` hooks of nodes that have been removed.
-///
-/// Never from inside a flush, and never from inside another hook: a removal
-/// happens with the state borrowed, so its hooks wait in a queue for the next
-/// moment nothing holds it. Each hook is a handler — its own fuel, its writes
-/// flushed once when the last of them returns — and a node its hook removes
-/// has its own hook queued and run in the same drain.
-pub(crate) fn run_destroyed_hooks(
-    state: &Rc<RefCell<ReactiveState>>,
-    ctx: Context<'_>,
-    limits: Limits,
-) {
-    {
-        let mut state = state.borrow_mut();
-        if state.reactive.flushing || state.running_destroyed || state.pending_destroyed.is_empty()
-        {
-            return;
-        }
-        state.running_destroyed = true;
-        state.handler_depth += 1;
-    }
-    loop {
-        let hooks = std::mem::take(&mut state.borrow_mut().pending_destroyed);
-        if hooks.is_empty() {
-            break;
-        }
-        for hook in hooks {
-            if let Err(error) = execute_handler_args(ctx, &hook, &[], limits) {
-                state
-                    .borrow_mut()
-                    .log(LogLevel::Warn, format!("on_destroyed: {error}"));
-            }
-        }
-    }
-    let flush = {
-        let mut state = state.borrow_mut();
-        state.running_destroyed = false;
-        state.handler_depth = state.handler_depth.saturating_sub(1);
-        state.handler_depth == 0 && std::mem::take(&mut state.flush_pending)
-    };
-    if flush {
-        let _ = flush_reactive(state, ctx, limits);
-    }
-}
-
-fn flush_graph(
-    state: &Rc<RefCell<ReactiveState>>,
-    ctx: Context<'_>,
-    limits: Limits,
-) -> Result<(), String> {
-    // A flush asked for from inside one -- a binding that registers another,
-    // a module `require`d from a binding writing a signal -- has nothing to
-    // do of its own: the flush already under way drains it.
-    let Some(mut run) = state.borrow_mut().reactive.begin_flush(limits.frame_fuel)? else {
-        return Ok(());
-    };
-    // Driven one effect at a time, the state borrowed only between the
-    // steps: an effect is Lua, and Lua may create signals or effects of its
-    // own while it runs.
-    let stepped = loop {
-        let next = state.borrow_mut().reactive.next_effect(&mut run);
-        let pending = match next {
-            Ok(Some(pending)) => pending,
-            Ok(None) => break Ok(()),
-            Err(error) => break Err(error),
-        };
-        let mut capture = morf_scene::reactive::EffectCapture::default();
-        let _span = crate::profile::span(|| effect_label(state, ctx, &pending));
-        let outcome = evaluate_effect(
-            state,
-            ctx,
-            limits,
-            &mut run.remaining,
-            pending.token(),
-            &mut capture,
-        );
-        state
-            .borrow_mut()
-            .reactive
-            .complete_effect(&mut run, pending, capture, outcome);
-    };
-
-    let _span =
-        crate::profile::span(|| "engine: after a flush (signal copies, graph gc)".to_owned());
-    let mut state = state.borrow_mut();
-    let result = state.reactive.finish_flush(run, stepped);
-    state.collect_graph_garbage();
-    if let Err(message) = &result {
-        state.log(LogLevel::Warn, message.clone());
-    }
-    result
-}
-
-/// What an effect is, for the profiler: a binding by the node path and
-/// property it drives, anything else by the name it was registered under,
-/// and either by where its function was written.
-fn effect_label(
-    state: &Rc<RefCell<ReactiveState>>,
-    ctx: Context<'_>,
-    pending: &morf_scene::reactive::PendingEffect,
-) -> String {
-    let state = state.borrow();
-    let Some(effect) = state.reactive.effects.get(&pending.token()) else {
-        return format!("effect {}", pending.name());
-    };
-    let origin = crate::profile::closure_origin(
-        ctx.fetch(&crate::vm::handler_store::stashed(&effect.handler)),
-    );
-    let node_path = |node: NodeHandle| {
-        let id = state
-            .scene
-            .string_value(node, "id")
-            .ok()
-            .filter(|id| !id.is_empty())
-            .map(|id| format!(" #{id}"))
-            .unwrap_or_default();
-        format!(
-            "{}{id}",
-            crate::runtime_config::lint_path(&state.scene, node)
-        )
-    };
-    match &effect.sink {
-        Some(EffectSink::Property(sink)) => {
-            format!(
-                "binding {}.{} ({origin})",
-                node_path(sink.node),
-                sink.property
-            )
-        }
-        Some(EffectSink::State(node)) => format!("binding {}.state ({origin})", node_path(*node)),
-        Some(EffectSink::Loop(node)) => format!("binding {}.loop ({origin})", node_path(*node)),
-        None => format!("effect {} ({origin})", pending.name()),
     }
 }

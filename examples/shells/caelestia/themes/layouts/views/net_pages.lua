@@ -58,7 +58,7 @@ function M.build(model,w,h)
   if kind=="wired" then
     blocks[#blocks+1]=P.section {id="wired-ports",caption_id="wired-ports-title",width=w,title="Ports",
       list(model,w,model.network,"No wired ports")}
-    blocks[#blocks+1]=note(w,function() return model.has_network() and model.note or "NetworkManager is not running." end)
+    blocks[#blocks+1]=note(w,function() return model.network_available() and model.note or "NetworkManager is not running." end)
   elseif kind=="tor" then
     blocks[#blocks+1]=P.section {id="tor-services",width=w,title="Tor",list(model,w,model.tor)}
     blocks[#blocks+1]=note(w,function() return model.available() and model.note or "Tor is not installed." end)
@@ -79,11 +79,19 @@ function M.build(model,w,h)
         can=function() local r=row() return r~=nil and r.can end,
         on_word=kind=="mesh" and "Up" or "Connect",off_word=kind=="mesh" and "Down" or "Disconnect",
         toggle=function(on) model.toggle("app:"..id,on) end,
-        visible=function() return model.apps:len()==0 or row()~=nil end,
+        visible=function() return (model.apps:len()==0 and not model.loaded()) or row()~=nil end,
       })
     end
+    -- A finished scan that found none says so, rather than reading on.
+    apps[#apps+1]=P.row {id="vpn-"..kind.."-none",width=P.inner(w),icon="block",on=function() return false end,
+      title=kind=="mesh" and "No mesh tools" or "No VPN applications",
+      subtitle=kind=="mesh" and "No supported mesh tools are installed." or "No supported VPN applications are installed.",
+      visible=function() return model.loaded() and model.apps:len()==0 end}
     blocks[#blocks+1]=P.section(apps)
-    blocks[#blocks+1]=note(w,model.note)
+    blocks[#blocks+1]=note(w,function()
+      if kind=="tunnel" and not model.network_available() then return "NetworkManager is not running." end
+      return model.note
+    end)
     if kind=="tunnel" then
       local present=function() return model.tor:len()>0 end
       blocks[#blocks+1]=P.section {id="vpn-tunnel-tor",caption_id="vpn-tunnel-tor-title",width=w,title="Tor",

@@ -25,7 +25,7 @@ use wayland_protocols::ext::workspace::v1::client::{
     ext_workspace_manager_v1::{self, ExtWorkspaceManagerV1},
 };
 
-use crate::{Desktop, DesktopState};
+use crate::{DesktopState, WaylandDesktop};
 
 /// `state` is a bitfield, and these are its bits.
 const STATE_ACTIVE: u32 = 1;
@@ -104,7 +104,12 @@ impl WorkspaceState {
     }
 }
 
-impl Desktop {
+impl WaylandDesktop {
+    /// Whether the compositor reports its workspaces.
+    pub fn supports_workspaces(&self) -> bool {
+        self.state.workspaces.manager.is_some()
+    }
+
     /// Every workspace the compositor reports, in a stable order.
     ///
     /// Sorted by coordinates and then id, because the protocol delivers them in

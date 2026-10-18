@@ -107,3 +107,20 @@ that then leaves the session to you until `TIMEOUT`:
     VISIBLE=1 TIMEOUT=3600 MORF_CONFIG=examples/shells/caelestia/shell/init.lua \
       MORF_ENV="CAELESTIA_WALLPAPER=/path/to/wallpaper" \
       tools/sandbox/nested.sh morf show tools/sandbox/caelestia-show.steps
+
+## headless
+
+`headless.sh NAME STEPS` runs morf straight under a headless sway on the
+GPU, with the same private runtime dir, bus and HOME but no nested
+Hyprland and no stubs -- for configurations that do not reach the
+machine, such as the frame-stall rehearsal. Steps have `ipc`, `sw`
+(swaymsg on the private instance) and `wait`. On an NVIDIA-only machine,
+where the nested Hyprland cannot allocate its buffers, `HOST_GL=1` gives
+the Nix-built sway the host's NVIDIA EGL and GBM libraries, and `VULKAN`
+names the wrapper morf runs under:
+
+    HOST_GL=1 SWAY=$(nix build --print-out-paths nixpkgs#sway)/bin/sway \
+      VULKAN=nixVulkanNvidia tools/sandbox/headless.sh stall tools/sandbox/frame-stall.steps
+
+A headless sway output paces frame callbacks near 30 Hz on NVIDIA whatever
+its mode says; compare runs with each other, not with a desk's refresh.

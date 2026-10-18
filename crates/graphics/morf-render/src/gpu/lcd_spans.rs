@@ -236,6 +236,7 @@ pub(crate) fn mark_subpixel_glyphs(
                 instances,
                 command_spans,
                 plain,
+                ..
             } = batch;
             let beneath = &ground[slot];
             split_spans(&mut command_spans[index], |instance| {

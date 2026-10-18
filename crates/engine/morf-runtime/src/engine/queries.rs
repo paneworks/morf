@@ -49,9 +49,10 @@ fn id_suffix(scene: &Scene, node: NodeHandle) -> String {
 }
 
 impl Engine {
-    /// Whether anything is in motion: the scene's animations or a theme fade.
+    /// Whether anything is in motion: the scene's animations, a theme fade,
+    /// or claims with a winner to work out or a presence on the move.
     pub fn has_motion(&self) -> bool {
-        self.scene.has_motion() || self.animation.fading()
+        self.scene.has_motion() || self.animation.fading() || self.animation.claims.wants_tick()
     }
 
     /// The finest clock anything currently reads, or nothing when no binding
@@ -102,8 +103,7 @@ impl Engine {
     /// the scene changed since the services last ran, a node waits to be torn
     /// down, a model a view follows changed.
     pub fn has_pending_work(&self) -> bool {
-        self.revisions.scene_revision != self.revisions.polled_revision
-            || self.revisions.scene_revision != self.revisions.service_definitions_revision
+        self.revisions.unseen()
             || !self.retained.retained_destroy_queue.is_empty()
             || self
                 .views
@@ -121,12 +121,7 @@ impl Engine {
         let writes = crate::animation::fades::advance(&mut self.animation.fades, delta);
         let moved = writes.len();
         for (signal, colour) in writes {
-            let value = IpcValue::Color(colour);
-            if let Some(graph) = self.reactive.graph.as_mut()
-                && graph.write(signal, value.clone()).is_ok()
-            {
-                self.reactive.values.insert(signal, value);
-            }
+            self.reactive.try_write(signal, IpcValue::Color(colour));
         }
         moved
     }

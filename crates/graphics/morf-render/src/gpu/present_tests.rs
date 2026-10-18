@@ -9,8 +9,52 @@ use morf_layout::{Layout, Size};
 use morf_scene::{Element, NodeHandle, Scene, Value};
 
 use super::partial_tests::{LOGICAL, desk, frame, largest_difference};
+use super::present::BufferRing;
 use crate::tests::NoText;
 use crate::*;
+
+impl WgpuBackend {
+    /// Presents into a ring of `limit` plain textures from now on, whose
+    /// release the test decides.
+    pub(crate) fn present_into_ring(&mut self, limit: usize) {
+        let format = (self.present, self.transfer());
+        self.buffers = Some(BufferRing::new(
+            &self.device,
+            &self.texture,
+            limit,
+            None,
+            format,
+        ));
+        self.select_depth();
+    }
+
+    /// Buffer `index`'s bytes as its format stores them.
+    pub(crate) fn ring_bytes(&self, index: usize) -> Vec<u8> {
+        let ring = self.buffers.as_ref().expect("a ring");
+        self.read_texture(&ring.slots[index].texture)
+    }
+
+    /// The buffer the last frame went to, if it went to one.
+    pub(crate) fn ring_presented(&self) -> Option<usize> {
+        self.buffers.as_ref()?.presented
+    }
+
+    /// The compositor lets go of buffer `index`.
+    pub(crate) fn ring_release(&mut self, index: usize) {
+        if let Some(ring) = &mut self.buffers {
+            ring.release(index);
+        }
+    }
+
+    /// Buffer `index`'s pixels, as RGBA like `read_pixels`.
+    pub(crate) fn ring_pixels(&self, index: usize) -> Vec<u8> {
+        let mut pixels = self.ring_bytes(index);
+        for pixel in pixels.as_chunks_mut::<4>().0 {
+            pixel.swap(0, 2);
+        }
+        pixels
+    }
+}
 
 /// Asserts that the buffer the last frame went to shows the frame.
 fn assert_presented_shows_the_frame(
@@ -44,6 +88,7 @@ fn compositor_keeps(
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn buffers_in_rotation_show_every_frame_exactly() {
+    require_gpu!();
     // How many buffers the compositor holds after each frame: one on screen
     // usually, sometimes one it has not let go of, and sometimes all three,
     // so the frame after has none to go to and is skipped.
@@ -100,6 +145,7 @@ fn buffers_in_rotation_show_every_frame_exactly() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_frame_with_no_buffer_reaches_the_next_one() {
+    require_gpu!();
     let mut desk = desk();
     let physical = LOGICAL as u32;
     let mut engine =
@@ -127,6 +173,7 @@ fn a_frame_with_no_buffer_reaches_the_next_one() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_resize_repaints_every_buffer_whole() {
+    require_gpu!();
     let desk = desk();
     let mut engine = RenderEngine::new(pollster::block_on(WgpuBackend::new(96, 96)).unwrap());
     engine.backend_mut().present_into_ring(2);
@@ -182,6 +229,7 @@ fn full_hd() -> (Scene, NodeHandle, NodeHandle) {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_full_hd_surface_through_small_damage() {
+    require_gpu!();
     let (mut scene, root, dot) = full_hd();
     let mut engine = RenderEngine::new(pollster::block_on(WgpuBackend::new(1920, 1080)).unwrap());
     engine.backend_mut().present_into_ring(3);

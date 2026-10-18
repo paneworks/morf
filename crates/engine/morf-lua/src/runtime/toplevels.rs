@@ -7,7 +7,10 @@
 
 use luna::{Table, Value as LuaValue};
 
-use crate::{api_toplevels::*, reactive_bindings::flush_reactive, surface_types::*, types::*};
+use crate::{
+    api::desktop::toplevels::*, api::ui::bindings::flush_reactive, runtime::host_types::*,
+    vm::types::*,
+};
 
 impl Runtime {
     /// Replaces `morf.windows` with the compositor's current window list.
@@ -33,8 +36,7 @@ impl Runtime {
     fn follow_toplevels(&mut self, windows: &[Toplevel]) {
         let (change, listeners) = {
             let mut guard = self.reactive.borrow_mut();
-            let state = &mut *guard;
-            let Some(host) = state.toplevels.as_mut() else {
+            let (Some(host), engine) = guard.toplevels_and_engine() else {
                 return;
             };
             let change = ToplevelChange::between(&host.windows, windows);
@@ -49,9 +51,8 @@ impl Runtime {
             );
             // A list nothing draws would keep its change journal forever;
             // one a view follows is drained by the view.
-            let followed = state
-                .engine
-                .views
+            let followed = engine
+                .views()
                 .values()
                 .any(|view| std::rc::Rc::ptr_eq(&view.model, &host.model));
             if !followed {
@@ -67,11 +68,7 @@ impl Runtime {
                     .map(|(_, callback)| callback.clone())
                     .collect::<Vec<_>>()
             };
-            if let Some(graph) = state.reactive.graph.as_mut()
-                && graph.write(revision, value.clone()).is_ok()
-            {
-                state.reactive.values.insert(revision, value);
-            }
+            engine.reactive_mut().try_write(revision, value);
             (change.to_scene(), listeners)
         };
         if let Err(message) = self
@@ -150,7 +147,10 @@ impl Runtime {
 
     /// Takes what a configuration asked to do to other windows.
     pub fn take_toplevel_requests(&mut self) -> Vec<ToplevelRequest> {
-        self.reactive.borrow_mut().requests.take_toplevel_requests()
+        self.reactive
+            .borrow_mut()
+            .requests_mut()
+            .take_toplevel_requests()
     }
 
     /// Replaces `morf.workspaces` with the compositor's current workspace list.
@@ -216,7 +216,7 @@ impl Runtime {
     pub fn take_workspace_requests(&mut self) -> Vec<WorkspaceRequest> {
         self.reactive
             .borrow_mut()
-            .requests
+            .requests_mut()
             .take_workspace_requests()
     }
 }

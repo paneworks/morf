@@ -1,0 +1,27 @@
+# frame-stall.steps: the frame-stall rehearsal under a GPU, phase by phase.
+# Run it on examples/demos/motion/frame-stall.lua with MORF_TEST_HOOKS=1 in
+# MORF_ENV; OUT/hc.log has each phase's `@frames` report:
+#
+#   MORF_CONFIG=examples/demos/motion/frame-stall.lua MORF_ENV=MORF_TEST_HOOKS=1 \
+#     tools/sandbox/nested.sh morf stall tools/sandbox/frame-stall.steps
+#
+# or, where the nested Hyprland cannot run (an NVIDIA-only machine), under a
+# headless sway, which runs the rehearsal and sets the hooks itself:
+#
+#   HOST_GL=1 VULKAN=nixVulkanNvidia tools/sandbox/headless.sh stall tools/sandbox/frame-stall.steps
+#
+# A budget is Lua instructions per firing (about 9 ns each in a release
+# build); STALL_PHASES replaces the list of budget:interval pairs, and
+# PHASE_SECONDS how long each is read over.
+phase() {
+  ipc stall "$1" "$2"
+  wait 1
+  ipc @frames
+  echo "phase budget=$1 interval=$2" >> "$OUT/hc.log"
+  wait "${PHASE_SECONDS:-6}"
+  ipc @frames
+}
+wait 2
+for pair in ${STALL_PHASES:-0:16 1300000:16 2800000:100 4500000:100 67000000:2000 0:16}; do
+  phase "${pair%:*}" "${pair#*:}"
+done

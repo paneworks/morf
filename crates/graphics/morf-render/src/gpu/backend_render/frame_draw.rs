@@ -1,8 +1,8 @@
 //! Drawing one command or one layer into a pass, as every pass of a frame does,
 //! and where each command can put pixels.
 
-use crate::effects::physical_damage;
 use crate::{DamageRect, DrawList, ShaderBinding};
+use morf_paint::effects::physical_damage;
 
 use super::super::{
     backdrops::BackdropDraw,
@@ -87,17 +87,9 @@ impl FrameDraw<'_> {
                     }
                     None => {
                         use super::super::field_pass::FieldVariant;
-                        pass.set_pipeline(
-                            match FieldVariant::for_command(&self.list.commands[command_index]) {
-                                FieldVariant::General => &self.backend.field_pipeline,
-                                FieldVariant::Analytic => &self.backend.field_analytic,
-                                FieldVariant::AnalyticOpaque => &self.backend.field_opaque,
-                                FieldVariant::Boxes => &self.backend.field_boxes,
-                                FieldVariant::BoxesOpaque => &self.backend.field_boxes_opaque,
-                                FieldVariant::Quad => &self.backend.field_quad,
-                                FieldVariant::BoxesUniform => &self.backend.field_boxes_uniform,
-                            },
-                        );
+                        pass.set_pipeline(self.backend.field_variant(FieldVariant::for_command(
+                            &self.list.commands[command_index],
+                        )));
                         pass.set_bind_group(1, &self.backend.field_shader_default, &[]);
                     }
                 }

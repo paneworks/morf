@@ -15,8 +15,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{
-    reactive_bindings::*, runtime_helpers::*, scene_bindings::*, state::*, surface_types::*,
-    types::*,
+    api::ui::bindings::*, api::ui::scene::*, runtime::helpers::*, runtime::host_types::*,
+    runtime::state::*, vm::types::*,
 };
 
 /// Whether a Lua table is an array: every key a positive integer, or none.
@@ -28,7 +28,7 @@ fn is_array<'gc>(ctx: Context<'gc>, table: Table<'gc>) -> bool {
 
 pub(crate) fn build<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     metatable: &luna::StashedTable,
     path: &str,
     reloadable: Option<&str>,
@@ -51,8 +51,8 @@ pub(crate) fn build<'gc>(
                 let model = Rc::new(RefCell::new(ListModel::new(values)));
                 let model_metatable = state
                     .borrow()
-                    .model_metatable
-                    .clone()
+                    .metatables()
+                    .model()
                     .ok_or("list models are not installed")?;
                 let userdata = UserData::new_static(
                     &ctx,
@@ -82,17 +82,10 @@ pub(crate) fn build<'gc>(
                     Some(prefix) => {
                         register_reloadable_value(&mut state, format!("{prefix}.{key}"), value)?.0
                     }
-                    None => {
-                        let id = state
-                            .reactive
-                            .graph
-                            .as_mut()
-                            .ok_or("reactive graph is already running")?
-                            .signal(name, value.clone());
-                        state.reactive.values.insert(id, value);
-                        state.reactive.signals.push(id);
-                        id
-                    }
+                    None => state
+                        .reactive_mut()
+                        .signal(name, value)
+                        .ok_or(morf_runtime::reactive::GRAPH_RUNNING)?,
                 };
                 fields.scalars.insert(key, id);
             }
@@ -110,7 +103,7 @@ pub(crate) fn build<'gc>(
 
 pub(crate) fn install_state_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     limits: Limits,
 ) {
@@ -124,8 +117,9 @@ pub(crate) fn install_state_api<'gc>(
             let fields = token.fields.borrow();
             if let Some(closure) = fields.derived.get(&key) {
                 // Derived on the spot, with the state as its argument.
-                let function =
-                    luna::Function::Closure(ctx.fetch(&crate::vm::handler_store::stashed(closure)));
+                let function = luna::Function::Closure(
+                    ctx.fetch(&crate::vm::handler_store::stashed(closure).map_err(HostError)?),
+                );
                 drop(fields);
                 stack.replace(ctx, this);
                 return Ok(CallbackReturn::Call {
@@ -135,7 +129,7 @@ pub(crate) fn install_state_api<'gc>(
             }
             if let Some(&id) = fields.scalars.get(&key) {
                 let mut state = state.borrow_mut();
-                let value = if let Some(active) = &mut state.active {
+                let value = if let Some(active) = state.tracking_mut().capture() {
                     active.reads.insert(id);
                     active
                         .writes
@@ -143,9 +137,9 @@ pub(crate) fn install_state_api<'gc>(
                         .rev()
                         .find(|(signal, _)| *signal == id)
                         .map(|(_, value)| value.clone())
-                        .or_else(|| state.reactive.values.get(&id).cloned())
+                        .or_else(|| state.reactive().value(id).cloned())
                 } else {
-                    state.reactive.values.get(&id).cloned()
+                    state.reactive().value(id).cloned()
                 }
                 .ok_or_else(|| HostError("stale state field".to_owned()))?;
                 stack.replace(ctx, value.to_lua(ctx));
@@ -171,7 +165,7 @@ pub(crate) fn install_state_api<'gc>(
             if let Some(&id) = fields.scalars.get(&key) {
                 let value = IpcValue::from_lua(value).map_err(HostError)?;
                 let value = if fields.theme {
-                    crate::api_theme::token_value(value)
+                    crate::api::color::theme::token_value(value)
                 } else {
                     value
                 };
@@ -181,51 +175,46 @@ pub(crate) fn install_state_api<'gc>(
                     // one on show; the frames carry it (`advance_theme_fades`).
                     if let (Some((duration, easing)), IpcValue::Color(to)) =
                         (fields.transition, &value)
-                        && let Some(IpcValue::Color(from)) = state.reactive.values.get(&id).cloned()
+                        && let Some(IpcValue::Color(from)) = state.reactive().value(id).cloned()
                         && !duration.is_zero()
                         // Nothing shown yet: no fade, the colour is just set.
-                        && state.animation.ticked
+                        && state.engine().animation().ticked
                     {
-                        state.animation.fades.retain(|fade| fade.signal != id);
+                        state.animation_mut().fades.retain(|fade| fade.signal != id);
                         // Only a change that shows: a colour set to one that
                         // looks the same keeps the one on show, and no frame
                         // re-runs every binding that reads it.
                         if !from.looks_same(to) {
-                            state.animation.fades.push(crate::state::ThemeFade {
-                                signal: id,
-                                from,
-                                to: *to,
-                                elapsed: std::time::Duration::ZERO,
-                                duration,
-                                easing,
-                            });
+                            state
+                                .animation_mut()
+                                .fades
+                                .push(crate::runtime::state::ThemeFade {
+                                    signal: id,
+                                    from,
+                                    to: *to,
+                                    elapsed: std::time::Duration::ZERO,
+                                    duration,
+                                    easing,
+                                });
                             // Nothing on screen changed yet, so nothing else
                             // asks for the frame that starts the fade: a
                             // colour set from a tool's terminal or file would
                             // wait for the clock to tick before it began.
-                            state.revisions.scene_revision =
-                                state.revisions.scene_revision.wrapping_add(1);
+                            state.revisions_mut().bump_scene();
                         }
                         return Ok(CallbackReturn::Return);
                     }
-                    if let Some(active) = &mut state.active {
+                    if let Some(active) = state.tracking_mut().capture() {
                         active.writes.push((id, value));
                         return Ok(CallbackReturn::Return);
                     }
-                    state
-                        .reactive
-                        .graph
-                        .as_mut()
-                        .ok_or_else(|| HostError("reactive graph is already running".into()))?
-                        .write(id, value.clone())
-                        .map_err(|error| HostError(error.to_string()))?;
-                    state.reactive.values.insert(id, value);
-                    if state.handler_depth > 0 {
-                        state.flush_pending = true;
+                    state.reactive_mut().write(id, value).map_err(HostError)?;
+                    if state.tracking().in_handler() {
+                        state.tracking_mut().defer_flush();
                         return Ok(CallbackReturn::Return);
                     }
                 }
-                flush_reactive(&state, ctx, limits).map_err(HostError)?;
+                flush_status(&state, ctx, limits).map_err(HostError)?;
                 return Ok(CallbackReturn::Return);
             }
             if let Some((_, model)) = fields.lists.get(&key) {
@@ -243,9 +232,9 @@ pub(crate) fn install_state_api<'gc>(
                 drop(fields);
                 {
                     let mut state = state.borrow_mut();
-                    state.revisions.scene_revision = state.revisions.scene_revision.wrapping_add(1);
+                    state.revisions_mut().bump_scene();
                 }
-                crate::model_revisions::replace_model_rows(
+                crate::runtime::model_revisions::replace_model_rows(
                     &state, ctx, limits, &model, values, None,
                 )
                 .map_err(HostError)?;
@@ -264,7 +253,10 @@ pub(crate) fn install_state_api<'gc>(
     metatable.set_field(ctx, "__index", index);
     metatable.set_field(ctx, "__newindex", new_index);
     let metatable = ctx.stash(metatable);
-    state.borrow_mut().state_metatable = Some(metatable.clone());
+    state
+        .borrow_mut()
+        .metatables_mut()
+        .set_state(metatable.clone());
 
     let create = Callback::from_fn(&ctx, {
         let state = Rc::clone(&state);

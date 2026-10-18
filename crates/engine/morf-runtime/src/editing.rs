@@ -124,21 +124,39 @@ impl InputState {
 #[derive(Default)]
 pub struct Editing {
     /// Every live text input's editing state.
-    pub inputs: HashMap<NodeHandle, InputState>,
+    inputs: HashMap<NodeHandle, InputState>,
     /// When each text input was made, so ties between them are settled the
     /// same way every time.
-    pub order: HashMap<NodeHandle, u64>,
-    pub last: u64,
+    order: HashMap<NodeHandle, u64>,
+    last: u64,
     /// The text input that has the keyboard, if one does.
-    pub focused: Option<NodeHandle>,
+    focused: Option<NodeHandle>,
     /// Callbacks owed, run once whatever made them is done.
-    pub events: Vec<(NodeHandle, UiEvent, Vec<IpcValue>)>,
+    events: Vec<(NodeHandle, UiEvent, Vec<IpcValue>)>,
     /// Whether those callbacks are being run, so running one does not start
     /// running them again from inside itself.
-    pub draining: bool,
+    draining: bool,
+    /// The paint stamp and box each unfocused field was last synced at.
+    synced: HashMap<NodeHandle, (u64, [u64; 4])>,
 }
 
 impl Editing {
+    /// The text input that has the keyboard, if one does.
+    pub fn focused(&self) -> Option<NodeHandle> {
+        self.focused
+    }
+
+    /// Owes `node`'s handler for `event` a call with `args`, run once
+    /// whatever made it is done.
+    pub fn owe(&mut self, node: NodeHandle, event: UiEvent, args: Vec<IpcValue>) {
+        self.events.push((node, event, args));
+    }
+
+    /// Takes the callbacks owed so far.
+    pub fn take_owed(&mut self) -> Vec<(NodeHandle, UiEvent, Vec<IpcValue>)> {
+        std::mem::take(&mut self.events)
+    }
+
     /// Forgets the fields among `removed`, and what they owed.
     pub fn forget(&mut self, removed: &HashSet<NodeHandle>) {
         if self.focused.is_some_and(|node| removed.contains(&node)) {
@@ -147,6 +165,24 @@ impl Editing {
         self.inputs.retain(|node, _| !removed.contains(node));
         self.order.retain(|node, _| !removed.contains(node));
         self.events.retain(|(node, _, _)| !removed.contains(node));
+        self.synced.retain(|node, _| !removed.contains(node));
+    }
+
+    /// Whether `node` has to be shaped and observed again this frame: it has
+    /// the keyboard (its caret moves without the scene changing), or its
+    /// paint stamp or box moved since it last was. Records them when so.
+    pub fn needs_sync(&mut self, node: NodeHandle, stamp: u64, bounds: [f64; 4]) -> bool {
+        if self.focused == Some(node) {
+            // Synced again once the keyboard has gone, whatever moved.
+            self.synced.remove(&node);
+            return true;
+        }
+        let seen = (stamp, bounds.map(f64::to_bits));
+        if self.synced.get(&node) == Some(&seen) {
+            return false;
+        }
+        self.synced.insert(node, seen);
+        true
     }
 
     /// Starts running the owed callbacks, unless they are being run, a

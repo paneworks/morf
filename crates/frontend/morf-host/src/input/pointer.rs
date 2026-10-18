@@ -11,7 +11,7 @@ use morf_layout::Hit;
 use morf_lua::{EventPoint, FocusReason, Runtime, UiEvent};
 use morf_scene::NodeHandle;
 
-use crate::{backdrop::*, pointer_cursor::CursorShapes, surface_touch::*, surfaces::*};
+use crate::{host::surfaces::*, input::cursor::CursorShapes, input::touch::*, paint::backdrop::*};
 
 /// Routes one pointer or touch event, or hands it back when it is neither.
 pub fn handle_pointer_event(
@@ -23,7 +23,7 @@ pub fn handle_pointer_event(
 ) -> Result<Result<bool, Event>, String> {
     let mut repaint = false;
     if let Event::PointerButton { modifiers, .. } | Event::PointerAxis { modifiers, .. } = &event {
-        runtime.set_held_modifiers(crate::surface_keys::key_modifiers(*modifiers));
+        runtime.set_held_modifiers(crate::input::keys::key_modifiers(*modifiers));
     }
     // A click while a modifier is down makes that modifier no tap.
     if let Event::PointerButton { pressed: true, .. } = &event {
@@ -64,7 +64,7 @@ pub fn handle_pointer_event(
             }
             input.hovered = next_hovered;
             runtime.flush_after_event();
-            crate::pointer_cursor::hover_changed(runtime, client, entered, left);
+            crate::input::cursor::hover_changed(runtime, client, entered, left);
             if let Some(hit) = hit {
                 repaint |= runtime.dispatch_pointer(
                     hit.node,

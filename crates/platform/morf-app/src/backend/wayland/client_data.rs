@@ -22,7 +22,7 @@ pub(crate) enum ReadTag {
 impl LayerClient {
     /// A function a transfer thread calls when it finishes, so a loop asleep
     /// in [`Self::dispatch_timeout_or`] wakes for the result at once.
-    pub fn set_waker(&mut self, waker: fn()) {
+    pub fn set_waker(&mut self, waker: crate::transfer::Wakeup) {
         self.state.waker = Some(waker);
     }
 

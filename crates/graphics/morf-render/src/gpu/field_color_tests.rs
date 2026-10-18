@@ -9,6 +9,7 @@ use crate::{Operation, Shape};
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_fused_surface_carries_each_layer_s_own_colour_across_the_seam() {
+    require_gpu!();
     // A composition is one surface but not one colour. Two blobs joined by a
     // smooth union keep their own fills and cross-fade exactly where they bulge
     // into each other, so a fused row of differently coloured shapes stays
@@ -52,6 +53,7 @@ pub(crate) fn a_fused_surface_carries_each_layer_s_own_colour_across_the_seam() 
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_box_keeps_a_radius_per_corner() {
+    require_gpu!();
     // A field absorbs ordinary rects, and a rect carries four corner radii. If
     // the box collapsed them to one, a card rounded only along its top would
     // come out rounded all round once it joined a composition.
@@ -79,6 +81,7 @@ pub(crate) fn a_box_keeps_a_radius_per_corner() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_smooth_seam_may_bulge_outside_the_node_without_being_clipped() {
+    require_gpu!();
     // A smooth operator returns a value below either input, so the surface is
     // larger than the shapes wherever the seam is active — including outside
     // the node's own rectangle. The quad has to allow for that; sized only for
@@ -148,6 +151,7 @@ pub(crate) fn a_smooth_seam_may_bulge_outside_the_node_without_being_clipped() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn alpha_cross_fades_across_a_seam_like_any_other_channel() {
+    require_gpu!();
     // Transparency is per layer, and it is carried through the seam rather than
     // resolved by drawing one shape over another. Where an opaque shape fuses
     // into a transparent one the *surface* becomes gradually see-through; there
@@ -185,6 +189,7 @@ pub(crate) fn alpha_cross_fades_across_a_seam_like_any_other_channel() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_hard_edged_stripe_is_two_stops_at_one_position() {
+    require_gpu!();
     // Two stops at the same position make an edge, not a ramp: left of it the
     // first colour, right of it the second, and nothing in between wider than
     // the pixel the edge falls on.

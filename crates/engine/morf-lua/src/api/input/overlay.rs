@@ -31,7 +31,7 @@
 //! `morf.overlay.close(content)` closes one, `morf.overlay.is_open(content)`
 //! asks.
 
-use std::cell::RefCell;
+use crate::runtime::state::StateCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
@@ -40,11 +40,11 @@ use morf_scene::overlay::Placement;
 use morf_scene::{Element, NodeHandle, Value as SceneValue};
 
 use crate::Runtime;
-use crate::api_focus::FocusRequest;
-use crate::scene_bindings::{assign_scene_property, create_node};
-use crate::state::ReactiveState;
-use crate::state_tokens::NodeToken;
-use crate::types::LogLevel;
+use crate::api::input::focus::FocusRequest;
+use crate::api::ui::scene::{assign_scene_property, create_node};
+use crate::runtime::state::ReactiveState;
+use crate::value::tokens::NodeToken;
+use crate::vm::types::LogLevel;
 use morf_runtime::overlays::{DIM, Overlay, Overlays};
 
 mod runtime;
@@ -86,16 +86,16 @@ fn fill() -> SceneValue {
 }
 
 /// The surface's overlay layer, made the first time it is wanted.
-fn layer_of(state: &Rc<RefCell<ReactiveState>>, root: NodeHandle) -> Result<NodeHandle, String> {
-    if let Some(layer) = state.borrow().overlays.layers.get(&root).copied()
-        && state.borrow().scene.contains(layer)
+fn layer_of(state: &Rc<StateCell<ReactiveState>>, root: NodeHandle) -> Result<NodeHandle, String> {
+    if let Some(layer) = state.borrow().overlays().layers.get(&root).copied()
+        && state.borrow().scene().contains(layer)
     {
         return Ok(layer);
     }
     let layer = create_node(state, Element::Item);
     let mut state = state.borrow_mut();
     state
-        .scene
+        .scene_mut()
         .reparent(layer, Some(root))
         .map_err(|error| error.to_string())?;
     set(
@@ -105,13 +105,13 @@ fn layer_of(state: &Rc<RefCell<ReactiveState>>, root: NodeHandle) -> Result<Node
         SceneValue::String("morf-overlay".to_owned()),
     );
     set(&mut state, layer, "z", SceneValue::Number(1.0e6));
-    state.overlays.layers.insert(root, layer);
+    state.overlays_mut().layers.insert(root, layer);
     Ok(layer)
 }
 
 fn open<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     content: NodeHandle,
     options: Option<Table<'gc>>,
 ) -> Result<(), String> {
@@ -137,17 +137,17 @@ fn open<'gc>(
         LuaValue::Number(n) => n,
         _ => default,
     };
-    if state.borrow().overlays.contains(content) {
+    if state.borrow().overlays().contains(content) {
         state
             .borrow_mut()
-            .overlays
+            .overlays_mut()
             .open_again(content, || options.map(|t| ctx.stash(t)));
         return Ok(());
     }
     let anchor = node("anchor")?;
     let root = match (node("root")?, anchor) {
-        (Some(root), _) => state.borrow().scene.root_of(root),
-        (None, Some(anchor)) => state.borrow().scene.root_of(anchor),
+        (Some(root), _) => state.borrow().scene().root_of(root),
+        (None, Some(anchor)) => state.borrow().scene().root_of(anchor),
         (None, None) => None,
     }
     .ok_or("morf.overlay.open: give it an anchor or a root on a surface")?;
@@ -164,7 +164,7 @@ fn open<'gc>(
     let dim = match get("dim") {
         LuaValue::Nil | LuaValue::Boolean(false) => None,
         LuaValue::Boolean(true) => Some(SceneValue::String(DIM.to_owned())),
-        value => Some(crate::reactive_bindings::lua_to_scene(ctx, value, 0)?),
+        value => Some(crate::api::ui::bindings::lua_to_scene(ctx, value, 0)?),
     };
     let modal = flag("modal", dim.is_some());
     let on_close = match get("on_close") {
@@ -173,19 +173,19 @@ fn open<'gc>(
         _ => return Err("overlay on_close must be a function".to_owned()),
     };
     let layer = layer_of(state, root)?;
-    let existing = state.borrow().overlays.wrappers.get(&content).copied();
-    let wrapper = match existing.filter(|w| state.borrow().scene.contains(*w)) {
+    let existing = state.borrow().overlays().wrappers.get(&content).copied();
+    let wrapper = match existing.filter(|w| state.borrow().scene().contains(*w)) {
         Some(wrapper) => {
             // Its scrim and blocker are rebuilt for these options.
             let children = state
                 .borrow()
-                .scene
+                .scene()
                 .children(wrapper)
                 .unwrap_or_default()
                 .to_vec();
             let mut s = state.borrow_mut();
             for child in children.into_iter().filter(|c| *c != content) {
-                crate::runtime_helpers::remove_scene_subtree(&mut s, child);
+                crate::runtime::helpers::remove_scene_subtree(&mut s, child);
             }
             wrapper
         }
@@ -193,7 +193,7 @@ fn open<'gc>(
             let wrapper = create_node(state, Element::Item);
             state
                 .borrow_mut()
-                .overlays
+                .overlays_mut()
                 .wrappers
                 .insert(content, wrapper);
             wrapper
@@ -202,7 +202,7 @@ fn open<'gc>(
     let blocker = modal.then(|| create_node(state, Element::MouseArea));
     let scrim = dim.as_ref().map(|_| create_node(state, Element::Rect));
     let mut s = state.borrow_mut();
-    s.scene
+    s.scene_mut()
         .reparent(wrapper, Some(layer))
         .map_err(|error| error.to_string())?;
     set(&mut s, wrapper, "anchors", fill());
@@ -211,7 +211,7 @@ fn open<'gc>(
     set(&mut s, wrapper, "opacity", SceneValue::Number(0.0));
     for (extra, color) in [(scrim, dim.clone()), (blocker, None)] {
         if let Some(extra) = extra {
-            s.scene
+            s.scene_mut()
                 .reparent(extra, Some(wrapper))
                 .map_err(|error| error.to_string())?;
             set(&mut s, extra, "anchors", fill());
@@ -220,22 +220,21 @@ fn open<'gc>(
             }
         }
     }
-    crate::runtime_helpers::cancel_node_exit(&mut s, content);
-    s.scene
+    crate::runtime::helpers::cancel_node_exit(&mut s, content);
+    s.scene_mut()
         .reparent(content, Some(wrapper))
         .map_err(|error| error.to_string())?;
-    let restore = s.focus.owner.get(&root).copied().map(|node| {
+    let restore = s.focus().owner(root).map(|node| {
         (
             node,
-            s.scene.bool_value(node, "visual_focus").unwrap_or(false),
+            s.scene().bool_value(node, "visual_focus").unwrap_or(false),
         )
     });
     if flag("focus", true) {
-        s.focus
-            .requests
-            .push(FocusRequest::Into(content, restore.is_some_and(|(_, v)| v)));
+        s.focus_mut()
+            .request(FocusRequest::Into(content, restore.is_some_and(|(_, v)| v)));
     }
-    s.overlays.stack.push(Overlay {
+    s.overlays_mut().stack.push(Overlay {
         root,
         wrapper,
         content,
@@ -263,7 +262,7 @@ fn open<'gc>(
 /// and back. `options` as `open`'s, less the placement.
 fn track<'gc>(
     ctx: Context<'gc>,
-    state: &Rc<RefCell<ReactiveState>>,
+    state: &Rc<StateCell<ReactiveState>>,
     content: NodeHandle,
     options: Option<Table<'gc>>,
 ) -> Result<(), String> {
@@ -273,7 +272,7 @@ fn track<'gc>(
         LuaValue::Boolean(on) => on,
         _ => true,
     };
-    if state.borrow().overlays.contains(content) {
+    if state.borrow().overlays().contains(content) {
         return Ok(());
     }
     let anchor = match get("anchor") {
@@ -286,7 +285,7 @@ fn track<'gc>(
     };
     let root = state
         .borrow()
-        .scene
+        .scene()
         .root_of(content)
         .ok_or("morf.overlay.track: the node is on no surface")?;
     let on_close = match get("on_close") {
@@ -297,7 +296,7 @@ fn track<'gc>(
     let outside = flag("outside", true);
     let catcher = create_node(state, Element::MouseArea);
     let mut s = state.borrow_mut();
-    s.scene
+    s.scene_mut()
         .reparent(catcher, Some(root))
         .map_err(|error| error.to_string())?;
     set(&mut s, catcher, "anchors", fill());
@@ -311,18 +310,17 @@ fn track<'gc>(
         "id",
         SceneValue::String("morf-overlay-catcher".to_owned()),
     );
-    let restore = s.focus.owner.get(&root).copied().map(|node| {
+    let restore = s.focus().owner(root).map(|node| {
         (
             node,
-            s.scene.bool_value(node, "visual_focus").unwrap_or(false),
+            s.scene().bool_value(node, "visual_focus").unwrap_or(false),
         )
     });
     if flag("focus", false) {
-        s.focus
-            .requests
-            .push(FocusRequest::Into(content, restore.is_some_and(|(_, v)| v)));
+        s.focus_mut()
+            .request(FocusRequest::Into(content, restore.is_some_and(|(_, v)| v)));
     }
-    s.overlays.stack.push(Overlay {
+    s.overlays_mut().stack.push(Overlay {
         root,
         wrapper: catcher,
         content,
@@ -347,7 +345,7 @@ fn track<'gc>(
 /// `is_open(content)`.
 pub(crate) fn install_overlay_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let overlay = Table::new(&ctx);
@@ -358,7 +356,7 @@ pub(crate) fn install_overlay_api<'gc>(
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let (content, options): (UserRef<NodeToken>, Option<Table>) = stack.consume(ctx)?;
             open(ctx, &opener, content.handle, options)
-                .map_err(crate::scene_bindings::HostError)?;
+                .map_err(crate::api::ui::scene::HostError)?;
             Ok(CallbackReturn::Return)
         }),
     );
@@ -369,7 +367,7 @@ pub(crate) fn install_overlay_api<'gc>(
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let (content, options): (UserRef<NodeToken>, Option<Table>) = stack.consume(ctx)?;
             track(ctx, &tracker, content.handle, options)
-                .map_err(crate::scene_bindings::HostError)?;
+                .map_err(crate::api::ui::scene::HostError)?;
             Ok(CallbackReturn::Return)
         }),
     );
@@ -381,7 +379,7 @@ pub(crate) fn install_overlay_api<'gc>(
             let content: UserRef<NodeToken> = stack.consume(ctx)?;
             closer
                 .borrow_mut()
-                .overlays
+                .overlays_mut()
                 .request_close(content.handle, "closed");
             Ok(CallbackReturn::Return)
         }),
@@ -392,7 +390,7 @@ pub(crate) fn install_overlay_api<'gc>(
         "is_open",
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let content: UserRef<NodeToken> = stack.consume(ctx)?;
-            let open = asker.borrow().overlays.is_open(content.handle);
+            let open = asker.borrow().overlays().is_open(content.handle);
             stack.replace(ctx, open);
             Ok(CallbackReturn::Return)
         }),

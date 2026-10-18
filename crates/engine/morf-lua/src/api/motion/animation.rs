@@ -1,10 +1,9 @@
 use luna::{Callback, CallbackReturn, Context, Table, UserRef, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use morf_scene::{Color, NodeHandle, Scene, SceneError, Value as SceneValue};
 
-use crate::{lua_values::*, scene_bindings::*, serialization::*, state::*};
+use crate::{api::ui::scene::*, runtime::state::*, value::lua::*, vm::loader::*};
 
 /// Installs `morf.animation`, the imperative control surface over motion that
 /// a `behavior` table has already declared.
@@ -14,7 +13,7 @@ use crate::{lua_values::*, scene_bindings::*, serialization::*, state::*};
 /// to act on, so Lua can branch without first asking whether one is running.
 pub(crate) fn install_animation_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let animation = Table::new(&ctx);
@@ -27,7 +26,7 @@ pub(crate) fn install_animation_api<'gc>(
             let state = Rc::clone(&state);
             let callback = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
                 let (node, property): (UserRef<NodeToken>, String) = stack.consume(ctx)?;
-                let found = control(&mut state.borrow_mut().scene, node.handle, &property)
+                let found = control(state.borrow_mut().scene_mut(), node.handle, &property)
                     .map_err(|error| HostError(error.to_string()))?;
                 stack.replace(ctx, found);
                 Ok(CallbackReturn::Return)
@@ -51,7 +50,7 @@ pub(crate) fn install_animation_api<'gc>(
             let (node, property): (UserRef<NodeToken>, String) = stack.consume(ctx)?;
             let active = state
                 .borrow()
-                .scene
+                .scene()
                 .is_animating(node.handle, &property)
                 .map_err(|error| HostError(error.to_string()))?;
             stack.replace(ctx, active);
@@ -66,7 +65,7 @@ pub(crate) fn install_animation_api<'gc>(
             let (node, property): (UserRef<NodeToken>, String) = stack.consume(ctx)?;
             let paused = state
                 .borrow()
-                .scene
+                .scene()
                 .is_animation_paused(node.handle, &property)
                 .map_err(|error| HostError(error.to_string()))?;
             stack.replace(ctx, paused);
@@ -83,7 +82,7 @@ pub(crate) fn install_animation_api<'gc>(
             let (node, property): (UserRef<NodeToken>, String) = stack.consume(ctx)?;
             let progress = state
                 .borrow()
-                .scene
+                .scene()
                 .animation_progress(node.handle, &property)
                 .map_err(|error| HostError(error.to_string()))?;
             match progress {
@@ -105,7 +104,7 @@ pub(crate) fn install_animation_api<'gc>(
             }
             let found = state
                 .borrow_mut()
-                .scene
+                .scene_mut()
                 .seek_animation(node.handle, &property, progress)
                 .map_err(|error| HostError(error.to_string()))?;
             stack.replace(ctx, found);
@@ -123,7 +122,7 @@ pub(crate) fn install_animation_api<'gc>(
                 stack.consume(ctx)?;
             let found = state
                 .borrow_mut()
-                .scene
+                .scene_mut()
                 .set_behavior_enabled(node.handle, &property, enabled)
                 .map_err(|error| HostError(error.to_string()))?;
             stack.replace(ctx, found);
@@ -215,8 +214,8 @@ pub(crate) fn install_easing_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         // behavior; OkLab, the shorter way, otherwise.
         let (space, hue) = match options {
             Some(options) => (
-                crate::configure::parse_color_space(ctx, options).map_err(HostError)?,
-                crate::configure::parse_hue(ctx, options).map_err(HostError)?,
+                crate::api::ui::configure::parse_color_space(ctx, options).map_err(HostError)?,
+                crate::api::ui::configure::parse_hue(ctx, options).map_err(HostError)?,
             ),
             None => Default::default(),
         };
@@ -224,7 +223,7 @@ pub(crate) fn install_easing_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         // Accepts anything a colour property does: a value, a string, a
         // table naming a space.
         let read = |value| {
-            crate::api_color::color_of(ctx, value)
+            crate::api::color::color::color_of(ctx, value)
                 .map(|color| Color::from_pastel(&color))
                 .map_err(HostError)
         };

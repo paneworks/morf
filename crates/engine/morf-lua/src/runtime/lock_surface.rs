@@ -12,8 +12,8 @@ use luna::{Executor, UserRef, Value as LuaValue, Variadic};
 use morf_scene::NodeHandle;
 
 use crate::{
-    api_host::screen_entry, reactive_execute::drive_executor,
-    runtime_helpers::remove_scene_subtree, state_tokens::NodeToken, types::*,
+    api::system::host::screen_entry, runtime::helpers::remove_scene_subtree,
+    value::tokens::NodeToken, vm::execute::drive_executor, vm::types::*,
 };
 
 impl Runtime {
@@ -21,7 +21,7 @@ impl Runtime {
     pub fn has_lock_surface_builder(&self) -> bool {
         self.reactive
             .borrow()
-            .session
+            .session()
             .lock_surface_builder
             .is_some()
     }
@@ -39,17 +39,17 @@ impl Runtime {
         let builder = self
             .reactive
             .borrow()
-            .session
+            .session()
             .lock_surface_builder
             .clone()
             .ok_or_else(|| Error::Runtime("no lock surface builder is registered".into()))?;
-        let density = self.reactive.borrow().density;
+        let density = self.reactive.borrow().display().density();
         let node = self.run_handler(|ctx, limits| {
             let table = screen_entry(ctx, screen, density);
             table.set_field(ctx, "index", index as i64 + 1);
             let executor = Executor::start(
                 ctx,
-                ctx.fetch(&crate::vm::handler_store::stashed(&builder))
+                ctx.fetch(&crate::vm::handler_store::stashed(&builder)?)
                     .into(),
                 Variadic(vec![LuaValue::Table(table)]),
             );

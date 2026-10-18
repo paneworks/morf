@@ -10,7 +10,9 @@ engine <- frontend), and on exactly the morf crates its row below names.
 Nothing below morf-lua names `luna`; nothing outside morf-app and
 morf-desktop names a Wayland crate. And section 3's house rules: no Rust
 file over 500 lines, each crate's root opens with a `//!` header, and each
-crate has tests (a `tests/` directory or `#[cfg(test)]` code).
+crate has tests (a `tests/` directory or `#[cfg(test)]` code). And no
+compositor or service name (Hyprland, NetworkManager, MPRIS, ...) appears in
+crate code outside comments, tests and AGNOSTIC_ALLOWED.
 
 Violations a later phase of the plan removes are listed in PENDING, each
 with its phase: --strict fails on anything else, and on a PENDING entry
@@ -32,7 +34,8 @@ ALLOWED = {
     "morf-vector": {"morf-image", "morf-value"},
     "morf-text": {"morf-scene", "morf-layout", "morf-vector", "morf-value"},
     "morf-image": {"morf-value"},
-    "morf-render": {"morf-scene", "morf-layout", "morf-text", "morf-vector", "morf-image", "morf-value"},
+    "morf-paint": {"morf-scene", "morf-layout", "morf-text", "morf-vector", "morf-value"},
+    "morf-render": {"morf-paint", "morf-scene", "morf-layout", "morf-text", "morf-vector", "morf-image", "morf-value"},
     "morf-app": {"morf-value"},
     "morf-desktop": {"morf-app", "morf-value"},
     "morf-io": {"morf-value"},
@@ -46,7 +49,7 @@ ALLOWED = {
                  "morf-image", "morf-render", "morf-shader", "morf-app", "morf-desktop", "morf-io", "morf-audio",
                  "morf-terminal", "morf-system", "morf-value"},
     "morf-host": None,  # everything above
-    "morf-cli": {"morf-host", "morf-value"},
+    "morf-cli": {"morf-host", "morf-app", "morf-io", "morf-lua", "morf-scene", "morf-text", "morf-value"},
 }
 # morf-shader reads Lua-syntax shaders with luna's parser: the Lua layer.
 # What still breaks the rules, and the phase of PLAN.md that ends it: nothing.
@@ -54,6 +57,22 @@ PENDING = {}
 NO_LUA_BELOW = {"morf-shader", "morf-lua", "morf-host", "morf-cli"}
 WAYLAND_ALLOWED = {"morf-app", "morf-desktop", "morf-host", "morf-cli"}
 WAYLAND = re.compile(r"^(wayland-|smithay-client-toolkit)")
+
+# The core stays agnostic: no compositor, desktop or service names in crate
+# code (comments and tests aside). Those belong to Lua libraries.
+DENIED = re.compile(
+    r"(?i)(?<![a-z0-9])(hyprland|swaysock|sway|niri|i3sock|wlroots|networkmanager|bluez|mpris"
+    r"|org\.gnome|org\.kde|gnome|kde|plasma)(?![a-z0-9])"
+)
+# Names a file may hold on purpose, and why.
+AGNOSTIC_ALLOWED = {
+    # Stripping the compositors' session variables is the point of the file.
+    "crates/frontend/morf-host/src/headless/env.rs": {"hyprland", "niri", "swaysock"},
+    # The StatusNotifierItem specification's own bus names.
+    "crates/platform/morf-system/src/status_notifier.rs": {"org.kde"},
+    # GNOME's interface namespace, read only through the XDG settings portal.
+    "crates/platform/morf-system/src/prefers.rs": {"org.gnome"},
+}
 
 
 def crates():
@@ -91,6 +110,33 @@ def house_rules(name, path):
     )
     if not tested:
         found.append(f"{name}: has no tests")
+    found.extend(agnostic(path))
+    return found
+
+
+def agnostic(path):
+    """Compositor and service names in a crate's non-test code."""
+    found = []
+    for source in sorted(path.rglob("*.rs")):
+        parts = source.relative_to(path).parts
+        if {"target", "tests"} & set(parts) or source.name == "tests.rs":
+            continue
+        rel = str(source.relative_to(ROOT))
+        allowed = AGNOSTIC_ALLOWED.get(rel, set())
+        in_block = False
+        for number, line in enumerate(source.read_text(errors="replace").splitlines(), 1):
+            if line.strip().startswith("#[cfg(test)]"):
+                break
+            if in_block:
+                if "*/" not in line:
+                    continue
+                line, in_block = line.split("*/", 1)[1], False
+            if "/*" in line and "*/" not in line.split("/*", 1)[1]:
+                line, in_block = line.split("/*", 1)[0], True
+            code = line.split("//", 1)[0]
+            for match in DENIED.finditer(code):
+                if match.group(1).lower() not in allowed:
+                    found.append(f"{rel}:{number}: names {match.group(1)}; the core stays agnostic")
     return found
 
 

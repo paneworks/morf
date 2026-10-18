@@ -7,7 +7,7 @@ use morf_lua::{Runtime, WindowSurfaceKind};
 use std::collections::{HashMap, HashSet};
 
 use crate::host::windows::{Kind, Windows};
-use crate::{surface_layers::*, surface_popups::*};
+use crate::host::{layers::*, popups::*};
 use morf_app::WindowKind;
 
 use super::Window;

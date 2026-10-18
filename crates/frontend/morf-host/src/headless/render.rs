@@ -7,9 +7,11 @@
 use std::path::Path;
 
 use morf_layout::Size;
-use morf_render::{BlendSpace, RenderEngine, WgpuBackend};
+use morf_paint::{BlendSpace, RenderEngine};
+use morf_render::WgpuBackend;
 
 use crate::headless::Headless;
+use crate::host::reload_band::band_overlay;
 
 /// Layout passes a picture allows the bindings that read the layout.
 const SETTLE_PASSES: usize = 8;
@@ -51,7 +53,7 @@ fn renderer(width: u32, height: u32) -> Result<RenderEngine<WgpuBackend>, String
 
 /// Draws one surface at `scale`, premultiplied as the renderer leaves it.
 fn draw(headless: &mut Headless, index: usize, scale: u32) -> Result<Picture, String> {
-    let (root, size, blend, label) = {
+    let (root, size, blend, label, primary) = {
         let surface = headless
             .surfaces
             .get(index)
@@ -61,6 +63,7 @@ fn draw(headless: &mut Headless, index: usize, scale: u32) -> Result<Picture, St
             surface.size,
             surface.blend.clone(),
             surface.label(),
+            surface.kind == "primary",
         )
     };
     let (width, height) = (size.0 * scale, size.1 * scale);
@@ -68,7 +71,7 @@ fn draw(headless: &mut Headless, index: usize, scale: u32) -> Result<Picture, St
     engine
         .backend_mut()
         .set_blend(BlendSpace::parse(&blend).unwrap_or_default());
-    crate::surface_run::register_shaders(&headless.runtime, &mut engine)?;
+    crate::host::run::register_shaders(&headless.runtime, &mut engine)?;
     // Settled against the renderer's own faces, since that is what shapes
     // what is drawn.
     let available = Size {
@@ -84,11 +87,25 @@ fn draw(headless: &mut Headless, index: usize, scale: u32) -> Result<Picture, St
         .runtime
         .sync_text_inputs(&layout, engine.backend_mut().text_system());
     headless.runtime.observe_stretch(&layout);
+    let band = primary
+        .then(|| {
+            headless
+                .runtime
+                .lay_out_reload_band(size, engine.backend_mut())
+        })
+        .flatten();
+    let overlays: Vec<_> = band_overlay(band.as_ref()).into_iter().collect();
     // Twice: the second frame is the incremental one, which reuses an effect
     // layer's target the way every frame after the first does.
     for _ in 0..2 {
         engine
-            .render(&headless.runtime.scene(), &layout, scale * 120, |_| {})
+            .render_over(
+                &headless.runtime.scene(),
+                &layout,
+                &overlays,
+                scale * 120,
+                |_| {},
+            )
             .map_err(|error| format!("{label}: render: {error}"))?;
     }
     Ok(Picture {
@@ -130,7 +147,7 @@ pub fn render_screen(headless: &mut Headless, scale: u32) -> Result<Picture, Str
     let mut order = (0..headless.surfaces.len())
         .filter(|index| {
             let surface = &headless.surfaces[*index];
-            surface.visible && matches!(surface.kind, "primary" | "layer")
+            surface.visible && matches!(surface.kind, "primary" | "layer" | "lock")
         })
         .collect::<Vec<_>>();
     // Bottom layer first, as a compositor stacks them: a background layer
@@ -171,20 +188,28 @@ pub fn render_screen(headless: &mut Headless, scale: u32) -> Result<Picture, Str
 }
 
 /// Renders what `wanted` names -- a surface, or `screen` for all of them
-/// composed -- and writes it.
+/// composed -- with the label of what was drawn.
+pub fn render_picture(
+    headless: &mut Headless,
+    wanted: Option<&str>,
+    scale: u32,
+) -> Result<(Picture, String), String> {
+    if wanted == Some("screen") {
+        return Ok((render_screen(headless, scale)?, "screen".to_owned()));
+    }
+    let index = headless.surface_index(wanted)?;
+    let label = headless.surfaces[index].label();
+    Ok((render_surface(headless, index, scale)?, label))
+}
+
+/// Renders what `wanted` names, as [`render_picture`] does, and writes it.
 pub fn render_to(
     headless: &mut Headless,
     wanted: Option<&str>,
     scale: u32,
     path: &Path,
 ) -> Result<(u32, u32, String), String> {
-    let (picture, what) = if wanted == Some("screen") {
-        (render_screen(headless, scale)?, "screen".to_owned())
-    } else {
-        let index = headless.surface_index(wanted)?;
-        let label = headless.surfaces[index].label();
-        (render_surface(headless, index, scale)?, label)
-    };
+    let (picture, what) = render_picture(headless, wanted, scale)?;
     picture.save(path)?;
     Ok((picture.width, picture.height, what))
 }

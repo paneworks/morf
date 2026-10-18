@@ -35,6 +35,7 @@ fn at(pixels: &[u8], x: usize, y: usize) -> [u8; 4] {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn an_image_draws_svg_written_inline_and_as_a_data_uri() {
+    require_gpu!();
     for source in [
         RED.to_owned(),
         format!("data:image/svg+xml,{}", RED.replace('#', "%23")),
@@ -57,6 +58,7 @@ pub(crate) fn an_image_draws_svg_written_inline_and_as_a_data_uri() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 pub(crate) fn a_field_shape_takes_its_outline_from_svg_written_inline() {
+    require_gpu!();
     let mut scene = Scene::new();
     let root = scene.create(Element::Sdf);
     scene.assign(root, "width", 64.0).unwrap();

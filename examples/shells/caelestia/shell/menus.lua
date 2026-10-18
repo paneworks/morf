@@ -31,13 +31,14 @@ local function dry_run()
   return v ~= nil and v ~= "" and v ~= "0"
 end
 
---- Starts `argv` detached from the shell, as the scripts do with setsid.
+--- Starts `argv` detached from the shell, as the scripts do with setsid,
+--- with its output on /dev/null instead of the pipe morf.run closes.
 local function start(argv)
   if dry_run() then
     morf.log("info", "caelestia: menus (dry run): " .. table.concat(argv, " "))
     return
   end
-  local detached = { "setsid", "-f" }
+  local detached = { "setsid", "-f", "sh", "-c", 'exec "$@" </dev/null >/dev/null 2>&1', "sh" }
   for _, word in ipairs(argv) do detached[#detached + 1] = word end
   morf.run(detached, {}, function(result)
     if result and not result.ok then

@@ -38,11 +38,23 @@ function M.parse(text)
   return out
 end
 
+--- The rules lists to try: the usual places, then wherever xkb itself looks
+--- (a distribution without `/usr/share`, or `XKB_CONFIG_ROOT`).
+function M.candidates()
+  local out = {}
+  for _, path in ipairs(M.RULES) do out[#out + 1] = path end
+  for _, root in ipairs(morf.xkb and morf.xkb.include_paths and morf.xkb.include_paths() or {}) do
+    out[#out + 1] = root .. "/rules/evdev.lst"
+    out[#out + 1] = root .. "/rules/base.lst"
+  end
+  return out
+end
+
 local cached
 --- Every layout, read once from the first rules list there is.
 function M.layouts()
   if cached then return cached end
-  for _, path in ipairs(M.RULES) do
+  for _, path in ipairs(M.candidates()) do
     local text = morf.fs.read(path)
     local found = text and M.parse(text) or {}
     if #found > 0 then cached = found return cached end

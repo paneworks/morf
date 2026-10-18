@@ -3,7 +3,7 @@ use morf_image::{ImageRect as QuantizeRect, quantize_colors};
 use morf_scene::NodeHandle;
 use std::path::PathBuf;
 
-use crate::{state::*, surface_types::*};
+use crate::{runtime::host_types::*, runtime::state::*};
 
 pub(crate) fn parse_quantizer_options<'gc>(
     ctx: Context<'gc>,
@@ -104,9 +104,9 @@ pub(crate) fn register_window_surface(
     updates_enabled: bool,
     kind: WindowSurfaceKind,
 ) -> u64 {
-    let id = state.windows.next_window_surface;
-    state.windows.next_window_surface = state.windows.next_window_surface.wrapping_add(1);
-    state.windows.window_surfaces.insert(
+    let id = state.windows().next_window_surface;
+    state.windows_mut().next_window_surface = id.wrapping_add(1);
+    state.windows_mut().window_surfaces.insert(
         id,
         WindowSurfaceConfig {
             id,
@@ -116,6 +116,6 @@ pub(crate) fn register_window_surface(
             kind,
         },
     );
-    state.windows.window_surfaces_changed = true;
+    state.windows_mut().window_surfaces_changed = true;
     id
 }

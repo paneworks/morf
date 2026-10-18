@@ -8,11 +8,13 @@ use morf_lua::{LayerSurfaceConfig, Runtime};
 use morf_scene::NodeHandle;
 use morf_text::TextSystem;
 
-use crate::surface_layers::window_layer_id;
-use crate::surfaces::{Window, keyboard_focus_of};
+use crate::host::layers::window_layer_id;
+use crate::host::reload_band::{band_for, band_input};
+use crate::host::surfaces::{Window, keyboard_focus_of};
 
+use super::auxiliary::AuxiliaryKind;
+use super::cache::{CachedLayout, layout_for};
 use super::layer::send_input_region;
-use super::{AuxiliaryKind, CachedLayout, layout_for};
 
 /// Lays out one layer as [`super::layer::paint_layer`] paints it.
 pub fn lay_out_layer(
@@ -48,21 +50,39 @@ pub fn lay_out_layer(
     // way there.
     runtime.sync_text_inputs(&layout, text);
     runtime.observe_stretch(&layout);
-    let input = {
+    let band = (layer == morf_app::PRIMARY_LAYER)
+        .then(|| {
+            let previous = cache.as_deref().and_then(|cached| cached.band.as_ref());
+            band_for(runtime, previous, (width, height), text)
+        })
+        .flatten();
+    let (input, input_paint) = {
         let scene = runtime.scene();
-        send_input_region(&scene, &layout, client, layer, config, cache.as_deref())?
+        let stamp = (!fresh).then(|| scene.input_stamp(root).ok()).flatten();
+        send_input_region(
+            &scene,
+            &layout,
+            client,
+            layer,
+            config,
+            cache.as_deref(),
+            (stamp, band_input(band.as_ref())),
+        )?
     };
     // The clock the animations run on is the frame callbacks, drawn or not.
     client.request_frame(WindowId::Layer(layer));
     runtime.observe_layout_with(&layout, fresh);
     Ok(CachedLayout {
+        painted: None,
         layout,
         revision,
         size: (width, height),
         scale_120,
         input,
+        input_paint,
         backdrop: Vec::new(),
         keyboard_focus: config.keyboard_focus.clone(),
+        band,
     })
 }
 
@@ -120,13 +140,16 @@ pub fn lay_out_auxiliary(
         kind.request_frame(client, surface.id);
     }
     surface.layout = Some(CachedLayout {
+        painted: None,
         layout,
         revision,
         size,
         scale_120,
         input: Vec::new(),
+        input_paint: u64::MAX,
         backdrop: Vec::new(),
         keyboard_focus: String::new(),
+        band: None,
     });
     Ok(())
 }

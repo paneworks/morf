@@ -15,7 +15,7 @@ The `morf-lua` crate embeds [Luna](https://github.com/onix-os/luna) as a bounded
 ```
 crates/
   core/      morf-value  morf-scene  morf-layout
-  graphics/  morf-text  morf-vector  morf-image  morf-render
+  graphics/  morf-text  morf-vector  morf-image  morf-paint  morf-render
   platform/  morf-app  morf-desktop  morf-io  morf-audio  morf-terminal  morf-system
   engine/    morf-shader  morf-runtime  morf-kit  morf-lua
   frontend/  morf-host  morf-cli
@@ -69,6 +69,16 @@ morf check shell.lua --strict
 nixVulkanIntel morf render shell.lua -o shell.png --surface screen
 morf test examples/demos/tests/counter_spec.lua
 ```
+
+## Release tarballs
+
+The `morf-linux-*.tar.gz` assets on a GitHub release hold only the `morf`
+executable and its Lua library. They do not include the `morf-keyring` helper
+or the libraries morf opens at run time (Vulkan loader, PipeWire, PAM, udev);
+those come from the host distribution, and `tools/keyring/build.sh` builds the
+helper against the host's GCR. For a complete, self-contained install on any
+distribution, use the Nix packages below: `.#morf` wraps the engine with the
+keyring helper and every runtime library.
 
 ## Nix packages and binary cache
 

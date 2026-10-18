@@ -21,6 +21,7 @@ use zbus::blocking::{Connection as DbusConnection, MessageIterator};
 use zbus::fdo::RequestNameFlags;
 use zbus::message::Type as MessageType;
 
+use crate::Error;
 use crate::dbus_encode::dbus_argument_value;
 use crate::dbus_types::{Bus, DbusValue};
 
@@ -87,7 +88,7 @@ impl DbusService {
         path: &str,
         replace: bool,
     ) -> zbus::Result<(Self, NameOutcome)> {
-        let connection = bus.builder()?.build()?;
+        let connection = crate::dbus_types::driver::build(bus.builder()?)?;
         // `AllowReplacement` either way: a shell that cannot be restarted
         // without first being killed is a shell nobody restarts.
         //
@@ -125,6 +126,7 @@ impl DbusService {
             .build();
         let iterator = MessageIterator::for_match_rule(rule, &connection, Some(64))?;
         let (tx, calls) = mpsc::channel();
+        let waker = crate::waker();
         let join = thread::spawn(move || {
             let mut id = 0u64;
             for message in iterator {
@@ -133,7 +135,7 @@ impl DbusService {
                 if tx.send((id, message)).is_err() {
                     break;
                 }
-                crate::wake_all();
+                waker.wake();
             }
         });
         let name = if name.is_empty() {
@@ -207,8 +209,8 @@ impl DbusService {
     /// `DbusValue::Nil` is a reply with no body, which is what most methods
     /// return and is not the same as no reply at all — a caller waits for its
     /// timeout on the second.
-    pub fn reply(&mut self, id: u64, value: &DbusValue) -> Result<(), String> {
-        let message = self.pending.remove(&id).ok_or("no such call")?;
+    pub fn reply(&mut self, id: u64, value: &DbusValue) -> Result<(), Error> {
+        let message = self.pending.remove(&id).ok_or_else(no_such_call)?;
         let header = message.header();
         match value {
             DbusValue::Nil => self.connection.reply(&header, &()),
@@ -228,16 +230,16 @@ impl DbusService {
                 let body = positional_body(std::slice::from_ref(other))?;
                 self.connection.reply(&header, &body)
             }
-        }
-        .map_err(|error| error.to_string())
+        }?;
+        Ok(())
     }
 
     /// Answers a call with an error.
-    pub fn reply_error(&mut self, id: u64, name: &str, message: &str) -> Result<(), String> {
-        let call = self.pending.remove(&id).ok_or("no such call")?;
+    pub fn reply_error(&mut self, id: u64, name: &str, message: &str) -> Result<(), Error> {
+        let call = self.pending.remove(&id).ok_or_else(no_such_call)?;
         self.connection
-            .reply_error(&call.header(), name, &message)
-            .map_err(|error| error.to_string())
+            .reply_error(&call.header(), name, &message)?;
+        Ok(())
     }
 
     /// Calls a method on another service, from this service's connection.
@@ -255,7 +257,7 @@ impl DbusService {
         interface: &str,
         member: &str,
         arguments: &DbusValue,
-    ) -> Result<DbusValue, String> {
+    ) -> Result<DbusValue, Error> {
         let reply = match arguments {
             DbusValue::Nil => {
                 self.connection
@@ -271,9 +273,8 @@ impl DbusService {
                 self.connection
                     .call_method(Some(destination), path, Some(interface), member, &body)
             }
-        }
-        .map_err(|error| error.to_string())?;
-        crate::dbus_encode::decode_message_value(&reply)
+        }?;
+        crate::dbus_encode::decode_message_value(&reply).map_err(Error::Bus)
     }
 
     /// Emits a signal from this service's object.
@@ -283,7 +284,7 @@ impl DbusService {
         interface: &str,
         member: &str,
         value: &DbusValue,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         match value {
             DbusValue::Nil => {
                 self.connection
@@ -301,9 +302,13 @@ impl DbusService {
                 self.connection
                     .emit_signal(None::<&str>, path, interface, member, &body)
             }
-        }
-        .map_err(|error| error.to_string())
+        }?;
+        Ok(())
     }
+}
+
+fn no_such_call() -> Error {
+    Error::NotFound("no such call".to_owned())
 }
 
 /// A call's arguments, always as a list of them.
@@ -335,12 +340,14 @@ fn arguments_of(message: &zbus::Message) -> DbusValue {
 /// A D-Bus body is a struct without its outer parentheses, which is what a
 /// `Structure` serialises to when it is the whole body -- so a list of values
 /// packed into one arrives as that many arguments.
-fn positional_body(values: &[DbusValue]) -> Result<zbus::zvariant::Structure<'_>, String> {
+fn positional_body(values: &[DbusValue]) -> Result<zbus::zvariant::Structure<'_>, Error> {
     let mut builder = zbus::zvariant::StructureBuilder::new();
     for value in values {
-        builder = builder.append_field(dbus_argument_value(value)?);
+        builder = builder.append_field(dbus_argument_value(value).map_err(Error::Invalid)?);
     }
-    builder.build().map_err(|error| error.to_string())
+    builder
+        .build()
+        .map_err(|error| Error::Invalid(error.to_string()))
 }
 
 impl Drop for DbusService {

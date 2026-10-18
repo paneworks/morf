@@ -50,6 +50,13 @@ pub(crate) struct RunnerArgs {
     pub(crate) kit: bool,
     /// `--a11y`: every control a screen reader reaches has a name.
     pub(crate) a11y: bool,
+    /// `--frames`: the frame accounting over the `--after` run.
+    pub(crate) frames: bool,
+    /// `--paced`: `--after` runs on the wall clock, with a refresh every
+    /// 16.7 ms, as a compositor paces a shell.
+    pub(crate) paced: bool,
+    /// `--gpu`: the host paints with the GPU, offscreen.
+    pub(crate) gpu: bool,
     pub(crate) output: Option<PathBuf>,
     pub(crate) surface: Option<String>,
     pub(crate) filter: Option<String>,
@@ -78,7 +85,8 @@ impl RunnerArgs {
                 Runner::Test => 0,
             }),
             wait: Duration::ZERO,
-            no_dbus: false,
+            // A check reaches no bus unless given one of its own.
+            no_dbus: runner == Runner::Check,
             private_bus: false,
             // A test must not write to the settings of the person running it;
             // a check or a picture usually wants to read them.
@@ -86,6 +94,9 @@ impl RunnerArgs {
             strict: false,
             kit: false,
             a11y: false,
+            frames: false,
+            paced: false,
+            gpu: false,
             output: None,
             surface: None,
             filter: None,
@@ -127,9 +138,7 @@ fn default_kit_config() -> Result<PathBuf, String> {
     let here = std::env::current_dir()
         .map_err(|e| e.to_string())?
         .join("x");
-    let mut roots: Vec<PathBuf> = morf_host::morf_lua::project_library(&here)
-        .into_iter()
-        .collect();
+    let mut roots: Vec<PathBuf> = morf_lua::project_library(&here).into_iter().collect();
     roots.extend(
         std::env::var_os("MORF_RUNTIME_PATH")
             .into_iter()
@@ -212,7 +221,10 @@ pub(crate) fn parse_runner(runner: Runner, rest: &[&str]) -> Result<RunnerArgs, 
                 parsed.ipc.push(words);
             }
             ("--no-dbus", _) => parsed.no_dbus = true,
-            ("--private-bus", _) => parsed.private_bus = true,
+            ("--private-bus", _) => {
+                parsed.private_bus = true;
+                parsed.no_dbus = false;
+            }
             ("--isolate", _) => parsed.isolate = true,
             ("--no-isolate", _) => parsed.isolate = false,
             ("--strict", Runner::Check) => parsed.strict = true,
@@ -226,6 +238,9 @@ pub(crate) fn parse_runner(runner: Runner, rest: &[&str]) -> Result<RunnerArgs, 
                 }
             }
             ("--a11y", Runner::Check) => parsed.a11y = true,
+            ("--frames", Runner::Check) => parsed.frames = true,
+            ("--paced", Runner::Check) => parsed.paced = true,
+            ("--gpu", Runner::Check) => parsed.gpu = true,
             ("-o" | "--output", Runner::Render) => {
                 parsed.output = Some(PathBuf::from(value(&mut rest, "-o")?));
             }

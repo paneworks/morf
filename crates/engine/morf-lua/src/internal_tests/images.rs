@@ -33,7 +33,7 @@ fn a_gif_plays_while_it_is_drawn_and_stops_when_asked() {
     paint(&mut runtime, &mut cache);
     assert_eq!(ipc(&mut runtime, "state"), "ready 0/3");
     let advance = |runtime: &mut Runtime, at: Instant| {
-        crate::images::advance(&mut runtime.reactive.borrow_mut(), at)
+        crate::runtime::images::advance(&mut runtime.reactive.borrow_mut(), at)
     };
     let set =
         |runtime: &mut Runtime, line: &str| runtime.execute("set.lua", line.as_bytes()).unwrap();

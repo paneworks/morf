@@ -25,6 +25,9 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
         // Whether the mask keeps what it covers (false) or cuts it out.
         boolean("mask_invert", false),
         color("color_overlay", Color::rgba8(0, 0, 0, 0)),
+        // How many times SDR white the node's `color` shines at its
+        // brightest on an HDR output (`MORF_HDR=1`); ignored on SDR.
+        number("hdr", 1.0),
         number("z", 0.0),
         boolean("clip", element == Element::ClipRect),
         // `true` asks the compositor to blur what is behind this node.
@@ -75,6 +78,10 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
         // whoever has to find the node again from outside -- `morf test`'s
         // `test.find { id = ... }`, a log line.
         string("id", ""),
+        // Declarative input meaning on this actual scene node. Native frame
+        // export supplies its geometry; this table supplies no coordinates,
+        // authentication state or input ownership.
+        any("input_context", Value::Nil),
         // "ltr" or "rtl" for this subtree; "" takes the parent's
         // (`direction.rs`).
         string("layout_direction", ""),
@@ -166,6 +173,17 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
                 boolean("shadow_inner", false),
                 // How saturated a frosted backdrop is: 1 leaves it as it was.
                 number("backdrop_saturation", 1.0),
+                // A colour washed over the frosted backdrop, by its alpha.
+                color("backdrop_tint", Color::rgba8(0, 0, 0, 0)),
+                // The glass material over the backdrop (`glass.rs`): how far
+                // its lens bends what is behind at the rim, in logical
+                // pixels; how frosted it is, 0 clear to 1, or "auto" to
+                // judge by how busy what is behind is; and how bright its
+                // rim catches the light. `glass` sets them as one table.
+                number("glass_refraction", 0.0),
+                any("glass_frost", Value::Number(1.0)),
+                number("glass_rim", 0.0),
+                any("glass", Value::Nil),
             ]);
             if element == Element::ClipRect {
                 properties.extend([

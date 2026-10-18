@@ -16,7 +16,9 @@ use std::collections::{BTreeMap, VecDeque};
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::{ConnectOptions, IoEvent, IoHandle, IoId, Reactor, ReactorControl, SpawnOptions};
+use crate::{
+    ConnectOptions, Error, IoEvent, IoHandle, IoId, Reactor, ReactorControl, SpawnOptions,
+};
 
 /// Children one runtime may have running at once.
 pub const MAX_PROCESSES: usize = 64;
@@ -151,7 +153,7 @@ pub struct RunResult {
     pub stderr: Vec<u8>,
     pub timed_out: bool,
     pub truncated: bool,
-    pub error: Option<String>,
+    pub error: Option<Error>,
 }
 
 impl RunResult {
@@ -205,17 +207,19 @@ impl IoLink {
 
     /// Writes `data`: refused past [`MAX_WRITE`] (the outer error), or
     /// failed because it is closed or the reactor said so (the inner one).
-    pub fn write(&self, data: &[u8]) -> Result<Result<(), String>, String> {
+    pub fn write(&self, data: &[u8]) -> Result<Result<(), Error>, Error> {
         if data.len() > MAX_WRITE {
-            return Err(format!("a write is at most {MAX_WRITE} bytes"));
+            return Err(Error::Invalid(format!(
+                "a write is at most {MAX_WRITE} bytes"
+            )));
         }
         if self.status.closed() {
-            return Ok(Err("closed".into()));
+            return Ok(Err(Error::other("closed")));
         }
         Ok(self
             .control
             .write(&self.handle, data.to_vec())
-            .map_err(|error| error.to_string()))
+            .map_err(Error::from))
     }
 
     pub fn close_stdin(&self) {
@@ -242,11 +246,12 @@ impl IoLink {
 }
 
 impl<C> IoHub<C> {
-    fn reactor(&mut self) -> Result<&Reactor, String> {
+    fn reactor(&mut self) -> Result<&Reactor, Error> {
         if self.reactor.is_none() {
-            self.reactor = Some(
-                Reactor::new().map_err(|error| format!("cannot start the I/O reactor: {error}"))?,
-            );
+            self.reactor =
+                Some(Reactor::new().map_err(|error| {
+                    Error::Other(format!("cannot start the I/O reactor: {error}"))
+                })?);
         }
         Ok(self.reactor.as_ref().expect("just made"))
     }
@@ -256,6 +261,16 @@ impl<C> IoHub<C> {
             .values()
             .filter(|entry| entry.process == process && !entry.status.closed())
             .count()
+    }
+
+    /// How many children this hub holds open.
+    pub fn processes(&self) -> usize {
+        self.count(true)
+    }
+
+    /// How many connections this hub holds open.
+    pub fn connections(&self) -> usize {
+        self.count(false)
     }
 
     fn insert(
@@ -284,15 +299,18 @@ impl<C> IoHub<C> {
         &mut self,
         options: SpawnOptions,
         kind: IoKind<C>,
-    ) -> Result<Result<IoLink, String>, String> {
+    ) -> Result<Result<IoLink, Error>, Error> {
         if self.count(true) >= MAX_PROCESSES {
-            return Err(format!("more than {MAX_PROCESSES} processes running"));
+            return Err(Error::Invalid(format!(
+                "more than {MAX_PROCESSES} processes running"
+            )));
         }
         let program = options.command[0].clone();
         let handle = match self.reactor()?.spawn(options) {
             Ok(handle) => handle,
             Err(error) => {
                 let message = format!("{program}: {error}");
+                let error = Error::process(error).with_message(message);
                 if let IoKind::Run {
                     callback: Some(callback),
                     ..
@@ -302,13 +320,13 @@ impl<C> IoHub<C> {
                         status: Rc::new(HandleStatus::default()),
                         callback,
                         args: CallArgs::Run(RunResult {
-                            error: Some(message.clone()),
+                            error: Some(error.clone()),
                             ..RunResult::default()
                         }),
                     });
-                    crate::wake_all();
+                    crate::waker().wake();
                 }
-                return Ok(Err(message));
+                return Ok(Err(error));
             }
         };
         let control = self.reactor()?.control();
@@ -323,9 +341,11 @@ impl<C> IoHub<C> {
     }
 
     /// Opens a connection; refused past [`MAX_CONNECTIONS`].
-    pub fn connect(&mut self, options: ConnectOptions, kind: IoKind<C>) -> Result<IoLink, String> {
+    pub fn connect(&mut self, options: ConnectOptions, kind: IoKind<C>) -> Result<IoLink, Error> {
         if self.count(false) >= MAX_CONNECTIONS {
-            return Err(format!("more than {MAX_CONNECTIONS} connections open"));
+            return Err(Error::Invalid(format!(
+                "more than {MAX_CONNECTIONS} connections open"
+            )));
         }
         let reactor = self.reactor()?;
         let handle = reactor.connect(options);
@@ -341,11 +361,11 @@ impl<C> IoHub<C> {
 }
 
 /// A process id a script may signal: above 1, so neither init nor a group.
-pub fn signalable_pid(pid: i64) -> Result<i32, String> {
+pub fn signalable_pid(pid: i64) -> Result<i32, Error> {
     i32::try_from(pid)
         .ok()
         .filter(|pid| *pid > 1)
-        .ok_or_else(|| "kill takes a process id above 1".into())
+        .ok_or_else(|| Error::invalid("kill takes a process id above 1"))
 }
 
 #[cfg(test)]

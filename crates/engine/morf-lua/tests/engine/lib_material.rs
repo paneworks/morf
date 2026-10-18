@@ -1,5 +1,5 @@
-//! `library/lib/material.lua`: Material 3 schemes over `morf.color`'s HCT,
-//! and the source colour of a picture.
+//! `library/lib/util/material.lua`: Material 3 schemes over `morf.color`'s
+//! HCT, and the source colour of a picture.
 
 use std::path::Path;
 use std::time::{Duration, Instant};

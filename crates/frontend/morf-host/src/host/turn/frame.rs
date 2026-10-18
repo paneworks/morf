@@ -5,10 +5,10 @@ use morf_app::{PRIMARY_LAYER, WindowId};
 use morf_lua::Runtime;
 use std::time::Instant;
 
+use crate::host::actions::apply_parent_transitions;
 use crate::host::windows::Kind;
-use crate::painter::Painter;
-use crate::surface_actions::apply_parent_transitions;
-use crate::{paint::*, surface_pointer::answer_new_containment, surfaces::*};
+use crate::paint::painter::Painter;
+use crate::{host::surfaces::*, input::pointer::answer_new_containment, paint::*};
 
 use super::{Host, Turn, complain_layout, is_layout_error, slow};
 
@@ -30,7 +30,10 @@ impl Host {
         // only a paint asks for one -- without this it waits, frozen, for
         // whatever paints next: a pill that stays lit, a swell that shows
         // seconds late.
-        if !repaint && frame_wait.is_none() && runtime.has_motion() {
+        if !repaint
+            && frame_wait.is_none()
+            && (runtime.has_motion() || self.state.turning.is_some())
+        {
             repaint = true;
         }
         // A paint owed for longer than a stall is made without the callback.
@@ -115,6 +118,18 @@ impl Host {
         if self.a11y.turn(runtime, &self.state, &name, repaint) {
             self.follow_up = true;
         }
+        // A replaced runtime goes once nothing is moving, or once it has
+        // waited long enough.
+        let quiet =
+            !repaint && !self.follow_up && !runtime.has_motion() && self.state.turning.is_none();
+        if self
+            .retired
+            .as_ref()
+            .is_some_and(|(_, since)| quiet || since.elapsed() > super::RETIRED_GRACE)
+        {
+            self.retired = None;
+            give_back_freed_memory();
+        }
         // Prepare unopened pages between events, without asking for frames.
         // Each slice yields to input and stops while animation is running.
         // A fresh layout alone is not a scheduler: once it settles, the rest
@@ -122,7 +137,7 @@ impl Host {
         if !repaint
             && !self.follow_up
             && !runtime.has_motion()
-            && !self.state.animating_shaders
+            && !self.state.animating()
             && let Some(renderer) = self.state.painter.gpu()
         {
             let backend = renderer.backend_mut();
@@ -140,6 +155,7 @@ impl Host {
     /// Paints the shell's own surface and every window that takes updates.
     fn paint(&mut self, runtime: &mut Runtime) -> Result<Turn, String> {
         let painted = Instant::now();
+        let paint_stage = morf_lua::profile::stage(morf_lua::profile::Stage::Paint);
         let state = &mut self.state;
         let client = &*self.backend;
         // Before anything is drawn, tell the renderer what died. Its caches
@@ -165,6 +181,7 @@ impl Host {
             }
         }
         apply_parent_transitions(runtime, &mut state.painter, client)?;
+        let shown = crate::paint::cover::shown(state, runtime, client);
         let painting = Instant::now();
         let painted_frame = paint(
             runtime,
@@ -172,13 +189,16 @@ impl Host {
             client,
             state.primary_root,
             Some(&mut state.layout),
+            shown.as_ref(),
         );
         slow(self.report_slow, &self.name, "a frame", painting);
         // Skipped for want of a buffer: owed, and painted on the next
         // callback (or when the callback is overdue).
-        if let Painter::Gpu(renderer) = &mut state.painter
-            && renderer.backend_mut().take_skipped()
-        {
+        let skipped = match &mut state.painter {
+            Painter::Gpu(renderer) => renderer.backend_mut().take_skipped(),
+            Painter::Layout(_) => false,
+        };
+        if skipped {
             state.primary_deferred = true;
             // Nothing committed, so no callback may be coming: ask for one,
             // or the owed paint waits for whatever paints next.
@@ -213,6 +233,22 @@ impl Host {
         // What this frame actually cost, which is what the next one is paced
         // against.
         state.pacer.observed(painted.elapsed());
+        drop(paint_stage);
+        if !skipped {
+            let shown = runtime.scene().paint_revision();
+            self.frame_accounting
+                .painted(state.refresh, shown, state.animating());
+        }
         Ok(Turn::Again)
+    }
+}
+
+/// Hands the free pages a dropped runtime leaves in the allocator's arenas
+/// back to the system.
+fn give_back_freed_memory() {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    // SAFETY: malloc_trim only walks and releases the allocator's free lists.
+    unsafe {
+        libc::malloc_trim(0);
     }
 }

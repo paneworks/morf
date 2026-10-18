@@ -8,6 +8,8 @@
 
 use std::fmt::Write as _;
 
+use crate::Error;
+
 const STANDARD: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const URL_SAFE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
@@ -41,7 +43,7 @@ pub fn base64_encode(bytes: &[u8], url_safe: bool, pad: bool) -> String {
 }
 
 /// Either alphabet, padded or not, whitespace ignored.
-pub fn base64_decode(text: &[u8]) -> Result<Vec<u8>, String> {
+pub fn base64_decode(text: &[u8]) -> Result<Vec<u8>, Error> {
     let mut out = Vec::with_capacity(text.len() / 4 * 3);
     let mut buffer = 0u32;
     let mut bits = 0;
@@ -58,10 +60,14 @@ pub fn base64_decode(text: &[u8]) -> Result<Vec<u8>, String> {
                 continue;
             }
             b' ' | b'\n' | b'\r' | b'\t' => continue,
-            _ => return Err(format!("base64: invalid byte {c:#04x} at {position}")),
+            _ => {
+                return Err(Error::Invalid(format!(
+                    "base64: invalid byte {c:#04x} at {position}"
+                )));
+            }
         };
         if padding {
-            return Err("base64: data after padding".into());
+            return Err(Error::invalid("base64: data after padding"));
         }
         buffer = (buffer << 6) | u32::from(value);
         bits += 6;
@@ -72,7 +78,7 @@ pub fn base64_decode(text: &[u8]) -> Result<Vec<u8>, String> {
         }
     }
     if bits >= 6 {
-        return Err("base64: truncated input".into());
+        return Err(Error::invalid("base64: truncated input"));
     }
     Ok(out)
 }
@@ -89,14 +95,14 @@ pub fn hex_encode(bytes: &[u8], upper: bool) -> String {
     out
 }
 
-pub fn hex_decode(text: &[u8]) -> Result<Vec<u8>, String> {
+pub fn hex_decode(text: &[u8]) -> Result<Vec<u8>, Error> {
     let digits = text
         .iter()
         .copied()
         .filter(|c| !c.is_ascii_whitespace())
         .collect::<Vec<_>>();
     if digits.len() % 2 != 0 {
-        return Err("hex: odd number of digits".into());
+        return Err(Error::invalid("hex: odd number of digits"));
     }
     digits
         .chunks(2)
@@ -105,10 +111,10 @@ pub fn hex_decode(text: &[u8]) -> Result<Vec<u8>, String> {
             let low = (pair[1] as char).to_digit(16);
             match (high, low) {
                 (Some(high), Some(low)) => Ok((high * 16 + low) as u8),
-                _ => Err(format!(
+                _ => Err(Error::Invalid(format!(
                     "hex: invalid digits {:?}",
                     String::from_utf8_lossy(pair)
-                )),
+                ))),
             }
         })
         .collect()

@@ -51,18 +51,19 @@ machine:
 | `--private-bus` | starts a `dbus-daemon` of the run's own, with no services, as the session bus (the system bus points nowhere); stopped when the run ends. For a configuration that owns a name -- a notification server, a tray watcher -- without taking it from the real one |
 | `--isolate`     | points `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME` and `XDG_CACHE_HOME` at a scratch folder under `$TMPDIR`, removed afterwards. **On by default for `morf test`** (`--no-isolate` turns it off) |
 
-Without `--no-dbus` or `--private-bus` a configuration that asks for the
-bus gets the real one, which is what a check of "does it load on this
-machine" usually wants and what a test never should. Programs started with
-`morf.run` and `morf.spawn` are real; `morf test` can stub `morf.run` (see
-below).
+`morf check` reaches no bus unless it is given one of its own: `--no-dbus`
+is its default and `--private-bus` replaces it. `morf render` and `morf
+test` without either get the real bus, which a test never should. Programs
+started with `morf.run` and `morf.spawn` are real; `morf test` can stub
+`morf.run` (see below).
 
 ## `morf check`
 
 ```sh
 morf check shell.lua [--size WxH] [--screens N] [--ipc 'VERB ARGS']...
                      [--after MS] [--wait MS] [--strict] [--kit [default]] [--a11y]
-                     [--no-dbus | --private-bus] [--isolate] [-- args...]
+                     [--frames [--paced] [--gpu]]
+                     [--private-bus] [--isolate] [-- args...]
 ```
 
 Loads the configuration once per screen, makes any `--ipc` calls (each
@@ -73,6 +74,11 @@ followed by a settle), advances `--after` milliseconds of virtual time
   many nodes it holds -- hidden surfaces are laid out too, so a panel's
   problems are found before anyone opens it;
 - the IPC verbs the configuration registered;
+- each imported module and plugin it loaded, with where it stands
+  (`approved`, `not approved`, `changed since it was approved`) and what it
+  declares, in the words `morf approve` uses. A check holds every imported
+  module while it loads, approved or not (see "Imported modules" in
+  `docs/IO.md`), and each call it refuses is a warning;
 - **errors**: the load failing (with `file:line`, including the line of a
   `require` that found nothing), a Lua error in any callback, binding or
   handler that ran, a line the configuration logged at `error` level, a
@@ -89,13 +95,26 @@ archetype skin due at the contract's stage, and an owner in the contract
 for every row of the element catalogue (`library/lib/kit/catalogue.lua`).
 It prints `kit stage N: D due, M missing` and each problem as an error.
 
+`--frames` prints the host's frame accounting over the `--after` run (as
+`test.frames()` returns it): how many frames, how many late and over 2.4x
+the refresh interval and which stage held each of those, and the wall time
+charged to each stage. `--paced` runs `--after` on the wall clock instead,
+a refresh every 16.7 ms with the frame callbacks held to it as a
+compositor holds them, and `--gpu` paints with the GPU, offscreen: together
+they are the frame-stall rehearsal's GPU run where no compositor can be
+started (`examples/demos/motion/frame-stall.lua`, `docs/baseline.md`).
+
 `--a11y` builds the tree a screen reader would be given for every shown
 surface and fails each control it could land on -- one that takes focus,
 or plays a role read by name (a button, switch, slider, tab, field, ...)
 -- that has no name. It prints `a11y N accessible nodes, M unnamed`.
 
+An imported module whose manifest cannot be read is an error, and under
+`--strict` so is an imported integration (`lib.integrations.*`) with no
+manifest.
+
 The exit status is 1 when there are errors, and with `--strict` when there
-are warnings too. `--wait MS` spreads that much real time over the run, for
+are warnings too, or when any binding or effect raised an error. `--wait MS` spreads that much real time over the run, for
 a configuration whose first screen depends on a process or a bus answering.
 
 ```
@@ -192,8 +211,10 @@ not ok 2 - counter is ready after a second of its own time (104 ms)
 ```
 
 A failure prints the assertion with its `file:line` and the warnings and
-errors the configuration logged during that test. The exit status is 1 when
-any test failed. `--filter PATTERN` runs only tests whose full name (the
+errors the configuration logged during that test. A test also fails when
+one of the configuration's bindings or effects raised an error during it,
+unless the spec read past it with `test.clear_logs()`. The exit status is 1
+when any test failed. `--filter PATTERN` runs only tests whose full name (the
 `describe` names and the test's, joined by spaces) contains `PATTERN`.
 
 ### Structure
@@ -228,12 +249,20 @@ shown; `message` is put in front.
 | `test.load(path, options)` | loads a configuration, replacing the one loaded before (whose children are killed and reaped first). `path` is looked for beside the spec, then from the working directory |
 | `test.load { source = [[...]] }`, `test.source(text, options)` | a configuration written in the spec |
 | `test.surfaces()` | `{ label, kind, name, width, height, x, y, visible }` for each surface, the primary first |
+| `test.reload()`, `test.reload { source = [[...]] }` | reloads the configuration in place, from its file or from that source, through the same worker command and host turn the shell's supervisor drives; returns `true`, or `false` and the error. A failed reload keeps the running configuration, and while the engine's error band is shown it is among the primary surface's nodes (`id = "morf-reload-error"`, its text `"morf-reload-error-text"`) |
+| `test.problems()` | what the runner itself found wrong since load: a frame that failed, a layout that could not be made, a surface that could not be worked out |
 
 `options`: `size = { w, h }`, `screens = n`, `args = { ... }` (the
 configuration's own arguments, what follows `--`: `morf.args`,
 `morf.options`, `morf.operands`), and `env = { NAME = "value" }` --
 what `morf.env` answers for those names (`false` for unset). `env` is seen
-by the configuration only, not by programs it starts.
+by the configuration only, not by programs it starts. `runtime_path = {
+"dir", ... }` adds module roots after the configuration's folder, as
+`MORF_RUNTIME_PATH` entries are: what `require` finds there is imported.
+
+`test.approve(name)` approves the imported module the configuration loaded
+as `name`, in the run's own approvals (a test's state folder is a scratch
+one); the next `test.load` runs it approved.
 
 ### Time
 
@@ -321,8 +350,11 @@ or an exact `text`), or a function of the node returning true.
 | `test.stub_run(program, result)` | from now on, `morf.run` of `program` (its `argv[1]`, or that path's last part) does not start anything: the callback gets `result` -- `{ ok, code, stdout, stderr }`, missing fields filled in (`ok` from `code`), or a string meaning `stdout` -- on a later turn of the loop, as a real run's would come. Stubs outlast `test.load` within a spec file |
 | `test.clear_stubs()` | |
 | `test.runs()` | the argv of every `morf.run` since load, stubbed or not |
+| `test.resources()` | what the configuration holds open, as the engine counts it: `{ dbus_subscriptions, dbus_calls, timers, processes, connections, file_watches, owned_hooks }` -- compare with a baseline to prove a teardown gave everything back |
 | `test.snapshot(name [, { surface }])` | renders to `name` under `--snapshots DIR` (default `snapshots/` beside the spec); returns `true, path`, or `false, reason` when there is no GPU -- the test goes on, with the reason noted in the output |
+| `test.frame([{ surface }])` | renders the surface now (`"screen"` for all of them) and keeps the picture to read back, or returns `nil, reason` when there is no GPU: `frame.width`, `frame.height` in pixels at the runner's scale, `frame.pixel(x, y)` the straight colour there as `"#rrggbbaa"`, and `frame.region { x, y, width, height }` the region summed up -- its `mean` colour and its luma's `luma` (mean), `variance`, `min` and `max`, from 0 to 1 |
 | `test.note(text)`, `test.log(...)` | a line printed under the test's result |
+| `test.frames()` | the host's frame accounting since the last call (or load), and a new window begun: `{ frames, late, overruns, turns, motion_turns, worst_ms, mean_ms, refresh_ms, stages, owners, summary }`. `stages` is the wall time charged to `services`, `handlers`, `flush`, `motion`, `layout`, `paint` and `waiting` (no stage: between turns), `owners` how many overruns -- frames over 2.4x the refresh interval -- each held the most of, and `summary` the line `MORF_WAKE_LOG` prints. Times are the wall clock's, not the virtual one's |
 
 ## Examples
 
@@ -340,9 +372,17 @@ or an exact `text`), or a function of the node returning true.
   the run's scratch data folder and started through impasto's launcher: a
   window per program, destroyed when it exits, kept up (with the exit code)
   when it fails.
+- `frame_stall_spec.lua`: `examples/demos/motion/frame-stall.lua`, a spring
+  swung beside a timer that burns a Lua budget every frame: the spring's
+  path matches the unstalled run frame for frame, and `test.frames()`
+  charges the stall to the handlers stage, never to paint.
 - `contains_pointer_spec.lua`: a configuration written in the spec, and a
   panel's `contains_pointer` through pointer moves, a leave, a clip, and a
   binding made while the pointer was already there.
+- `reload_band_spec.lua`: `test.reload` with a broken file and a fixed one:
+  the old scene keeps painting under the engine's error band, which names
+  the file, the line and the error, survives every kind of root, and goes
+  on a fixed reload, a press, or the configuration's own `on_reload_failed`.
 - `impasto_spec.lua`: loads `examples/shells/impasto/shell/init.lua` with
   `IMPASTO_DRY_RUN`, opens every panel over IPC and closes it, and checks
   that nothing landed in `morf ipc call failed`. Run it with

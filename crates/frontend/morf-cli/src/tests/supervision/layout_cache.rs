@@ -5,13 +5,16 @@ use morf_layout::Layout;
 /// Builds a cached layout with known provenance.
 fn cached_at(revision: u64, size: (u32, u32), scale_120: u32) -> CachedLayout {
     CachedLayout {
+        painted: None,
         layout: Layout::default(),
         revision,
         size,
         scale_120,
         input: Vec::new(),
+        input_paint: u64::MAX,
         backdrop: Vec::new(),
         keyboard_focus: String::new(),
+        band: None,
     }
 }
 

@@ -6,10 +6,20 @@
 use std::thread;
 use std::time::Duration;
 
+use super::lib_dbus_services::{PRIVATE_BUS, run_under_private_bus};
 use super::*;
 
 #[test]
-fn a_configuration_owns_a_bus_name_and_answers_a_call() {
+fn bus_names_and_proxies_over_a_private_session_bus() {
+    run_under_private_bus("services::private_bus_");
+}
+
+#[test]
+#[ignore = "runs only inside dbus-run-session, started by the test above"]
+fn private_bus_a_configuration_owns_a_bus_name_and_answers_a_call() {
+    if std::env::var(PRIVATE_BUS).is_err() {
+        return;
+    }
     // The client half of D-Bus has been reachable from Lua for years; this is
     // the other half, and it is what a notification server, a tray watcher and
     // a polkit agent all need. `morf_io::DbusService` had every piece of it and
@@ -37,14 +47,7 @@ fn a_configuration_owns_a_bus_name_and_answers_a_call() {
         )
         .as_bytes(),
     );
-    if started.is_err() {
-        // No session bus here; the thing under test cannot run.
-        assert!(
-            std::env::var("DBUS_SESSION_BUS_ADDRESS").is_err(),
-            "there is a session bus, so this failed for a real reason: {started:?}"
-        );
-        return;
-    }
+    assert!(started.is_ok(), "serving on the private bus: {started:?}");
     let root = runtime.scene().roots()[0];
     assert_eq!(
         runtime.scene().string_value(root, "text").unwrap(),
@@ -127,7 +130,11 @@ fn a_configuration_can_ask_the_shell_to_stop() {
 }
 
 #[test]
-fn a_proxy_takes_a_call_timeout_and_enumerates_managed_objects() {
+#[ignore = "runs only inside dbus-run-session, started by the test above"]
+fn private_bus_a_proxy_takes_a_call_timeout_and_enumerates_managed_objects() {
+    if std::env::var(PRIVATE_BUS).is_err() {
+        return;
+    }
     // Two halves of the same complaint: that writing UPower or BlueZ in Lua is
     // technically possible and unpleasant.
     //
@@ -163,16 +170,7 @@ fn a_proxy_takes_a_call_timeout_and_enumerates_managed_objects() {
     let scene = runtime.scene();
     let text = scene.string_value(root, "text").unwrap().to_owned();
     drop(scene);
-    assert!(
-        text == "listed" || text == "no bus",
-        "a proxy accepts a timeout and still works: {text}"
-    );
-    if text == "no bus" {
-        assert!(
-            std::env::var("DBUS_SESSION_BUS_ADDRESS").is_err(),
-            "there is a session bus, so the proxy failed for a real reason"
-        );
-    }
+    assert_eq!(text, "listed", "a proxy accepts a timeout and still works");
 }
 
 #[test]

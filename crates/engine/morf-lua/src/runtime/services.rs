@@ -3,13 +3,12 @@
 //! callbacks.
 
 use morf_system::{GreetdEvent, PamEvent};
-use std::time::Duration;
 
 use morf_scene::{NodeHandle, Value as SceneValue};
 
 use crate::{
-    reactive_execute::*, runtime_helpers::*, scene_bindings::*, state::*, surface_types::*,
-    types::*, views::*,
+    api::ui::scene::*, runtime::helpers::*, runtime::host_types::*, runtime::state::*,
+    runtime::views::*, vm::execute::*, vm::types::*,
 };
 use morf_runtime::Handler;
 use morf_runtime::timers::DueTimer;
@@ -27,12 +26,12 @@ use definitions::{reconcile_loaders, reconcile_timers};
 pub(crate) use morf_runtime::engine::PRELOAD_PATIENCE;
 
 /// A finished HTTP request, with what its handler is called with.
-type HttpAnswer = (
+pub(crate) type HttpAnswer = (
     Handler,
-    Result<morf_io::HttpResponse, String>,
+    Result<morf_io::HttpResponse, morf_io::Error>,
     String,
-    crate::api_http::JsonKinds,
-    std::rc::Rc<crate::api_http::HttpHandleState>,
+    crate::api::io::http::JsonKinds,
+    std::rc::Rc<crate::api::io::http::HttpHandleState>,
 );
 
 /// What one turn collects while the state is borrowed, to be run once it is
@@ -44,19 +43,19 @@ struct Collected {
     dbus_signals: Vec<(
         u64,
         Handler,
-        crate::state_pending::DbusSignalKind,
+        crate::runtime::pending::DbusSignalKind,
         morf_io::DbusSignalEvent,
     )>,
-    dbus_replies: Vec<(Handler, Result<morf_io::DbusValue, String>)>,
+    dbus_replies: Vec<(Handler, Result<morf_io::DbusValue, morf_io::Error>)>,
     dbus_calls: Vec<(Handler, morf_io::DbusCall)>,
     pam_messages: Vec<(Handler, PamEvent)>,
     greetd_messages: Vec<(Handler, GreetdEvent)>,
     udev_events: Vec<(Handler, morf_system::UdevEvent)>,
     status_updates: Vec<(Handler, Vec<morf_system::StatusNotifierAddress>)>,
     http_answers: Vec<HttpAnswer>,
-    io_calls: Vec<crate::api_io::IoCall>,
+    io_calls: Vec<crate::api::io::io::IoCall>,
     io_more: bool,
-    watch_calls: Vec<crate::api_watch::WatchCall>,
+    watch_calls: Vec<crate::api::io::watch::WatchCall>,
     watch_more: bool,
     retained_destroys: Vec<NodeHandle>,
     transform_callbacks: Vec<(Handler, u64)>,
@@ -68,6 +67,7 @@ impl Runtime {
         // Outside the arena, before this turn's Lua: compile what turned hot.
         self.service_jit();
         let _bookkeeping = crate::profile::span(|| "engine: services bookkeeping".to_owned());
+        let _stage = crate::profile::stage(crate::profile::Stage::Services);
         self.flush_lint();
         // The loop wakes when the caret is due to turn over
         // (`Runtime::next_deadline`), so it blinks without a timer of its own.
@@ -96,9 +96,7 @@ impl Runtime {
             // a scene write. Native timers still fire and buses still drain
             // below on every poll. Animated Timer intervals invalidate this
             // checkpoint in tick_animations, including their final tick.
-            let definitions_changed =
-                state.revisions.scene_revision != state.revisions.service_definitions_revision;
-            state.revisions.service_definitions_revision = state.revisions.scene_revision;
+            let definitions_changed = state.revisions_mut().settle_services();
             service_changed |= reconcile_timers(&mut state, definitions_changed);
             service_changed |= reconcile_loaders(
                 &mut state,
@@ -130,16 +128,10 @@ impl Runtime {
         // firing is not a reason to render: a 16ms timer that polls a file and
         // finds it unchanged would otherwise force a full render of every
         // output sixty times a second, forever.
-        let (revision_before, hidden_before) = {
-            let state = self.reactive.borrow();
-            (
-                state.revisions.scene_revision,
-                state.revisions.hidden_revisions,
-            )
-        };
+        let before = self.reactive.borrow().revisions().mark();
         // Timers, loaders and views are in step with the scene as it is now;
         // what the callbacks below change is for the next turn to pick up.
-        self.reactive.borrow_mut().revisions.polled_revision = revision_before;
+        self.reactive.borrow_mut().revisions_mut().polled_at(before);
         let service_changed = service_changed
             || appearance_changed
             || audio_changed
@@ -157,14 +149,12 @@ impl Runtime {
             self.poll_image_jobs();
         }
         // A source set outright, not animated, is followed at once too.
-        crate::state::apply_follows(&mut self.reactive.borrow_mut());
+        crate::runtime::state::apply_follows(&mut self.reactive.borrow_mut());
+        let reported = self.offer_reload_failure();
         // Changes to nodes nothing shows are not painted: a hidden panel's
         // chart that follows a counter every second would otherwise draw
         // every output every second for a picture nobody sees.
-        let state = self.reactive.borrow();
-        let bumps = state.revisions.scene_revision.wrapping_sub(revision_before);
-        let hidden = state.revisions.hidden_revisions.wrapping_sub(hidden_before);
-        service_changed || bumps > hidden
+        service_changed || reported || self.reactive.borrow().revisions().shown_since(before)
     }
 }
 
@@ -176,17 +166,7 @@ impl Runtime {
     /// backend are not, so the list is handed back for the caller to finish
     /// the job. Nobody else has both the scene and those caches in scope.
     pub fn take_removed_nodes(&self) -> Vec<NodeHandle> {
-        let mut state = self.reactive.borrow_mut();
-        let removed = state.scene.take_removed_nodes();
-        if !removed.is_empty() {
-            let morf_runtime::Engine {
-                scene,
-                transform_tracker,
-                ..
-            } = &mut state.engine;
-            transform_tracker.retain_scene(&*scene);
-        }
-        removed
+        self.reactive.borrow_mut().take_removed_nodes()
     }
 }
 
@@ -203,12 +183,12 @@ fn timer_still_due(
     node: Option<NodeHandle>,
     repeat: bool,
 ) -> bool {
-    let settled = state.timers.settle(id, repeat);
+    let settled = state.timers_mut().settle(id, repeat);
     if let Some(node) = node {
-        if !state.timer_callbacks.contains_key(&node) {
+        if !state.timers().has_node_handler(node) {
             return false;
         }
-        let Ok(running) = state.scene.bool_value(node, "running") else {
+        let Ok(running) = state.scene().bool_value(node, "running") else {
             return false;
         };
         if repeat && !running {

@@ -108,6 +108,8 @@ impl Drop for AuxSurfaceScale {
 /// One live wlr-layer-shell surface and the per-surface state the compositor
 /// configures independently of every other layer surface this client owns.
 pub(crate) struct LayerRecord {
+    /// Namespace sent at creation; it cannot change through geometry updates.
+    pub(crate) namespace: String,
     pub(crate) surface: ShellSurface,
     pub(crate) fractional_scale: Option<WpFractionalScaleV1>,
     pub(crate) viewport: Option<WpViewport>,
@@ -251,7 +253,7 @@ pub(crate) struct LayerState {
     pub(crate) read_tx: mpsc::Sender<ReadDone<ReadTag>>,
     pub(crate) read_rx: mpsc::Receiver<ReadDone<ReadTag>>,
     /// Rung by a transfer thread when it finishes, so the loop wakes for it.
-    pub(crate) waker: Option<fn()>,
+    pub(crate) waker: Option<crate::transfer::Wakeup>,
     /// A drag from elsewhere currently over one of these surfaces, or dropped
     /// on one and not yet finished.
     pub(crate) drag: Option<DragState>,
@@ -290,6 +292,8 @@ pub(crate) struct LayerState {
     /// compositor may withdraw it at run time — at which point it stops
     /// applying blur even to regions already set.
     pub(crate) blur_capable: bool,
+    /// What the compositor says about colour (`color.rs`).
+    pub(crate) color: crate::backend::wayland::color::ColorState,
     pub(crate) screens: Vec<Output>,
     pub(crate) session_locks: SessionLockState,
     /// Whether the compositor offers `ext-session-lock`.

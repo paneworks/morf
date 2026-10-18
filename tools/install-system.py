@@ -71,14 +71,33 @@ def save_stage(directory, manifest):
     print(f'Staged {manifest["kind"]}: {len(manifest["files"])} files in {directory}')
 
 
+def reported_version(binary):
+    """The version `binary --version` reports."""
+    reported = subprocess.run([str(binary), '--version'], env=clean_env(), check=True,
+                              capture_output=True, text=True).stdout.split()
+    assert len(reported) == 2 and reported[0] == 'morf', f'unexpected --version: {reported}'
+    return reported[1]
+
+
+def stage_docs(library, version):
+    """The guides under library/docs, stamped with `version`."""
+    docs = library / 'docs'
+    docs.mkdir(parents=True, exist_ok=True)
+    for name in ('UI.md', 'IO.md'): shutil.copy2(REPO / 'docs' / name, docs / name)
+    (docs / 'VERSION').write_text(version + '\n')
+
+
 def stage_runtime(directory, binary):
     assert binary.is_file(), 'build the dist executable first: oslo make dist'
-    subprocess.run([str(binary), '--version'], env=clean_env(), check=True)
+    version = reported_version(binary)
+    print(f'morf {version}')
     tree = new_stage(directory)
     (tree / 'usr/bin').mkdir(parents=True)
     shutil.copy2(binary, tree / 'usr/bin/morf')
-    shutil.copytree(REPO / 'library', tree / 'usr/share/morf/library', ignore=shutil.ignore_patterns('tests'))
-    subprocess.run([str(binary), 'types', str(tree / 'usr/share/morf/library/types')], env=clean_env(), check=True)
+    library = tree / 'usr/share/morf/library'
+    shutil.copytree(REPO / 'library', library, ignore=shutil.ignore_patterns('tests'))
+    stage_docs(library, version)
+    subprocess.run([str(binary), 'types', str(library / 'types')], env=clean_env(), check=True)
     save_stage(directory, {'kind': 'runtime', 'trees': ['usr/share/morf/library']})
 
 

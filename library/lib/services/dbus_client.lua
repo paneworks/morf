@@ -121,12 +121,16 @@ function dbus_client.new(options)
   --- Forgets the cached proxies for a path whose object has gone (only
   --- those to `destination`, if given), so their connections can close.
   function client.forget(path, destination)
+    -- Collect first: clearing entries while `pairs` walks the table
+    -- can make the walk revisit entries forever.
+    local gone = {}
     for key in pairs(client.proxies) do
       local _, _, d, p = key:find("^(%S+) (%S+) ")
       if p == path and (destination == nil or d == destination) then
-        client.proxies[key] = nil
+        gone[#gone + 1] = key
       end
     end
+    for _, key in ipairs(gone) do client.proxies[key] = nil end
   end
 
   --- Calls a method. `arguments` is a list of positional arguments (typed
@@ -319,7 +323,29 @@ function dbus_client.new(options)
     local ok, subscription = pcall(client.dbus.on_name_owner_changed, client.bus, name,
       function(_, new_owner) handler(new_owner ~= "", new_owner) end)
     if not ok then return nil, tostring(subscription) end
-    return subscription
+    -- The engine's token closes as a method; this handle closes either way,
+    -- like the handles `on_signal` returns.
+    local handle = { closed = false }
+    function handle.close()
+      if handle.closed then return false end
+      handle.closed = true
+      pcall(subscription.close, subscription)
+      return true
+    end
+    function handle.active()
+      return not handle.closed and subscription:active()
+    end
+    return handle
+  end
+
+  --- Drops every cached proxy and ends every subscription still open: the
+  --- client is not used again.
+  function client.release()
+    local open = {}
+    for key, route in pairs(client.routes) do open[key] = route end
+    client.routes = {}
+    for _, route in pairs(open) do pcall(route.subscription.close, route.subscription) end
+    client.proxies = {}
   end
 
   --- The whole tree under an ObjectManager: path -> interface -> properties.

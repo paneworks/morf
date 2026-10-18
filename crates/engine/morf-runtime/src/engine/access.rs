@@ -1,0 +1,82 @@
+//! Each subsystem of the engine, reached by reference.
+
+use super::Engine;
+
+/// A shared and an exclusive accessor for each subsystem field.
+macro_rules! subsystems {
+    ($($(#[$doc:meta])* $field:ident, $field_mut:ident: $ty:ty;)*) => {
+        impl Engine {
+            $(
+                $(#[$doc])*
+                pub fn $field(&self) -> &$ty {
+                    &self.$field
+                }
+
+                $(#[$doc])*
+                pub fn $field_mut(&mut self) -> &mut $ty {
+                    &mut self.$field
+                }
+            )*
+        }
+    };
+}
+
+subsystems! {
+    /// Each node's declared states.
+    states, states_mut: crate::states::States;
+    /// The verbs answered over IPC.
+    ipc, ipc_mut: crate::ipc::IpcVerbs;
+    /// Each `ui.Layout` container's functions, and the linked texts.
+    layout_hooks, layout_hooks_mut: crate::layout::LayoutHooks;
+    /// Each list model a binding has read, with its revision signal.
+    model_revisions, model_revisions_mut: crate::models::ModelRevisions;
+    /// The shell's log lines.
+    logs, logs_mut: crate::log::Log;
+    /// `morf.clock` and its coarser grains.
+    clocks, clocks_mut: crate::wake::Clocks;
+    /// `morf.shared` values: this copy's signals, and what to publish.
+    shared, shared_mut: crate::shared::SharedValues;
+    /// Each node's `on_destroyed`, and those of removed nodes waiting to run.
+    destroy_hooks, destroy_hooks_mut: crate::destroy::DestroyHooks;
+    /// Each node's `shortcuts`, a sequence half typed, a modifier's tap.
+    shortcuts, shortcuts_mut: crate::shortcuts::Shortcuts;
+    /// Where each node was laid out, and how it is transformed.
+    transform_tracker, transform_tracker_mut: morf_layout::TransformTracker;
+    /// Presses under way that may become gestures.
+    gestures, gestures_mut: crate::gestures::Gestures;
+    /// Each virtualised view, by the node that shows it.
+    views, views_mut: crate::views::Views;
+    /// A reload, file watching, quitting and unlocking, as asked.
+    lifecycle, lifecycle_mut: crate::requests::Lifecycle;
+    /// What this output can do, and how big one of morf's pixels is on it.
+    display, display_mut: crate::display::Display;
+    /// How far the scene has moved, and how far each reader has seen.
+    revisions, revisions_mut: crate::revisions::Revisions;
+    /// Every text input's editing, and which has the keyboard.
+    editing, editing_mut: crate::editing::Editing;
+    /// Which node of each surface has focus.
+    focus, focus_mut: crate::focus::FocusState;
+    /// The handlers on the stack, the effect being captured, and the
+    /// signals standing for node properties.
+    tracking, tracking_mut: crate::tracking::Tracking;
+    /// Every timer and `Timer` node, and the clock they run on.
+    timers, timers_mut: crate::timers::Timers;
+    /// The session lock, the primary duty and the output list's revision.
+    session, session_mut: crate::session::Session;
+    /// Loaders' items and retained nodes, and the handlers told as they go.
+    retained, retained_mut: crate::retention::Retained;
+    /// Motion beside the scene's own: `on_finished` handlers, loops,
+    /// follows, theme fades and exits.
+    animation, animation_mut: crate::animation::Animation;
+    /// What handlers asked of the platform, queued for the host.
+    requests, requests_mut: crate::requests::Requests;
+    /// The windows the configuration declared, as the host reads them.
+    windows, windows_mut: crate::windows::Declarations;
+    /// Each node's handler for each event, and the `contains_pointer`
+    /// watches.
+    events, events_mut: crate::events::Events;
+    /// The node tree the configuration built.
+    scene, scene_mut: morf_scene::Scene;
+    /// The graph, the signal mirror, the declared effects and the flush.
+    reactive, reactive_mut: crate::reactive::Reactive;
+}

@@ -2,19 +2,19 @@
 //! configuration requires, and the window constructors.
 
 use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::{
-    LogLevel, layer_parse::*, process_helpers::*, runtime_helpers::*, scene_bindings::*, state::*,
-    surface_types::*, table_menu::*, window_geometry::*, window_methods::*, window_parse::*,
+    LogLevel, api::io::process_helpers::*, api::ui::scene::*, api::window::geometry::*,
+    api::window::layer::*, api::window::methods::*, api::window::parse::*, runtime::helpers::*,
+    runtime::host_types::*, runtime::state::*, value::table::*,
 };
 
 mod window;
 
 pub(crate) fn install_module_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     limits: crate::Limits,
 ) -> (Table<'gc>, Table<'gc>, Table<'gc>) {
@@ -123,12 +123,12 @@ pub(crate) fn install_module_api<'gc>(
             {
                 let state = state.borrow();
                 state
-                    .scene
+                    .scene()
                     .element(root)
                     .map_err(|error| HostError(error.to_string()))?;
                 if let Some(parent) = config.parent {
                     let parent = state
-                        .windows
+                        .windows()
                         .window_surfaces
                         .get(&parent)
                         .ok_or_else(|| HostError("popup parent is stale".into()))?;
@@ -136,7 +136,7 @@ pub(crate) fn install_module_api<'gc>(
                         return Err(HostError("popup parent must be a toplevel".into()).into());
                     }
                     if let Some(anchor) = &node_anchor
-                        && !scene_node_in_subtree(&state.scene, parent.root, anchor.node)
+                        && !scene_node_in_subtree(state.scene(), parent.root, anchor.node)
                     {
                         return Err(HostError(
                             "popup anchor node must belong to its parent surface".into(),
@@ -156,13 +156,15 @@ pub(crate) fn install_module_api<'gc>(
                 );
                 if let Some(anchor) = node_anchor {
                     state
-                        .scene
+                        .scene()
                         .element(anchor.node)
                         .map_err(|error| HostError(error.to_string()))?;
-                    state.windows.popup_node_anchors.insert(id, anchor);
+                    state.windows_mut().popup_node_anchors.insert(id, anchor);
                 }
-                crate::window_events::register_window_size(&mut state, id);
-                crate::window_events::window_handlers_from_options(ctx, &mut state, id, options)?;
+                crate::api::window::events::register_window_size(&mut state, id);
+                crate::api::window::events::window_handlers_from_options(
+                    ctx, &mut state, id, options,
+                )?;
                 id
             };
             let userdata = UserData::new_static(&ctx, WindowSurfaceToken { id });
@@ -183,12 +185,12 @@ pub(crate) fn install_module_api<'gc>(
             {
                 let state = state.borrow();
                 state
-                    .scene
+                    .scene()
                     .element(root)
                     .map_err(|error| HostError(error.to_string()))?;
                 if let Some(parent) = config.parent {
                     let parent = state
-                        .windows
+                        .windows()
                         .window_surfaces
                         .get(&parent)
                         .ok_or_else(|| HostError("floating parent is stale".into()))?;
@@ -206,8 +208,10 @@ pub(crate) fn install_module_api<'gc>(
                     updates_enabled,
                     WindowSurfaceKind::Toplevel(config),
                 );
-                crate::window_events::register_window_size(&mut state, id);
-                crate::window_events::window_handlers_from_options(ctx, &mut state, id, options)?;
+                crate::api::window::events::register_window_size(&mut state, id);
+                crate::api::window::events::window_handlers_from_options(
+                    ctx, &mut state, id, options,
+                )?;
                 id
             };
             let userdata = UserData::new_static(&ctx, WindowSurfaceToken { id });
@@ -227,7 +231,7 @@ pub(crate) fn install_module_api<'gc>(
             {
                 let state = state.borrow();
                 state
-                    .scene
+                    .scene()
                     .element(root)
                     .map_err(|error| HostError(error.to_string()))?;
             }
@@ -240,7 +244,9 @@ pub(crate) fn install_module_api<'gc>(
                     updates_enabled,
                     WindowSurfaceKind::Layer(config),
                 );
-                crate::window_events::window_handlers_from_options(ctx, &mut state, id, options)?;
+                crate::api::window::events::window_handlers_from_options(
+                    ctx, &mut state, id, options,
+                )?;
                 id
             };
             let userdata = UserData::new_static(&ctx, WindowSurfaceToken { id });

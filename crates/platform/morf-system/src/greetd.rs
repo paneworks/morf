@@ -7,6 +7,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use serde_json::{Value, json};
+use zeroize::Zeroizing;
 
 const MAX_MESSAGE_SIZE: usize = 1024 * 1024;
 
@@ -84,11 +85,20 @@ impl GreetdClient {
     }
 
     /// Answers the current authentication message.
+    ///
+    /// The answer is serialised straight into a buffer sized for its worst
+    /// escaping, so it never reallocates and is wiped once sent.
     pub fn respond(&mut self, response: Option<&str>) -> Result<GreetdResponse, GreetdError> {
-        self.request(json!({
-            "type": "post_auth_message_response",
-            "response": response,
-        }))
+        const HEAD: &[u8] = br#"{"type":"post_auth_message_response","response":"#;
+        let capacity = HEAD.len() + response.map_or(4, |text| text.len() * 6 + 2) + 1;
+        let mut payload = Zeroizing::new(Vec::with_capacity(capacity));
+        let reserved = payload.capacity();
+        payload.extend_from_slice(HEAD);
+        serde_json::to_writer(&mut *payload, &response)
+            .map_err(|error| GreetdError::Protocol(error.to_string()))?;
+        payload.push(b'}');
+        debug_assert_eq!(payload.capacity(), reserved);
+        self.exchange(&payload)
     }
 
     /// Starts an authenticated session command.
@@ -112,13 +122,17 @@ impl GreetdClient {
     fn request(&mut self, request: Value) -> Result<GreetdResponse, GreetdError> {
         let payload = serde_json::to_vec(&request)
             .map_err(|error| GreetdError::Protocol(error.to_string()))?;
+        self.exchange(&payload)
+    }
+
+    fn exchange(&mut self, payload: &[u8]) -> Result<GreetdResponse, GreetdError> {
         if payload.len() > MAX_MESSAGE_SIZE {
             return Err(GreetdError::Protocol("request is too large".to_owned()));
         }
         let length = u32::try_from(payload.len())
             .map_err(|_| GreetdError::Protocol("request is too large".to_owned()))?;
         self.stream.write_all(&length.to_ne_bytes())?;
-        self.stream.write_all(&payload)?;
+        self.stream.write_all(payload)?;
         self.stream.flush()?;
 
         let mut length = [0_u8; 4];
@@ -216,6 +230,27 @@ mod tests {
                 message: "Password:".to_owned(),
             }
         );
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn answers_are_escaped_json_without_reallocating() {
+        let (client, mut server) = UnixStream::pair().unwrap();
+        let server = thread::spawn(move || {
+            for expected in [json!("pa\"ss\u{1}wörd"), Value::Null] {
+                let request = read_value(&mut server);
+                assert_eq!(request["type"], "post_auth_message_response");
+                assert_eq!(request["response"], expected);
+                write_value(&mut server, &json!({ "type": "success" }));
+            }
+        });
+        let mut client = GreetdClient { stream: client };
+        let answer = "pa\"ss\u{1}wörd";
+        assert_eq!(
+            client.respond(Some(answer)).unwrap(),
+            GreetdResponse::Success
+        );
+        assert_eq!(client.respond(None).unwrap(), GreetdResponse::Success);
         server.join().unwrap();
     }
 

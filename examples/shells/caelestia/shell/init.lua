@@ -85,6 +85,20 @@ morf.effect("caelestia.scale", function()
   zoom_settle = morf.timer(300, function() zoom_settle = nil morf.reload() end, false)
 end)
 
+-- --------------------------------------------------------------- rotation --
+
+-- A screen turned between portrait and landscape: this output's shell is
+-- built again in place for the other layout, and what is open stays open.
+local built_portrait = require("responsive").portrait()
+morf.effect("caelestia.rotation", function()
+  morf.screens_revision()
+  local portrait = require("responsive").portrait()
+  if portrait ~= built_portrait then
+    built_portrait = portrait
+    morf.reload { output = true }
+  end
+end)
+
 -- ---------------------------------------------------------------- drawers --
 
 local launcher = require("launcher")
@@ -183,6 +197,7 @@ local frame_root=frame_view.build {desk=bar.desk,bar=bar.build(),drawers=drawer.
   rail={node=rail_node,shape=rail.shape},levels={node=levels_node,shape=levels.shape},
   overlays=overlays,triggers=triggers}
 require("phone_gestures").attach(frame_root)
+require("prek_controls").attach(frame_root)
 -- The shell's window, to a screen reader.
 frame_root.accessible_name = "Caelestia"
 ui.reparent(capture.editor.node,frame_root)

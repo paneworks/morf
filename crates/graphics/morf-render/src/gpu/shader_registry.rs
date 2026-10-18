@@ -23,6 +23,9 @@ impl WgpuBackend {
         // says so, not while a frame is being drawn.
         let textures = self.build_shader_textures(shader.textures)?;
         let data = self.build_shader_data_layout(shader.data);
+        // What naga or the driver rejects is caught here and returned, so the
+        // configuration hears why instead of a log line and a dead pipeline.
+        let scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         let pipeline = if shader.effect {
             build_glyph_pipeline(
                 &self.device,
@@ -31,10 +34,12 @@ impl WgpuBackend {
                 shader.wgsl,
                 textures.as_ref().map(|(_, layout)| layout),
                 data.as_ref(),
-                self.blend,
+                self.space,
             )
             .ok_or_else(|| {
-                GpuError("the glyph shader has no hook to splice an effect into".to_owned())
+                GpuError::Pipeline(
+                    "the glyph shader has no hook to splice an effect into".to_owned(),
+                )
             })?
         } else {
             build_field_pipeline(
@@ -48,13 +53,20 @@ impl WgpuBackend {
                     vertex: shader.vertex,
                     textures: textures.as_ref().map(|(_, layout)| layout),
                     data: data.as_ref(),
-                    blend: self.blend,
+                    space: self.space,
                 },
             )
             .ok_or_else(|| {
-                GpuError("the field shader has no hook to splice a shader into".to_owned())
+                GpuError::Pipeline(
+                    "the field shader has no hook to splice a shader into".to_owned(),
+                )
             })?
         };
+        if let Some(error) = super::backend_init::ready(scope.pop()) {
+            return Err(GpuError::Pipeline(format!(
+                "the GPU rejected the shader: {error}"
+            )));
+        }
         let registry = if shader.effect {
             &mut self.effect_shaders
         } else {
@@ -70,7 +82,26 @@ impl WgpuBackend {
                 data: data.map(|layout| (layout, shader.data.to_vec())),
             },
         );
+        if !self
+            .registered
+            .iter()
+            .any(|kept| kept.program == shader.program && kept.effect == shader.effect)
+        {
+            self.registered.push(KeptShader::of(&shader));
+        }
         Ok(())
+    }
+
+    /// Builds every registered shader's pipeline again, for a new space.
+    pub(crate) fn rebuild_shaders(&mut self) {
+        self.shaders.clear();
+        self.effect_shaders.clear();
+        self.shader_instances.clear();
+        for kept in std::mem::take(&mut self.registered) {
+            if let Err(error) = self.register_shader(kept.registration()) {
+                eprintln!("morf: gpu: shader {:#x} not rebuilt: {error}", kept.program);
+            }
+        }
     }
 
     /// Decodes and uploads a shader's declared textures.
@@ -114,7 +145,7 @@ impl WgpuBackend {
             let image = self
                 .images
                 .load(path, 0, 0, 120)
-                .map_err(|error| GpuError(format!("shader texture `{path}`: {error}")))?;
+                .map_err(|error| GpuError::Other(format!("shader texture `{path}`: {error}")))?;
             views.push(self.upload_shader_texture(&image));
         }
         let mut bindings = Vec::with_capacity(views.len() * 2);
@@ -214,5 +245,48 @@ pub(crate) fn create_shader_instance(
         bind_group,
         data,
         frame,
+    }
+}
+
+/// A registration as owned data, so it can be made again.
+pub(crate) struct KeptShader {
+    program: u64,
+    wgsl: Option<String>,
+    vertex: Option<String>,
+    offsets: Vec<u32>,
+    uniform_size: u32,
+    owns_coverage: bool,
+    effect: bool,
+    textures: Vec<String>,
+    data: Vec<(String, u32)>,
+}
+
+impl KeptShader {
+    fn of(shader: &ShaderRegistration<'_>) -> Self {
+        Self {
+            program: shader.program,
+            wgsl: shader.wgsl.map(str::to_owned),
+            vertex: shader.vertex.map(str::to_owned),
+            offsets: shader.offsets.to_vec(),
+            uniform_size: shader.uniform_size,
+            owns_coverage: shader.owns_coverage,
+            effect: shader.effect,
+            textures: shader.textures.to_vec(),
+            data: shader.data.to_vec(),
+        }
+    }
+
+    fn registration(&self) -> ShaderRegistration<'_> {
+        ShaderRegistration {
+            program: self.program,
+            wgsl: self.wgsl.as_deref(),
+            vertex: self.vertex.as_deref(),
+            offsets: &self.offsets,
+            uniform_size: self.uniform_size,
+            owns_coverage: self.owns_coverage,
+            effect: self.effect,
+            textures: &self.textures,
+            data: &self.data,
+        }
     }
 }

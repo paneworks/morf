@@ -9,6 +9,9 @@ impl<B: Backend + ?Sized> Backend for Dense<B> {
     fn outputs(&self) -> &[Output] {
         self.inner.outputs()
     }
+    fn output_color(&self, id: u32) -> Option<crate::OutputColor> {
+        self.inner.output_color(id)
+    }
     fn open(&mut self, id: WindowId, kind: WindowKind) -> Result<(), String> {
         let kind = match kind {
             WindowKind::Layer(config) => {
@@ -124,8 +127,8 @@ impl<B: Backend + ?Sized> Backend for Dense<B> {
         self.inner.damage(id, x, y, width, height);
     }
     #[cfg(feature = "wayland")]
-    fn as_wayland(&self) -> Option<&crate::backend::wayland::LayerClient> {
-        self.inner.as_wayland()
+    fn desktop_link(&self) -> Option<crate::backend::wayland::DesktopLink> {
+        self.inner.desktop_link()
     }
     #[cfg(feature = "headless")]
     fn as_headless(&self) -> Option<&crate::backend::headless::HeadlessBackend> {
@@ -148,7 +151,7 @@ impl<B: Backend + ?Sized> Backend for Dense<B> {
     fn has_queued_events(&self) -> bool {
         !self.pending.is_empty() || self.inner.has_queued_events()
     }
-    fn set_waker(&mut self, waker: fn()) {
+    fn set_waker(&mut self, waker: crate::transfer::Wakeup) {
         self.inner.set_waker(waker);
     }
     fn screens(&self) -> &[Output] {
@@ -156,6 +159,11 @@ impl<B: Backend + ?Sized> Backend for Dense<B> {
     }
     fn own_output(&self) -> Option<Output> {
         self.inner.own_output()
+    }
+    fn layer_space(&self, id: u64) -> Option<crate::LayerSpace> {
+        let mut space = self.inner.layer_space(id)?;
+        space.local_scale *= self.zoom(WindowId::Layer(id)).point_out(1.0);
+        Some(space)
     }
     fn physical_size(&self) -> (u32, u32) {
         self.inner.physical_size()

@@ -118,6 +118,7 @@ fn scene_nodes() -> (NodeHandle, NodeHandle) {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn over_an_opaque_rectangle_text_is_drawn_in_subpixels_with_fringes_on_the_right_sides() {
+    require_gpu!();
     let (rect, text) = scene_nodes();
     let list = DrawList {
         commands: vec![ground(rect, 255), ink(text, "Illumination")],
@@ -179,6 +180,7 @@ fn over_an_opaque_rectangle_text_is_drawn_in_subpixels_with_fringes_on_the_right
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_stem_edge_matches_the_cpu_reference() {
+    require_gpu!();
     // An `l`: one tall vertical stem. Its left edge is placed to a fraction
     // of a pixel by where greyscale put it, and the three channels of the
     // subpixel pixel there are what lcd.rs computes for an edge at that
@@ -271,6 +273,7 @@ fn stays_greyscale(list: &DrawList, scale_120: u32, opaque: bool, why: &str) {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn text_over_nothing_or_over_a_translucent_rectangle_stays_greyscale() {
+    require_gpu!();
     let (rect, text) = scene_nodes();
     stays_greyscale(
         &DrawList {
@@ -295,6 +298,7 @@ fn text_over_nothing_or_over_a_translucent_rectangle_stays_greyscale() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn a_surface_declared_opaque_is_ground_everywhere() {
+    require_gpu!();
     // White text, so its fringes show over the cleared (black) target.
     let (_, text) = scene_nodes();
     let mut white = ink(text, "Illumination");
@@ -316,6 +320,7 @@ fn a_surface_declared_opaque_is_ground_everywhere() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn rotated_morphing_outlined_or_fractionally_scaled_text_stays_greyscale() {
+    require_gpu!();
     let (rect, text) = scene_nodes();
     let with = |change: &dyn Fn(&mut DrawCommand)| {
         let mut command = ink(text, "Illumination");
@@ -364,6 +369,7 @@ fn rotated_morphing_outlined_or_fractionally_scaled_text_stays_greyscale() {
 #[test]
 #[ignore = "requires a GPU adapter"]
 fn without_dual_source_blending_it_is_never_turned_on() {
+    require_gpu!();
     let mut backend = pollster::block_on(WgpuBackend::new(8, 8)).unwrap();
     backend.lcd_supported = false;
     assert!(!backend.set_subpixel_text(Some(RGB)));

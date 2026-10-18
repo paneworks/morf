@@ -1,12 +1,13 @@
 use luna::{Callback, CallbackReturn, Closure, Context, Table, Value as LuaValue};
-use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::{layer_parse::*, scene_bindings::*, state::*, table_menu::*, types::*};
+use crate::{
+    api::ui::scene::*, api::window::layer::*, runtime::state::*, value::table::*, vm::types::*,
+};
 
 /// The callbacks `morf.surface` holds rather than layer settings.
-fn surface_event(key: &str) -> Option<crate::window_events::WindowEvent> {
-    use crate::window_events::WindowEvent;
+fn surface_event(key: &str) -> Option<crate::api::window::events::WindowEvent> {
+    use crate::api::window::events::WindowEvent;
     match key {
         "on_focus_changed" => Some(WindowEvent::FocusChanged),
         "on_pointer_changed" => Some(WindowEvent::PointerChanged),
@@ -16,7 +17,7 @@ fn surface_event(key: &str) -> Option<crate::window_events::WindowEvent> {
 
 pub(crate) fn install_shell_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
     let surface_read_state = Rc::clone(&state);
@@ -25,21 +26,22 @@ pub(crate) fn install_shell_api<'gc>(
         if let Some(event) = surface_event(&key) {
             let handler = surface_read_state
                 .borrow()
-                .windows
+                .windows()
                 .surface_handlers
                 .get(&event)
                 .cloned();
             match handler {
-                Some(handler) => {
-                    stack.replace(ctx, ctx.fetch(&crate::vm::handler_store::stashed(&handler)))
-                }
+                Some(handler) => stack.replace(
+                    ctx,
+                    ctx.fetch(&crate::vm::handler_store::stashed(&handler).map_err(HostError)?),
+                ),
                 None => stack.replace(ctx, LuaValue::Nil),
             }
             return Ok(CallbackReturn::Return);
         }
         let value = layer_setting_to_lua(
             ctx,
-            &surface_read_state.borrow().windows.layer_surface,
+            &surface_read_state.borrow().windows().layer_surface,
             &key,
         );
         stack.replace(ctx, value);
@@ -52,10 +54,10 @@ pub(crate) fn install_shell_api<'gc>(
         if let Some(event) = surface_event(&key) {
             match value {
                 LuaValue::Nil => {
-                    state.windows.surface_handlers.remove(&event);
+                    state.windows_mut().surface_handlers.remove(&event);
                 }
                 LuaValue::Function(luna::Function::Closure(callback)) => {
-                    state.windows.surface_handlers.insert(
+                    state.windows_mut().surface_handlers.insert(
                         event,
                         crate::vm::handler_store::register(ctx.stash(callback)),
                     );
@@ -66,9 +68,9 @@ pub(crate) fn install_shell_api<'gc>(
             }
             return Ok(CallbackReturn::Return);
         }
-        let changed = apply_layer_setting(ctx, &mut state.windows.layer_surface, &key, value)
+        let changed = apply_layer_setting(ctx, &mut state.windows_mut().layer_surface, &key, value)
             .map_err(HostError)?;
-        state.windows.layer_surface_changed |= changed;
+        state.windows_mut().layer_surface_changed |= changed;
         Ok(CallbackReturn::Return)
     });
     let surface_metatable = Table::new(&ctx);
@@ -127,15 +129,9 @@ pub(crate) fn install_shell_api<'gc>(
         };
         {
             let mut state = density_state.borrow_mut();
-            if state.density != parsed {
-                state.density = parsed;
-                state.density_changed = true;
+            if state.display_mut().set_density(parsed) {
                 // What reads the screens' size reads it again.
-                let state = &mut *state;
-                state
-                    .engine
-                    .session
-                    .touch_screens(&mut state.engine.reactive);
+                state.touch_screens();
             }
         }
         // The screens already described are described again in the new unit.
@@ -227,14 +223,14 @@ pub(crate) fn install_shell_api<'gc>(
     );
     let shell_id_state = Rc::clone(&state);
     let shell_id = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let id = shell_storage_key(&shell_id_state.borrow().shell_root);
+        let id = shell_storage_key(shell_id_state.borrow().shell_root());
         stack.replace(ctx, id);
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "shell_id", shell_id);
     let shell_dir_state = Rc::clone(&state);
     let shell_dir = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let root = shell_dir_state.borrow().shell_root.clone();
+        let root = shell_dir_state.borrow().shell_root().to_path_buf();
         stack.replace(ctx, root.to_string_lossy().as_ref());
         Ok(CallbackReturn::Return)
     });
@@ -243,7 +239,7 @@ pub(crate) fn install_shell_api<'gc>(
     let shell_path = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let relative: String = stack.consume(ctx)?;
         let path =
-            rooted_path(&shell_root_state.borrow().shell_root, &relative).map_err(HostError)?;
+            rooted_path(shell_root_state.borrow().shell_root(), &relative).map_err(HostError)?;
         stack.replace(ctx, path.to_string_lossy().as_ref());
         Ok(CallbackReturn::Return)
     });
@@ -256,8 +252,8 @@ pub(crate) fn install_shell_api<'gc>(
     ] {
         let directory_state = Rc::clone(&state);
         let directory = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-            let root =
-                shell_storage_dir(&directory_state.borrow().shell_root, kind).map_err(HostError)?;
+            let root = shell_storage_dir(directory_state.borrow().shell_root(), kind)
+                .map_err(HostError)?;
             stack.replace(ctx, root.to_string_lossy().as_ref());
             Ok(CallbackReturn::Return)
         });
@@ -267,7 +263,7 @@ pub(crate) fn install_shell_api<'gc>(
         let path = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let relative: String = stack.consume(ctx)?;
             let root =
-                shell_storage_dir(&path_state.borrow().shell_root, kind).map_err(HostError)?;
+                shell_storage_dir(path_state.borrow().shell_root(), kind).map_err(HostError)?;
             let path = rooted_path(&root, &relative).map_err(HostError)?;
             stack.replace(ctx, path.to_string_lossy().as_ref());
             Ok(CallbackReturn::Return)
@@ -309,33 +305,45 @@ pub(crate) fn install_shell_api<'gc>(
     });
     morf.set_field(ctx, "has_version", has_version);
     let reload_state = Rc::clone(&state);
+    // `morf.reload(hard)`, or `morf.reload { hard = ..., output = ... }`:
+    // `output`, only this output's runtime.
     let reload = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let hard: Option<bool> = stack.consume(ctx)?;
-        let mut state = reload_state.borrow_mut();
-        state.lifecycle.reload_request =
-            Some(state.lifecycle.reload_request.unwrap_or(false) || hard.unwrap_or(false));
+        let asked = match stack.consume::<LuaValue>(ctx)? {
+            LuaValue::Table(options) => {
+                let field = |name| table_bool(ctx, options, name, false);
+                ReloadRequest {
+                    hard: field("hard").map_err(HostError)?,
+                    output: field("output").map_err(HostError)?,
+                }
+            }
+            LuaValue::Nil => ReloadRequest::default(),
+            LuaValue::Boolean(hard) => ReloadRequest {
+                hard,
+                output: false,
+            },
+            _ => return Err(HostError("morf.reload takes a boolean or a table".into()).into()),
+        };
+        reload_state.borrow_mut().lifecycle_mut().ask_reload(asked);
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "reload", reload);
     let completed_state = Rc::clone(&state);
     let on_reload_completed = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
-        completed_state
-            .borrow_mut()
-            .lifecycle
-            .reload_completed_callbacks
-            .push(crate::vm::handler_store::register(ctx.stash(callback)));
+        completed_state.borrow_mut().lifecycle_mut().on_reload(
+            true,
+            crate::vm::handler_store::register(ctx.stash(callback)),
+        );
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "on_reload_completed", on_reload_completed);
     let failed_state = Rc::clone(&state);
     let on_reload_failed = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
-        failed_state
-            .borrow_mut()
-            .lifecycle
-            .reload_failed_callbacks
-            .push(crate::vm::handler_store::register(ctx.stash(callback)));
+        failed_state.borrow_mut().lifecycle_mut().on_reload(
+            false,
+            crate::vm::handler_store::register(ctx.stash(callback)),
+        );
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "on_reload_failed", on_reload_failed);
@@ -343,19 +351,16 @@ pub(crate) fn install_shell_api<'gc>(
     let watch_files = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let value: Option<bool> = stack.consume(ctx)?;
         let mut state = watch_state.borrow_mut();
-        if let Some(value) = value
-            && state.lifecycle.watch_files != value
-        {
-            state.lifecycle.watch_files = value;
-            state.lifecycle.watch_files_changed = true;
+        if let Some(value) = value {
+            state.lifecycle_mut().set_watch_files(value);
         }
-        stack.replace(ctx, state.lifecycle.watch_files);
+        stack.replace(ctx, state.lifecycle().watch_files());
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "watch_files", watch_files);
     let lock_state_state = Rc::clone(&state);
     let session_lock_state = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let name = crate::runtime_session_lock::current(&lock_state_state.borrow()).name();
+        let name = crate::runtime::session_lock::current(&lock_state_state.borrow()).name();
         stack.replace(ctx, name);
         Ok(CallbackReturn::Return)
     });
@@ -366,7 +371,10 @@ pub(crate) fn install_shell_api<'gc>(
     let builder_state = Rc::clone(&state);
     let lock_surface = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let builder: Option<Closure> = stack.consume(ctx)?;
-        builder_state.borrow_mut().session.lock_surface_builder =
+        builder_state
+            .borrow_mut()
+            .session_mut()
+            .lock_surface_builder =
             builder.map(|builder| crate::vm::handler_store::register(ctx.stash(builder)));
         Ok(CallbackReturn::Return)
     });
@@ -382,10 +390,10 @@ pub(crate) fn install_shell_api<'gc>(
         let register = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let callback: Closure = stack.consume(ctx)?;
             let mut state = callbacks_state.borrow_mut();
-            if state.session.session_lock_callbacks.len() >= 64 {
+            if state.session().session_lock_callbacks.len() >= 64 {
                 return Err(HostError("session lock callback limit reached".into()).into());
             }
-            state.session.session_lock_callbacks.push((
+            state.session_mut().session_lock_callbacks.push((
                 crate::vm::handler_store::register(ctx.stash(callback)),
                 locked_only,
             ));
@@ -400,7 +408,7 @@ pub(crate) fn install_shell_api<'gc>(
     // Exiting from inside a Lua callback would unwind the runtime that is
     // running the callback.
     let quit = Callback::from_fn(&ctx, move |_, _, _| {
-        quit_state.borrow_mut().lifecycle.quit_requested = true;
+        quit_state.borrow_mut().lifecycle_mut().quit();
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "quit", quit);

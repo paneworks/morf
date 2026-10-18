@@ -10,7 +10,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::{Process, ProcessConfig, ProcessEvent};
+use crate::{Error, Process, ProcessConfig, ProcessEvent};
 
 /// The longest working directory a view accepts, in bytes.
 pub const MAX_WORKING_DIRECTORY: usize = 4_096;
@@ -23,12 +23,12 @@ pub struct ProcessView {
 
 impl ProcessView {
     /// A view of `config`, its child started when `running`.
-    pub fn new(config: ProcessConfig, running: bool) -> Result<Self, String> {
+    pub fn new(config: ProcessConfig, running: bool) -> Result<Self, Error> {
         check_command(&config.command)?;
         let process = running
             .then(|| Process::spawn_config(&config))
             .transpose()
-            .map_err(|error| error.to_string())?;
+            .map_err(Error::process)?;
         Ok(Self { config, process })
     }
 
@@ -37,12 +37,11 @@ impl ProcessView {
     }
 
     /// Starts the child; false when it was already running.
-    pub fn start(&mut self) -> Result<bool, String> {
+    pub fn start(&mut self) -> Result<bool, Error> {
         if self.process.is_some() {
             return Ok(false);
         }
-        self.process =
-            Some(Process::spawn_config(&self.config).map_err(|error| error.to_string())?);
+        self.process = Some(Process::spawn_config(&self.config).map_err(Error::process)?);
         Ok(true)
     }
 
@@ -55,16 +54,14 @@ impl ProcessView {
         self.process.as_ref().map(Process::id)
     }
 
-    fn child(&mut self) -> Result<&mut Process, String> {
+    fn child(&mut self) -> Result<&mut Process, Error> {
         self.process
             .as_mut()
-            .ok_or_else(|| "process is not running".to_owned())
+            .ok_or_else(|| Error::Process("process is not running".to_owned()))
     }
 
-    pub fn write(&mut self, bytes: &[u8]) -> Result<(), String> {
-        self.child()?
-            .write(bytes)
-            .map_err(|error| error.to_string())
+    pub fn write(&mut self, bytes: &[u8]) -> Result<(), Error> {
+        self.child()?.write(bytes).map_err(Error::process)
     }
 
     /// Closes the child's stdin; nothing when it is not running.
@@ -74,23 +71,18 @@ impl ProcessView {
         }
     }
 
-    pub fn kill(&mut self) -> Result<(), String> {
-        self.child()?.kill().map_err(|error| error.to_string())
+    pub fn kill(&mut self) -> Result<(), Error> {
+        self.child()?.kill().map_err(Error::process)
     }
 
-    pub fn signal(&mut self, signal: i32) -> Result<(), String> {
-        self.child()?
-            .signal(signal)
-            .map_err(|error| error.to_string())
+    pub fn signal(&mut self, signal: i32) -> Result<(), Error> {
+        self.child()?.signal(signal).map_err(Error::process)
     }
 
     /// The child's next event within `timeout`; after its exit the view is
     /// no longer running.
-    pub fn next_event(&mut self, timeout: Duration) -> Result<Option<ProcessEvent>, String> {
-        let event = self
-            .child()?
-            .next_event(timeout)
-            .map_err(|error| error.to_string())?;
+    pub fn next_event(&mut self, timeout: Duration) -> Result<Option<ProcessEvent>, Error> {
+        let event = self.child()?.next_event(timeout).map_err(Error::process)?;
         if matches!(event, Some(ProcessEvent::Exit(_))) {
             self.process = None;
         }
@@ -99,7 +91,7 @@ impl ProcessView {
 
     /// Edits the description; a running child is respawned with the new
     /// one, and nothing changes when that spawn fails.
-    pub fn update(&mut self, edit: impl FnOnce(&mut ProcessConfig)) -> Result<(), String> {
+    pub fn update(&mut self, edit: impl FnOnce(&mut ProcessConfig)) -> Result<(), Error> {
         let mut config = self.config.clone();
         edit(&mut config);
         check_command(&config.command)?;
@@ -108,7 +100,7 @@ impl ProcessView {
             .is_some()
             .then(|| Process::spawn_config(&config))
             .transpose()
-            .map_err(|error| error.to_string())?;
+            .map_err(Error::process)?;
         self.config = config;
         if let Some(replacement) = replacement {
             self.process = Some(replacement);
@@ -118,21 +110,21 @@ impl ProcessView {
 }
 
 /// Refuses a view with nothing to run.
-pub fn check_command(command: &[String]) -> Result<(), String> {
+pub fn check_command(command: &[String]) -> Result<(), Error> {
     if command.is_empty() {
-        return Err("process_view command cannot be empty".into());
+        return Err(Error::invalid("process_view command cannot be empty"));
     }
     Ok(())
 }
 
 /// A working directory as a script gives it, refused when empty, longer
 /// than [`MAX_WORKING_DIRECTORY`] or holding a NUL.
-pub fn working_directory(directory: String) -> Result<PathBuf, String> {
+pub fn working_directory(directory: String) -> Result<PathBuf, Error> {
     if directory.is_empty()
         || directory.len() > MAX_WORKING_DIRECTORY
         || directory.as_bytes().contains(&0)
     {
-        return Err("working directory is invalid".into());
+        return Err(Error::invalid("working directory is invalid"));
     }
     Ok(PathBuf::from(directory))
 }

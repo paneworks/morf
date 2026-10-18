@@ -50,10 +50,11 @@ pub(crate) fn register(closure: StashedClosure) -> Handler {
     Handler::new(id, registry as Rc<dyn HandlerRegistry>)
 }
 
-/// The closure behind `handler`.
-pub(crate) fn stashed(handler: &Handler) -> StashedClosure {
+/// The closure behind `handler`, or an error naming the handler whose
+/// closure is gone.
+pub(crate) fn stashed(handler: &Handler) -> Result<StashedClosure, String> {
     debug_assert!(handler.registry().as_any().is::<LuaHandlers>());
     CLOSURES
         .with(|closures| closures.borrow().get(&handler.id()).cloned())
-        .expect("a live handler keeps its closure")
+        .ok_or_else(|| format!("handler {} outlived its closure", handler.id().0))
 }

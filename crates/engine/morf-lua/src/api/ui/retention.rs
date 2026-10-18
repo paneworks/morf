@@ -1,16 +1,17 @@
 use luna::{
     Callback, CallbackReturn, Closure, Context, Table, UserData, UserRef, Value as LuaValue,
 };
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::rc::Rc;
 
 use crate::{
-    reactive_bindings::*, runtime_helpers::*, scene_bindings::*, state::*, table_menu::*, types::*,
+    api::ui::bindings::*, api::ui::scene::*, runtime::helpers::*, runtime::state::*,
+    value::table::*, vm::types::*,
 };
 
 pub(crate) fn install_retention_api<'gc>(
     ctx: Context<'gc>,
-    state: Rc<RefCell<ReactiveState>>,
+    state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     limits: Limits,
 ) {
@@ -20,7 +21,7 @@ pub(crate) fn install_retention_api<'gc>(
             let retainable: UserRef<RetainableToken> = stack.consume(ctx)?;
             let locks = state
                 .borrow_mut()
-                .retained
+                .retained_mut()
                 .retention
                 .lock(retainable.node)
                 .map_err(|error| HostError(error.to_string()))?;
@@ -35,12 +36,12 @@ pub(crate) fn install_retention_api<'gc>(
             let (locks, destroy) = {
                 let mut state = state.borrow_mut();
                 let locks = state
-                    .retained
+                    .retained_mut()
                     .retention
                     .unlock(retainable.node)
                     .map_err(|error| HostError(error.to_string()))?;
                 let destroy = state
-                    .retained
+                    .retained_mut()
                     .retention
                     .should_destroy(retainable.node)
                     .unwrap_or(false);
@@ -60,12 +61,12 @@ pub(crate) fn install_retention_api<'gc>(
             let destroy = {
                 let mut state = state.borrow_mut();
                 state
-                    .retained
+                    .retained_mut()
                     .retention
                     .force_unlock(retainable.node)
                     .map_err(|error| HostError(error.to_string()))?;
                 state
-                    .retained
+                    .retained_mut()
                     .retention
                     .should_destroy(retainable.node)
                     .unwrap_or(false)
@@ -82,7 +83,7 @@ pub(crate) fn install_retention_api<'gc>(
             let retainable: UserRef<RetainableToken> = stack.consume(ctx)?;
             let retained = state
                 .borrow()
-                .retained
+                .retained()
                 .retention
                 .state(retainable.node)
                 .is_some_and(|state| state.dropped);
@@ -96,7 +97,7 @@ pub(crate) fn install_retention_api<'gc>(
             let retainable: UserRef<RetainableToken> = stack.consume(ctx)?;
             let locks = state
                 .borrow()
-                .retained
+                .retained()
                 .retention
                 .state(retainable.node)
                 .map_or(0, |state| state.locks);
@@ -120,7 +121,7 @@ pub(crate) fn install_retention_api<'gc>(
             let (node, options): (UserRef<NodeToken>, LuaValue) = stack.consume(ctx)?;
             state
                 .borrow()
-                .scene
+                .scene()
                 .element(node.handle)
                 .map_err(|error| HostError(error.to_string()))?;
             let mut callbacks = RetainCallbacks::default();
@@ -142,16 +143,16 @@ pub(crate) fn install_retention_api<'gc>(
             }
             {
                 let mut state = state.borrow_mut();
-                state.retained.retention.register(node.handle);
+                state.retained_mut().retention.register(node.handle);
                 if locked {
                     state
-                        .retained
+                        .retained_mut()
                         .retention
                         .lock(node.handle)
                         .map_err(|error| HostError(error.to_string()))?;
                 }
                 state
-                    .retained
+                    .retained_mut()
                     .retain_callbacks
                     .insert(node.handle, callbacks);
             }
@@ -177,19 +178,19 @@ pub(crate) fn install_retention_api<'gc>(
                 let mut state = lock.state.borrow_mut();
                 if locked {
                     state
-                        .retained
+                        .retained_mut()
                         .retention
                         .lock(lock.node)
                         .map_err(|error| HostError(error.to_string()))?;
                     false
                 } else {
                     state
-                        .retained
+                        .retained_mut()
                         .retention
                         .unlock(lock.node)
                         .map_err(|error| HostError(error.to_string()))?;
                     state
-                        .retained
+                        .retained_mut()
                         .retention
                         .should_destroy(lock.node)
                         .unwrap_or(false)
@@ -207,7 +208,7 @@ pub(crate) fn install_retention_api<'gc>(
         let retained = lock
             .state
             .borrow()
-            .retained
+            .retained()
             .retention
             .state(lock.node)
             .is_some_and(|state| state.dropped);
@@ -233,7 +234,7 @@ pub(crate) fn install_retention_api<'gc>(
             if locked {
                 state
                     .borrow_mut()
-                    .retained
+                    .retained_mut()
                     .retention
                     .lock(retainable.node)
                     .map_err(|error| HostError(error.to_string()))?;
@@ -269,7 +270,7 @@ pub(crate) fn install_retention_api<'gc>(
         let state = Rc::clone(&state);
         move |ctx, _, mut stack| {
             let handle: UserRef<EffectHandleToken> = stack.consume(ctx)?;
-            let alive = state.borrow().reactive.effects.contains_key(&handle.token);
+            let alive = state.borrow().reactive().effect(handle.token).is_some();
             stack.replace(ctx, alive);
             Ok(CallbackReturn::Return)
         }
@@ -296,13 +297,12 @@ pub(crate) fn install_retention_api<'gc>(
             let token = {
                 let mut state = state.borrow_mut();
                 if let Some(owner) = owner
-                    && !state.scene.contains(owner)
+                    && !state.scene().contains(owner)
                 {
                     return Err(HostError("effect owner is a removed node".to_owned()).into());
                 }
-                let token = state.next_effect;
-                state.next_effect = state.next_effect.wrapping_add(1);
-                state.reactive.effects.insert(
+                let token = state.tracking_mut().next_effect_token();
+                state.reactive_mut().add_effect(
                     token,
                     LuaEffect {
                         handler: crate::vm::handler_store::register(ctx.stash(closure)),
@@ -319,7 +319,7 @@ pub(crate) fn install_retention_api<'gc>(
             handle.set_metatable(ctx, Some(ctx.fetch(&effect_metatable)));
             // The handle on success, so `assert(morf.effect(...))` still
             // reads; `false, message, handle` when the first run failed.
-            match flush_reactive(&state, ctx, limits) {
+            match flush_status(&state, ctx, limits) {
                 Ok(()) => stack.replace(ctx, handle),
                 Err(message) => stack.replace(ctx, (false, message, handle)),
             }
@@ -340,7 +340,7 @@ pub(crate) struct EffectHandleToken {
 /// nothing. While a flush holds the graph the removal waits for it to
 /// finish. False if the effect was already gone.
 pub(crate) fn dispose_effect(state: &mut ReactiveState, token: u64) -> bool {
-    if !state.reactive.dispose_effect(token) {
+    if !state.reactive_mut().dispose_effect(token) {
         return false;
     }
     state.collect_graph_garbage();

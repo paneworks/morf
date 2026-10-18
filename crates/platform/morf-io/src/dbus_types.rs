@@ -20,6 +20,7 @@
 //! alive" to it, which is the one thing every fd-returning service on a
 //! desktop (inhibitors, leases, portals' handles) actually asks of a client.
 
+pub(crate) mod driver;
 mod proxy;
 mod router;
 
@@ -32,6 +33,7 @@ use std::time::{Duration, Instant};
 
 use zbus::blocking::Connection as DbusConnection;
 
+use crate::Error;
 use crate::dbus_decode::DbusSignal;
 use zbus::zvariant::{Structure, StructureBuilder};
 
@@ -57,7 +59,7 @@ impl Bus {
     /// is done on the calling thread and zbus is handed the stream. An
     /// address this does not understand -- TCP, `unixexec`, a launchd one --
     /// goes to zbus as before.
-    pub(crate) fn builder(self) -> zbus::Result<zbus::blocking::connection::Builder<'static>> {
+    pub(crate) fn builder(self) -> zbus::Result<zbus::connection::Builder<'static>> {
         let address = match self {
             Self::Session => std::env::var("DBUS_SESSION_BUS_ADDRESS").ok().or_else(|| {
                 std::env::var("XDG_RUNTIME_DIR")
@@ -70,13 +72,11 @@ impl Bus {
             ),
         };
         if let Some(stream) = address.as_deref().and_then(connect_local) {
-            return Ok(zbus::blocking::connection::Builder::async_io_unix_stream(
-                stream,
-            ));
+            return Ok(zbus::connection::Builder::async_io_unix_stream(stream));
         }
         match self {
-            Self::Session => zbus::blocking::connection::Builder::session(),
-            Self::System => zbus::blocking::connection::Builder::system(),
+            Self::Session => zbus::connection::Builder::session(),
+            Self::System => zbus::connection::Builder::system(),
         }
     }
 }
@@ -104,7 +104,7 @@ fn shared_connection(bus: Bus, timeout: Duration) -> zbus::Result<zbus::blocking
         }
         let _gone = shared.swap_remove(index);
     }
-    let connection = bus.builder()?.method_timeout(timeout).build()?;
+    let connection = driver::build(bus.builder()?.method_timeout(timeout))?;
     shared.push((bus, timeout, connection.clone()));
     Ok(connection)
 }
@@ -190,7 +190,7 @@ pub const DEFAULT_CALL_TIMEOUT: Duration = Duration::from_millis(1000);
 /// [`DbusProxy::call_async`] and [`call_async`]; ask with
 /// [`PendingReply::try_take`] from a poll.
 pub struct PendingReply {
-    rx: std::sync::mpsc::Receiver<Result<DbusValue, String>>,
+    rx: std::sync::mpsc::Receiver<Result<DbusValue, Error>>,
     /// When to stop waiting, for a call whose connection waits longer than
     /// its caller asked to.
     deadline: Option<Instant>,
@@ -206,18 +206,18 @@ impl PendingReply {
     /// The reply if it is in, `None` while it is not. A reply whose thread
     /// vanished is an error rather than a wait that never ends, and so is one
     /// that missed its deadline.
-    pub fn try_take(&self) -> Option<Result<DbusValue, String>> {
+    pub fn try_take(&self) -> Option<Result<DbusValue, Error>> {
         match self.rx.try_recv() {
             Ok(reply) => Some(reply),
             Err(std::sync::mpsc::TryRecvError::Empty) => match self.deadline {
-                Some(deadline) if Instant::now() >= deadline => Some(Err(
+                Some(deadline) if Instant::now() >= deadline => Some(Err(Error::TimedOut(
                     "org.freedesktop.DBus.Error.Timeout: the call was not answered in time"
                         .to_owned(),
-                )),
+                ))),
                 _ => None,
             },
             Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                Some(Err("the D-Bus reply was lost".to_owned()))
+                Some(Err(Error::bus("the D-Bus reply was lost")))
             }
         }
     }
@@ -252,16 +252,17 @@ static CALLS_IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
 /// move the unbounded part somewhere less visible.
 fn spawn_call(
     deadline: Option<Instant>,
-    work: impl FnOnce() -> Result<DbusValue, String> + Send + 'static,
-) -> Result<PendingReply, String> {
+    work: impl FnOnce() -> Result<DbusValue, Error> + Send + 'static,
+) -> Result<PendingReply, Error> {
     let taken = CALLS_IN_FLIGHT.fetch_add(1, Ordering::AcqRel);
     if taken >= MAX_CALLS_IN_FLIGHT {
         CALLS_IN_FLIGHT.fetch_sub(1, Ordering::AcqRel);
-        return Err(format!(
+        return Err(Error::Invalid(format!(
             "too many D-Bus calls in flight (the limit is {MAX_CALLS_IN_FLIGHT})"
-        ));
+        )));
     }
     let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    let waker = crate::waker();
     let spawned = thread::Builder::new()
         .name("morf-dbus-call".to_owned())
         .spawn(move || {
@@ -269,11 +270,13 @@ fn spawn_call(
             // and dropping the answer is exactly right.
             let _ = tx.send(work());
             CALLS_IN_FLIGHT.fetch_sub(1, Ordering::AcqRel);
-            crate::wake_all();
+            waker.wake();
         });
     if let Err(error) = spawned {
         CALLS_IN_FLIGHT.fetch_sub(1, Ordering::AcqRel);
-        return Err(format!("could not start a D-Bus call: {error}"));
+        return Err(Error::Other(format!(
+            "could not start a D-Bus call: {error}"
+        )));
     }
     Ok(PendingReply { rx, deadline })
 }
@@ -297,8 +300,8 @@ pub fn call_async(
     method: &str,
     arguments: DbusValue,
     timeout: Duration,
-) -> Result<PendingReply, String> {
-    let router = router(bus).map_err(|error| error.to_string())?;
+) -> Result<PendingReply, Error> {
+    let router = router(bus)?;
     let connection = router.connection.clone();
     let destination = destination.to_owned();
     let path = path.to_owned();
@@ -321,28 +324,25 @@ pub fn call_async(
 ///
 /// Asked of the bus itself, which never activates anything to answer it — so
 /// this, unlike reading a property, cannot start the service it asks about.
-pub fn name_has_owner(bus: Bus, name: &str) -> Result<bool, String> {
-    let router = router(bus).map_err(|error| error.to_string())?;
-    let name = zbus::names::BusName::try_from(name).map_err(|error| error.to_string())?;
-    let proxy = zbus::blocking::fdo::DBusProxy::new(&router.connection)
-        .map_err(|error| error.to_string())?;
-    proxy
-        .name_has_owner(name)
-        .map_err(|error| error.to_string())
+pub fn name_has_owner(bus: Bus, name: &str) -> Result<bool, Error> {
+    let router = router(bus)?;
+    let name =
+        zbus::names::BusName::try_from(name).map_err(|error| Error::Invalid(error.to_string()))?;
+    let proxy = zbus::blocking::fdo::DBusProxy::new(&router.connection)?;
+    Ok(proxy.name_has_owner(name)?)
 }
 
 /// The unique name owning `name`, or `None` when nobody does.
-pub fn name_owner(bus: Bus, name: &str) -> Result<Option<String>, String> {
-    let router = router(bus).map_err(|error| error.to_string())?;
+pub fn name_owner(bus: Bus, name: &str) -> Result<Option<String>, Error> {
+    let router = router(bus)?;
     ask_owner(&router.connection, name)
 }
 
 /// Every name on `bus`, unique ones included.
-pub fn list_names(bus: Bus) -> Result<Vec<String>, String> {
-    let router = router(bus).map_err(|error| error.to_string())?;
-    let proxy = zbus::blocking::fdo::DBusProxy::new(&router.connection)
-        .map_err(|error| error.to_string())?;
-    let names = proxy.list_names().map_err(|error| error.to_string())?;
+pub fn list_names(bus: Bus) -> Result<Vec<String>, Error> {
+    let router = router(bus)?;
+    let proxy = zbus::blocking::fdo::DBusProxy::new(&router.connection)?;
+    let names = proxy.list_names()?;
     Ok(names.into_iter().map(|name| name.to_string()).collect())
 }
 
@@ -385,14 +385,14 @@ pub fn subscribe_signal(
 const BUS_NAME: &str = "org.freedesktop.DBus";
 
 /// Asks the bus who owns `name`. `None` is nobody, which is not an error.
-fn ask_owner(connection: &DbusConnection, name: &str) -> Result<Option<String>, String> {
-    let bus_name = zbus::names::BusName::try_from(name).map_err(|error| error.to_string())?;
-    let proxy =
-        zbus::blocking::fdo::DBusProxy::new(connection).map_err(|error| error.to_string())?;
+fn ask_owner(connection: &DbusConnection, name: &str) -> Result<Option<String>, Error> {
+    let bus_name =
+        zbus::names::BusName::try_from(name).map_err(|error| Error::Invalid(error.to_string()))?;
+    let proxy = zbus::blocking::fdo::DBusProxy::new(connection)?;
     match proxy.get_name_owner(bus_name) {
         Ok(owner) => Ok(Some(owner.to_string())),
         Err(zbus::fdo::Error::NameHasNoOwner(_)) => Ok(None),
-        Err(error) => Err(error.to_string()),
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -404,15 +404,14 @@ fn call_on(
     interface: &str,
     method: &str,
     arguments: &DbusValue,
-) -> Result<DbusValue, String> {
-    let message = match positional_arguments(arguments)? {
+) -> Result<DbusValue, Error> {
+    let message = match positional_arguments(arguments).map_err(Error::Invalid)? {
         Some(body) => {
             connection.call_method(Some(destination), path, Some(interface), method, &body)
         }
         None => connection.call_method(Some(destination), path, Some(interface), method, &()),
-    }
-    .map_err(|error| error.to_string())?;
-    decode_message_value(&message)
+    }?;
+    decode_message_value(&message).map_err(Error::Bus)
 }
 
 /// A call's arguments as one message body, `None` for none.

@@ -94,9 +94,28 @@ function V.build(model)
       return hovered and C.onSurface:alpha(0.07) or C.onSurface:alpha(0)
     end, 10)
   end
+  -- The windows in a lane that ends short of the clock; more than fit
+  -- scroll along it, a wheel notch a window at a time.
+  -- (PAD: well in from the frame's corners.)
+  local CLOCK_W, CLOCK_H, PAD = 190, 64, 34
   local function windows(as)
     if PHONE then return ui.Item { width = 0, height = 0 } end
-    return ui.Repeater { as = as, gap = 6, model = model.rows, delegate = window_delegate }
+    local vertical = as == "column"
+    local list = ui.Repeater { as = as, gap = 6, model = model.rows, delegate = window_delegate }
+    local function room()
+      local w, h = model.screen()
+      w, h = w or 0, h or 0
+      if vertical then return math.max(0, h / 2 - CLOCK_H / 2 - PAD - ITEM - 16) end
+      return math.max(0, w / 2 - CLOCK_W / 2 - PAD - ITEM - 20)
+    end
+    local function along()
+      local size = vertical and list.layout_height or list.layout_width
+      return math.min(size or 0, room())
+    end
+    local lane = require("lib.kit.scroll").make(vertical and "scroll_view" or "shelf", { id = "bar-windows" .. (vertical and "-v" or ""),
+      width = vertical and ITEM or along, height = vertical and along or ITEM, clip = true,
+      snap = "none", item_size = function() return (titles() and ITEM + 8 + TITLE_W or ITEM + 6) + 6 end, list })
+    return lane
   end
 
   -- ----------------------------------------------------------- status --
@@ -219,8 +238,6 @@ function V.build(model)
     if side == "left" then return 0, 0, i.left + theme.LEFT, h end
     return w - i.right - theme.BORDER, 0, i.right + theme.BORDER, h
   end
-  -- Well in from the frame's corners.
-  local PAD = 34
   local head_h = PHONE and ui.Row { gap = 10, align = "center", phone_clock(), windows("row") }
     or ui.Row { gap = 10, align = "center", logo(""), windows("row") }
   local tail_h, row_h = tail(false)
