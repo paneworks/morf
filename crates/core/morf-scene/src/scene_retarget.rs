@@ -20,7 +20,7 @@ impl Scene {
         let Some(motion) = motion else {
             return self.assign(node, property, value);
         };
-        let (key, slot) = self.property_key(node, property)?;
+        let (key, slot) = self.property_key_owned(node, property)?;
         let element = self.nodes[key.node].element;
         let value = coerce(element, property, slot.kind, value.into())?;
         if self.properties.read(slot.target)? == &value {

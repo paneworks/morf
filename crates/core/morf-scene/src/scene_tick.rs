@@ -148,7 +148,10 @@ impl Scene {
             // has not left the start value, so neither is worth a repaint.
             let idle = paused || (delayed && animation.is_delayed());
             if !idle {
-                let slot = node.properties[key.property];
+                let Some(slot) = node.properties.get(key.property).copied() else {
+                    finished.push(key);
+                    continue;
+                };
                 // A tick that moved nothing (a zero delta: the frame after one
                 // nothing on show moved) changes nothing to lay out or draw.
                 // Bumping anyway made every callback a fresh layout, and that
@@ -196,7 +199,10 @@ impl Scene {
                 physics_finished.push(key);
                 continue;
             };
-            let slot = node.properties[key.property];
+            let Some(slot) = node.properties.get(key.property).copied() else {
+                physics_finished.push(key);
+                continue;
+            };
             if snap {
                 let target = self.properties.read(slot.target)?.clone();
                 self.touch_layout(key.node, key.property);

@@ -19,7 +19,7 @@ impl NodeHandle {
 }
 
 /// Element kinds implemented by the first scene milestone.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Element {
     /// Non-painting container.
     Item,
@@ -179,6 +179,11 @@ pub struct Scene {
     /// nodes paint asks for the material (see [`Scene::may_have_glass`]).
     pub(crate) glass_nodes: FastSet<NodeId>,
     pub(crate) properties: crate::property_store::PropertyStore,
+    /// Each element's properties as nothing has set them: one slot per
+    /// property, shared by every node of the element and never written. A
+    /// node holds slots of its own only for what was set on it, so a
+    /// rectangle with three properties set carries three, not seventy.
+    pub(crate) defaults: FastMap<Element, FastMap<&'static str, PropertySlot>>,
     pub(crate) behaviors: FastMap<PropertyKey, Behavior>,
     pub(crate) animations: FastMap<PropertyKey, Animation>,
     pub(crate) physics: FastMap<PropertyKey, PhysicsAnimation>,

@@ -87,7 +87,7 @@ impl Scene {
     /// This is the halt that does not snap: the property keeps whatever value
     /// the last tick produced. Returns whether an animation was stopped.
     pub fn stop_animation(&mut self, node: NodeHandle, property: &str) -> Result<bool, SceneError> {
-        let (key, slot) = self.property_key(node, property)?;
+        let (key, slot) = self.property_key_owned(node, property)?;
         if !self.animations.contains_key(&key) && !self.physics.contains_key(&key) {
             return Ok(false);
         }
@@ -108,7 +108,7 @@ impl Scene {
         node: NodeHandle,
         property: &str,
     ) -> Result<bool, SceneError> {
-        let (key, slot) = self.property_key(node, property)?;
+        let (key, slot) = self.property_key_owned(node, property)?;
         let target = match (self.animations.remove(&key), self.physics.remove(&key)) {
             (Some(animation), _) => animation.to,
             (None, Some(motion)) => Value::Number(motion.target()),
@@ -134,7 +134,7 @@ impl Scene {
         node: NodeHandle,
         property: &str,
     ) -> Result<bool, SceneError> {
-        let (key, slot) = self.property_key(node, property)?;
+        let (key, slot) = self.property_key_owned(node, property)?;
         if let Some(animation) = self.animations.get_mut(&key) {
             animation.clock.reset();
             let value = animation.value();
@@ -191,7 +191,7 @@ impl Scene {
         property: &str,
         progress: f64,
     ) -> Result<bool, SceneError> {
-        let (key, slot) = self.property_key(node, property)?;
+        let (key, slot) = self.property_key_owned(node, property)?;
         let Some(animation) = self.animations.get_mut(&key) else {
             return Ok(false);
         };
@@ -209,14 +209,24 @@ impl Scene {
         property: &str,
     ) -> Result<(PropertyKey, PropertySlot), SceneError> {
         let id = self.live(node)?;
-        let (name, slot) = self.nodes[id]
-            .properties
-            .get_key_value(property)
-            .map(|(name, slot)| (*name, *slot))
-            .ok_or_else(|| SceneError::UnknownProperty {
-                element: self.nodes[id].element.name(),
-                property: property.to_owned(),
-            })?;
+        let (name, slot) = self.lookup(id, property)?;
+        Ok((
+            PropertyKey {
+                node: id,
+                property: name,
+            },
+            slot,
+        ))
+    }
+
+    /// As [`Scene::property_key`], with the node's own slot: for what writes.
+    pub(crate) fn property_key_owned(
+        &mut self,
+        node: NodeHandle,
+        property: &str,
+    ) -> Result<(PropertyKey, PropertySlot), SceneError> {
+        let id = self.live(node)?;
+        let (name, slot) = self.owned(id, property)?;
         Ok((
             PropertyKey {
                 node: id,

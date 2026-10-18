@@ -176,7 +176,9 @@ impl Scene {
         let Some(node) = self.nodes.get(key.node) else {
             return Ok(());
         };
-        let slot = node.properties[key.property];
+        let Some(slot) = node.properties.get(key.property).copied() else {
+            return Ok(());
+        };
         let settled = self.properties.read(slot.current)?.clone();
         if self.properties.read(slot.target)? != &settled {
             self.properties.write(slot.target, settled)?;

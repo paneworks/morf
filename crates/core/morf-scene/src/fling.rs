@@ -11,7 +11,8 @@ impl Scene {
         velocity: f64,
         bounds: (f64, f64),
     ) -> Result<(), SceneError> {
-        let slot = self.property(node, property)?;
+        let id = self.live(node)?;
+        let (name, slot) = self.owned(id, property)?;
         let Value::Number(current) = *self.properties.read(slot.current)? else {
             return Err(SceneError::Reactive(format!(
                 "property `{property}` is not numeric"
@@ -22,13 +23,8 @@ impl Scene {
                 SceneError::Reactive("scroll needs finite velocity and ordered bounds".into())
             })?;
         let key = PropertyKey {
-            node: self.live(node)?,
-            property: self
-                .node_ref(node)?
-                .properties
-                .get_key_value(property)
-                .map(|(name, _)| *name)
-                .ok_or(SceneError::StaleNode)?,
+            node: id,
+            property: name,
         };
         if self.animations.remove(&key).is_some() {
             self.push_event(key, AnimationEnd::Canceled);
@@ -76,20 +72,16 @@ impl Scene {
                 "fling velocity must be finite".to_owned(),
             ));
         }
-        let slot = self.property(node, property)?;
+        let id = self.live(node)?;
+        let (name, slot) = self.owned(id, property)?;
         let Value::Number(current) = *self.properties.read(slot.current)? else {
             return Err(SceneError::Reactive(format!(
                 "property `{property}` is not numeric"
             )));
         };
         let key = PropertyKey {
-            node: self.live(node)?,
-            property: self
-                .node_ref(node)?
-                .properties
-                .get_key_value(property)
-                .map(|(name, _)| *name)
-                .ok_or(SceneError::StaleNode)?,
+            node: id,
+            property: name,
         };
         if self.animations.remove(&key).is_some() {
             self.push_event(key, AnimationEnd::Canceled);
@@ -137,15 +129,7 @@ impl Scene {
         if !delta.is_finite() {
             return Err(SceneError::Reactive("an impulse must be finite".to_owned()));
         }
-        let live = self.node_ref(node)?;
-        let name = live
-            .properties
-            .get_key_value(property)
-            .map(|(name, _)| *name)
-            .ok_or_else(|| SceneError::UnknownProperty {
-                element: live.element.name(),
-                property: property.to_owned(),
-            })?;
+        let (name, _) = self.lookup(self.live(node)?, property)?;
         let key = PropertyKey {
             node: self.live(node)?,
             property: name,
