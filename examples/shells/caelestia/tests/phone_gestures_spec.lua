@@ -9,9 +9,11 @@ local SOURCE = [[
   morf.surface.height=tonumber(morf.env("TEST_H"))
   morf.ipc.swipe_test = function(edge,x) require("phone_gestures").swipe(edge,tonumber(x)) end
   morf.ipc.launcher_query_test = function(query) require("launcher").set_query(query) end
+  morf.ipc.close_all_test = function() for _,d in ipairs(require("drawer").all) do d.set(false) end end
   morf.ipc.gesture_state = function()
     local sidebar = require("sidebar")
     return { dashboard = require("dashboard").drawer.open:get(),
+      bottom = require("bottom").drawer.open:get(), leftbar = require("leftbar").drawer.open:get(),
       dashboard_y = require("dashboard").drawer.panel.translate_y,
       sidebar_y = sidebar.drawer.panel.translate_y,
       dashboard_tab = require("dashboard").tab:get(), sidebar_tab = sidebar.tab:get(),
@@ -233,14 +235,47 @@ for _, style in ipairs { "material", "tsugumori" } do
     test.falsy(state().launcher) test.eq(test.logs("error"),{})
   end)
 end
-test.it("landscape desktop does not acquire phone gesture regions or actions", function()
-  load("material", 1280, 800)
-  swipe("bottom") swipe("top") swipe("left") swipe("right")
-  test.falsy(state().dashboard) test.falsy(state().sidebar) test.eq(state().steps, {})
-  test.falsy(state().launcher)
-  test.eq(#test.find_all("phone-gesture-edges"), 0)
-  test.eq(#test.logs("error"), 0)
-end)
+local LANDSCAPE = { top = "dashboard", bottom = "bottom", right = "sidebar", left = "leftbar" }
+local function only_open(name)
+  local s = state()
+  for _, other in pairs(LANDSCAPE) do test.eq(s[other], other == name, other) end
+end
+for _, style in ipairs { "material", "tsugumori" } do
+  test.it(style .. " landscape swipes open the drawer that hangs from each edge", function()
+    load(style, 1280, 800)
+    test.eq(#test.find_all("phone-gesture-edges"), 1)
+    for _, edge in ipairs { "top", "bottom", "right", "left" } do
+      swipe(edge) only_open(LANDSCAPE[edge])
+    end
+    test.falsy(state().launcher)
+    test.eq(#test.logs("error"), 0)
+  end)
+  test.it(style .. " landscape pulls drag each edge's drawer under the finger", function()
+    load(style, 1280, 800)
+    local pulls = {
+      top = { { 640, 4 }, { 640, 360 } }, bottom = { { 640, 796 }, { 640, 440 } },
+      right = { { 1276, 400 }, { 916, 400 } }, left = { { 4, 400 }, { 364, 400 } },
+    }
+    for _, edge in ipairs { "top", "bottom", "right", "left" } do
+      test.ipc("close_all_test") test.advance(600)
+      test.swipe(pulls[edge][1], pulls[edge][2]) test.advance(700)
+      only_open(LANDSCAPE[edge])
+    end
+    test.eq(#test.logs("error"), 0)
+  end)
+  test.it(style .. " landscape dashboard swipes up shut toward the edge it hangs from", function()
+    load(style, 1280, 800)
+    test.swipe({ 640, 4 }, { 640, 360 }) test.advance(700)
+    test.truthy(state().dashboard)
+    local pages = test.get("dashboard-pages")
+    local x, y = pages.x + pages.width / 2, pages.y + pages.height / 2
+    test.swipe({ x, y }, { x, y + 240 }, { duration = 160 }) test.advance(700)
+    test.truthy(state().dashboard)
+    test.swipe({ x, y }, { x, y - 240 }, { duration = 160 }) test.advance(700)
+    test.falsy(state().dashboard)
+    test.eq(#test.logs("error"), 0)
+  end)
+end
 
 for _, style in ipairs { "material", "tsugumori" } do
   test.it(style .. " real touch switches dashboard tabs and pulls the drawer closed", function()

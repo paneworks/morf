@@ -30,6 +30,8 @@ local PANEL_W = COMPACT and (responsive.portrait() and responsive.sheet_width()
 -- The tabs by the edge it comes from: the bottom one, on a phone.
 local TABS_BELOW = COMPACT and responsive.portrait()
 local PHONE=responsive.portrait()
+-- Swiped shut toward the edge it hangs from: the bottom on a phone, the top on a desk.
+local DISMISS=PHONE and "down" or "up"
 -- Four fifths of the desk: the fifth above it is to tap it shut.
 local TABS_H = 68            -- icons, labels, indicator and hairline
 local function panel_height() return math.floor((responsive.desk_height() - 2 * theme.BORDER) * 0.8) end
@@ -251,14 +253,14 @@ local background = ui.MouseArea { anchors = { fill = true }, z = -1 }
 
 local content = ui.Item {
   anchors = { fill = true },
-  on_panned = require("phone_gestures").pan { drawer="dashboard", dismiss="down", pager=pager,
+  on_panned = require("phone_gestures").pan { drawer="dashboard", dismiss=DISMISS, pager=pager,
     can_dismiss=function()
       local position=scroll_positions[M.tab:get()]
       return not position or (position.position_y or 0)<=0
     end,
   },
   on_swiped = require("phone_gestures").panel {
-    tab = M.tab, count = #TABS, dismiss = "down", close = function() require("dashboard").drawer.set(false) end,
+    tab = M.tab, count = #TABS, dismiss = DISMISS, close = function() require("dashboard").drawer.set(false) end,
     can_dismiss = function()
       local position = scroll_positions[M.tab:get()]
       return not position or (position.position_y or 0) <= 0

@@ -140,13 +140,13 @@ test.it("native token replacement cancels the previous gesture and preserves ord
 end)
 
 for _,style in ipairs {"material","tsugumori"} do
-  test.it(style.." semantic regions exist independently of portrait recognizers",function()
+  test.it(style.." semantic regions and gesture recognizers exist in landscape too",function()
     load(style,1200,600)
     for _,role in ipairs {"top_left","top_right","side_left","side_right","content_bottom","physical_bottom"} do
       local node=test.find {id="phone-context-"..role}
       test.truthy(node and node.visible and node.width>0 and node.height>0)
     end
-    test.falsy(test.find {id="phone-gesture-bottom"})
+    test.truthy(test.find {id="phone-gesture-bottom"})
   end)
   test.it(style.." semantic shell geometry survives modeled native inhibition",function()
     load(style)

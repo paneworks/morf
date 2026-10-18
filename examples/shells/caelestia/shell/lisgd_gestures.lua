@@ -8,7 +8,7 @@ local EDGE=20
 function M.attach(root,policy)
   local contacts,origin,expiry={},nil,nil
   local function keyboard() return require("keyboard") end
-  local function allowed() return policy.phone() and not policy.blocked() and (not policy.allowed or policy.allowed()) end
+  local function allowed() return not policy.blocked() and (not policy.allowed or policy.allowed()) end
   local function clear()
     contacts,origin={},nil
     if expiry then expiry:cancel() expiry=nil end
@@ -35,7 +35,7 @@ function M.attach(root,policy)
         if edge=="top" then return 0 end
         return ((morf.screens[1] or {}).height or morf.surface.height)-EDGE
       end,
-      visible=function() return policy.phone() and not policy.blocked()
+      visible=function() return not policy.blocked()
         and (not policy.visible or policy.visible()) and (edge=="top" or not keyboard().active()) end,
       on_touch_pressed=function(id,x) down(edge,id,x) end,
       on_touch_released=up,on_touch_canceled=clear,
