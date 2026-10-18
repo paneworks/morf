@@ -1,5 +1,125 @@
 # Changelog
 
+## [0.3.0] - 2026-10-18
+
+### <!-- 0 -->⛰️  Features
+
+- Rebuild the shell when it turns
+- Hold and turn the frame on rotation
+- Gestures in every orientation
+- Run morf under a headless sway on the GPU
+- Share service names with module manifests
+- Approve modules from morf test specs
+- Give each integration a manifest
+- Hold unapproved modules while they load
+- Bind registered services with morf.service
+- Describe power and media as registry data
+- Count what a runtime holds open
+- Let a node own teardown hooks
+- Name the glass surfaces in the default kit
+- Draw glass refraction, frost and rim
+- Declare the glass material properties
+- Read rendered pixels back in morf test
+- Paint motion-only turns before services
+- Rehearse frame stalls paced and on the GPU
+- Account each frame's time by stage
+- Charge turn time to stages
+- Retarget a property by a named motion
+- Run fragments, diff types, tighten lists
+- Paint an overlay tree over a frame
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- Give freed memory back after reloads
+- Open edge drawers on plain hover
+- Give Loader sources a builder's budget
+- Keep a worker when its output turns
+- Leave recorded outputs alone in discover
+- Close name watches as other handles close
+- Show tooltips on nodes without hover
+- Blend the backdrop tint in linear light
+- Judge frames against the median refresh
+- Hold paced headless frames on its own clock
+- Drive each property by its winning claim
+- Name every argument morf docs refuses
+- Check docs stamps and survive closed stdout
+- Point bus addresses nowhere
+- Keep the reload band out of user layout
+
+### <!-- 2 -->🚜 Refactor
+
+- Split painting into morf-paint
+- Hold popup poses with ui.claims
+- Give draw styles a module
+- Give headless load options a module
+- Split provider controls and frames
+
+### <!-- 3 -->📚 Documentation
+
+- Frame stalls in a GPU sandbox
+- Stop linking private items from public docs
+- Imported-module bookkeeping cost
+- Document module manifests and morf approve
+- Document morf.service and service descriptors
+- Record the shared blur layer bench
+- Frame stalls before and after
+- Describe claims with a runnable example
+- Fix guide examples that fail to run
+- Describe the reload error band
+
+### <!-- 4 -->⚡ Performance
+
+- Build dashboard tabs when first shown
+- Build panel pages when first shown
+- Keep only the keyboard layouts in use
+- Store only the properties a node sets
+- Defer preloads while input is active
+- Build hidden panels on first use
+- Build keyboard layers and kits lazily
+- Compile each module once per process
+- Read glass only where it was written
+- Share one target among blurred siblings
+- Time full frames of sixty blurred cards
+- Keep backdrop_tint out of layout
+
+### <!-- 5 -->🎨 Styling
+
+- Import the layer placement at the top
+- Format the import gate and its test
+- Apply rustfmt to two engine files
+- Format the module approval gate
+- Apply rustfmt
+- Format permission gating code
+
+### <!-- 6 -->🧪 Testing
+
+- Characterise the popup motion
+- Share the D-Bus fake with Lua specs
+- Run the private-bus service contracts
+- Serve bus names on a private bus only
+- Assert the four glass cases on pixels
+- Spec the frame-stall rehearsal
+- Bind a presence in a morf test spec
+- Move claims through live frame callbacks
+- Describe docs tests without the plan
+- Reload configurations from morf test specs
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- Merge the popup claims conversion
+- Merge the module permission model
+- Merge the declarative service bindings
+- Merge the glass material and shared blur layers
+- Merge the frame-stall accounting and fast path
+- Merge the claims rework
+- Merge the docs gate and bundled docs rework
+- Merge the reload error band rework
+- Remove the generated agent skill
+
+### Build
+
+- Ship docs stamped with their version
+
 ## [0.2.9] - 2026-10-16
 
 ### <!-- 0 -->⛰️ Features
