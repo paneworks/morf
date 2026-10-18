@@ -610,14 +610,13 @@ function osk.new(options)
     return nodes
   end
 
-  -- Every mode and page is built once, the one on show first: when the
-  -- board is first in use, the rest ahead of being asked for while the
-  -- shell is idle. Built, a layer stays, shown while it is on show.
+  -- Each mode and page is built the first time it is on show once the
+  -- board is in use, and stays: a board holds only the layouts asked for.
   local used = morf.signal(named("used"), false)
   local layers = {}
   local function lazily(shown, build)
     layers[#layers + 1] = ui.Loader {
-      width = W, height = 1, keep = true, preload = true,
+      width = W, height = 1, keep = true,
       active = function() return used:get() and shown() end,
       source = build,
     }
