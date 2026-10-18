@@ -102,10 +102,15 @@ pub struct Host {
     /// The runtime the last reload replaced, and when: dropped on a quiet
     /// turn once the new one has painted, or after [`RETIRED_GRACE`].
     retired: Option<(Runtime, Instant)>,
+    /// When the person last pointed, touched or typed.
+    last_input: Option<Instant>,
 }
 
 /// How long a replaced runtime waits for a quiet turn to be dropped in.
 const RETIRED_GRACE: Duration = Duration::from_secs(2);
+/// How long after input the shell counts as in use, which Loader preloads
+/// wait out as they wait out motion.
+const INPUT_QUIET: Duration = Duration::from_millis(400);
 
 impl Host {
     pub(crate) fn request_paint(&mut self) {
@@ -156,9 +161,13 @@ impl Host {
         links: Option<&Links<'_>>,
     ) -> Result<Turn, String> {
         self.frame_accounting.begin_turn();
-        runtime.set_host_motion(self.state.turning.is_some());
         let base = morf_lua::profile::stage(Stage::Services);
         let events: Vec<Event> = std::iter::from_fn(|| self.backend.next_event()).collect();
+        if events.iter().any(steps::is_input) {
+            self.last_input = Some(Instant::now());
+        }
+        let in_use = self.last_input.is_some_and(|at| at.elapsed() < INPUT_QUIET);
+        runtime.set_host_motion(self.state.turning.is_some() || in_use);
         let commands: Vec<WorkerCommand> =
             links.map_or_else(Vec::new, |links| links.commands.try_iter().collect());
         let turned = match self.motion_only(&events, &commands) {

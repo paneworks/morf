@@ -47,6 +47,22 @@ pub(super) fn is_frame_callback(event: &Event) -> bool {
     )
 }
 
+/// Whether the person did something: pointed, scrolled, touched, typed or
+/// dragged.
+pub(super) fn is_input(event: &Event) -> bool {
+    matches!(
+        event,
+        Event::PointerMotion { .. }
+            | Event::PointerButton { .. }
+            | Event::PointerAxis { .. }
+            | Event::TouchDown { .. }
+            | Event::TouchMotion { .. }
+            | Event::TouchUp { .. }
+            | Event::Key { .. }
+            | Event::DragMotion { .. }
+    )
+}
+
 impl Host {
     /// `morf.clock`, when the second turned over since the last turn.
     pub(super) fn update_clock(&mut self, runtime: &mut Runtime) -> Result<bool, String> {
@@ -183,6 +199,9 @@ impl Host {
         {
             if matches!(&event, Event::Configure { id, .. } if *id == PRIMARY_LAYER) {
                 self.primary_configured = true;
+            }
+            if is_input(&event) {
+                self.last_input = Some(std::time::Instant::now());
             }
             self.follow_up = true;
             let charged = match is_frame_callback(&event) {

@@ -190,6 +190,7 @@ impl Host {
             containment_repaint: false,
             report_slow: options_report,
             retired: None,
+            last_input: None,
         })
     }
 
