@@ -39,6 +39,40 @@ fn runtimepath_loads_user_modules_without_rust_registration() {
 }
 
 #[test]
+fn a_module_edited_between_runtimes_runs_as_it_now_reads() {
+    let root = std::env::temp_dir().join(format!("morf-recompile-{}", std::process::id()));
+    let module = root.join("lua/user/edited.lua");
+    fs::create_dir_all(module.parent().unwrap()).unwrap();
+    let shell = root.join("shell.lua");
+    let answer = |source: &[u8]| {
+        fs::write(&module, source).unwrap();
+        let mut runtime = Runtime::default();
+        runtime
+            .execute(
+                &shell.to_string_lossy(),
+                b"morf.ipc.answer = function() return require('user.edited').answer end",
+            )
+            .unwrap();
+        runtime.call_ipc("answer", &[]).unwrap()
+    };
+
+    // Compiled once and kept, the same bytes run alike in a second runtime;
+    // changed bytes are compiled again.
+    assert_eq!(answer(b"return { answer = 1 }"), [IpcValue::Integer(1)]);
+    assert_eq!(answer(b"return { answer = 1 }"), [IpcValue::Integer(1)]);
+    assert_eq!(answer(b"return { answer = 2 }"), [IpcValue::Integer(2)]);
+    fs::write(&module, b"return {").unwrap();
+    let mut runtime = Runtime::default();
+    assert!(
+        runtime
+            .execute(&shell.to_string_lossy(), b"require('user.edited')")
+            .is_err()
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn require_caches_user_modules_in_package_loaded() {
     let root = std::env::temp_dir().join(format!("morf-require-{}", std::process::id()));
     let module = root.join("lua/user/once.lua");

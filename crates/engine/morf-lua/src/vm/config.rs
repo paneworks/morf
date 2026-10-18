@@ -1,4 +1,4 @@
-use luna::{Closure, Executor, ExecutorMode, Fuel, Lua};
+use luna::{Executor, ExecutorMode, Fuel, Lua};
 use morf_scene::NodeHandle;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -88,7 +88,7 @@ impl Runtime {
         let executor = self
             .lua
             .try_enter(|ctx| {
-                let closure = Closure::load(ctx, Some(name), source)?;
+                let closure = crate::vm::loader::load_compiled(ctx, name, source)?;
                 if let Some((plugin, path)) = plugin {
                     let holder = self.permissions.borrow_mut().admit(
                         ctx,

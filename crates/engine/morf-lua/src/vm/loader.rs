@@ -8,10 +8,12 @@ use std::path::PathBuf;
 
 use crate::{api::ui::scene::*, runtime::state::*, vm::execute::*, vm::types::*};
 
+mod compiled;
 mod dbus;
 mod json;
 mod require;
 
+pub(crate) use compiled::load as load_compiled;
 pub(crate) use dbus::{dbus_value_to_lua, lua_to_dbus};
 pub(crate) use json::{json_to_lua, lua_to_json};
 pub(crate) use require::{Require, install_require};

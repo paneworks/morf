@@ -2,7 +2,7 @@
 //! path. Each module's top level runs inside the permission gate's scope
 //! for it, held back when it is an unapproved imported module.
 
-use luna::{Callback, CallbackReturn, Closure, Context, StashedTable, Value as LuaValue};
+use luna::{Callback, CallbackReturn, Context, StashedTable, Value as LuaValue};
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -78,7 +78,7 @@ fn load<'gc>(
     let roots = require.roots.borrow().clone();
     let (path, source) = resolve_runtime_module(&roots, name).map_err(|error| (error, true))?;
     let closure =
-        Closure::load(ctx, Some(name), &source).map_err(|error| (error.to_string(), false))?;
+        super::load_compiled(ctx, name, &source).map_err(|error| (error.to_string(), false))?;
     let holder = require.permissions.borrow_mut().admit(
         ctx,
         &require.state,
