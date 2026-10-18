@@ -128,6 +128,7 @@ impl Host {
             .is_some_and(|(_, since)| quiet || since.elapsed() > super::RETIRED_GRACE)
         {
             self.retired = None;
+            give_back_freed_memory();
         }
         // Prepare unopened pages between events, without asking for frames.
         // Each slice yields to input and stops while animation is running.
@@ -239,5 +240,15 @@ impl Host {
                 .painted(state.refresh, shown, state.animating());
         }
         Ok(Turn::Again)
+    }
+}
+
+/// Hands the free pages a dropped runtime leaves in the allocator's arenas
+/// back to the system.
+fn give_back_freed_memory() {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    // SAFETY: malloc_trim only walks and releases the allocator's free lists.
+    unsafe {
+        libc::malloc_trim(0);
     }
 }
