@@ -31,7 +31,7 @@ local HOST=[[
   local function set(key,value) writes[#writes+1]={key,value} prefs[key:gsub("^edgebar%.","")]=value end
   package.loaded.config={get=get,set=set}
   package.loaded.bar={side=function() return prefs.side end,set_side=function(value) set("edgebar.side",value) end}
-  package.loaded.dashboard_battery={show=function() handoffs=handoffs+1 end}
+  package.loaded.dashboard_state={show=function(key) if key=="battery" then handoffs=handoffs+1 end end}
   local model
   local ok,models=pcall(require,page=="power" and "power_model" or "bar_settings_model")
   if ok then
