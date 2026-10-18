@@ -29,7 +29,7 @@ pub struct Limits {
     pub effect_fuel: u64,
     /// Maximum VM fuel granted to all effects in one recompute pass.
     pub frame_fuel: u64,
-    /// Maximum VM fuel granted to one view delegate. A delegate builds a
+    /// Maximum VM fuel granted to one view delegate or Loader source. Each builds a
     /// part of a view -- a row, or a whole panel or board shown on demand --
     /// which is loading's kind of work rather than a handler's, so it gets
     /// a budget nearer loading's: a board of widgets each drawing a face

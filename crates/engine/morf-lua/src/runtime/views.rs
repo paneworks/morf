@@ -104,7 +104,7 @@ pub(crate) fn execute_node_factory(
             .into(),
         (),
     );
-    drive_executor(ctx, executor, limits, limits.effect_fuel, "Loader source")?;
+    drive_executor(ctx, executor, limits, limits.delegate_fuel, "Loader source")?;
     match executor.take_result::<UserRef<NodeToken>>(ctx) {
         Ok(Ok(node)) => Ok(node.handle),
         Ok(Err(error)) => Err(error.to_string()),
