@@ -54,7 +54,7 @@ Unknown fields, caller coordinates and authentication/ownership claims are
 rejected. Annotation changes affect the scene paint stamp and must pass through
 the same GPU witness before they become observable.
 
-Caelestia annotates its real keyboard panel with its current layout, its ordinary
+eva annotates its real keyboard panel with its current layout, its ordinary
 and authentication drawers, and six separate noninteractive Items for shell
 geometry. These Items remain laid out when native global recognizers are
 inhibited. They do not take input or affect the existing controller behavior.

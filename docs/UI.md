@@ -2604,12 +2604,12 @@ A theme's kit carries its skins as `kit.skins.<Archetype>`.
 A widget may have a look of its own: `kit.skins.<widget>` (`skins.knob`,
 `skins.data_table`) is asked before its archetype's, slot by slot, so it
 fills what it draws differently and the archetype's skin the rest. The
-three looks shipped (the default kit, caelestia's Material and Tsugumori)
+three looks shipped (the default kit, eva's Material and Tsugumori)
 keep them in `widgets/<archetype>.lua` beside their `skins.lua`, one file
 per archetype, each `function(S, theme, M) S.<widget> = ... end`. Every
 widget of every archetype is drawn by the widget galleries
 (`library/tests/default_widgets_gallery_spec.lua`,
-`examples/shells/caelestia/tests/kit_widgets_gallery_spec.lua`) from its
+eva's `tests/kit_widgets_gallery_spec.lua`) from its
 sample in `library/lib/kit/samples/<archetype>.lua`; `KIT_WIDGETS="Canvas
 Dock"` draws only those archetypes.
 
@@ -2623,7 +2623,7 @@ arrived at, and the owner of every row of the element catalogue
 (`library/lib/kit/catalogue.lua`). `morf check --kit` checks a
 configuration's `require("kit")` against what is due (`morf check --kit
 default` checks the default look); the galleries
-(`examples/shells/caelestia/tests/kit_gallery_spec.lua`,
+(eva's `tests/kit_gallery_spec.lua`,
 `composites_gallery_spec.lua`, `library/tests/default_kit_spec.lua`) draw
 every widget in every theme and fail on anything that spills its cell or
 logs an error.

@@ -191,8 +191,8 @@ layout from Hyprland's sockets), `proc.lua`, `media.lua`, `field.lua`,
 
 Not here: the file manager, the media viewer, the password vault, the
 agents panel and the lock screen. The login
-example carries a lock of its own, which the lock button runs with
-`morf lock -c caelestia` when its configuration is installed.
+shell [eva](https://github.com/bresilla/eva) carries a lock of its own, which the lock button runs with
+`morf lock -c eva` when it is installed.
 
 Needs: `wpctl`, `pactl`, `nmcli` or `iwctl`; optionally `wf-recorder`,
 `cliphist`, `wl-copy`, `upower`, `power-profiles-daemon`, `curl`.

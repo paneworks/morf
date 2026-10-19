@@ -1,4 +1,4 @@
-# A tour of the caelestia port for someone watching a VISIBLE=1 sandbox,
+# A tour of eva, the caelestia port, for someone watching a VISIBLE=1 sandbox,
 # then the session left to them (the run ends at TIMEOUT). Nothing repeats.
 point 960 600; wait 3
 open launcher; wait 3

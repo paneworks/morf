@@ -1,6 +1,6 @@
 -- Gallery samples for composites (surfaces): name -> function(kit, composites)
 -- returning a node that fits a 520x340 area
--- (examples/shells/caelestia/tests/composites_gallery_spec.lua). The popup
+-- (eva's tests/composites_gallery_spec.lua). The popup
 -- ones are shown opened, inline.
 local ui = require("morf.ui")
 

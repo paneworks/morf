@@ -7,7 +7,7 @@
 -- icon; a timeline's rail and dots; feed cards; chat bubbles left and
 -- right; kanban cards with a tag; transfer rows with a check. Rows come in
 -- with a short rise and leave sliding away. Every layout here is shared
--- with the caelestia themes' (material, tsugumori): only the style differs.
+-- with eva's themes (material, tsugumori): only the style differs.
 local morf = require("morf")
 local ui = require("morf.ui")
 

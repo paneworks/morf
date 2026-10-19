@@ -4,7 +4,7 @@
 -- optionally `span`, a table of widget name -> { columns, rows } for one
 -- that needs more than a cell. A popup's sample gives the press that opens
 -- it (and may open it). Used by the widget galleries
--- (examples/shells/caelestia/tests/kit_widgets_gallery_spec.lua,
+-- (eva's tests/kit_widgets_gallery_spec.lua,
 -- library/tests/default_widgets_gallery_spec.lua).
 local M = {}
 

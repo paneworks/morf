@@ -103,22 +103,7 @@ def stage_runtime(directory, binary):
 
 def selected_example():
     root = Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'morf/default'
-    return root.resolve().name if root.is_symlink() else 'caelestia'
-
-
-def appearance_defaults(example):
-    """Carry the selected skin into accounts without personal preferences."""
-    defaults = {'theme': 'material', 'font': ''}
-    config = Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config'))
-    path = config / 'morf' / example / 'appearance.json'
-    if not path.is_file(): return defaults
-    selected = json.loads(path.read_text())
-    theme = selected.get('theme', 'material')
-    if isinstance(theme, str) and re.fullmatch(r'[a-z][a-z0-9_]*', theme):
-        if (REPO / 'examples/shells' / example / 'themes' / theme / 'manifest.lua').is_file():
-            defaults['theme'] = theme
-    if isinstance(selected.get('font'), str): defaults['font'] = selected['font']
-    return defaults
+    return root.resolve().name if root.is_symlink() else 'panacea'
 
 
 def stage_config(directory, example):
@@ -133,21 +118,6 @@ def stage_config(directory, example):
         if not (source / part / 'init.lua').is_file(): continue
         shutil.copytree(source / part, base / part, ignore=shutil.ignore_patterns('*.pending', '__pycache__'))
         parts.append(part)
-    # Include fonts used by both themes so the greeter needs no user home.
-    if example == 'caelestia':
-        appearance = appearance_defaults(example)
-        fonts = {}
-        families = ['Roboto', 'Material Symbols Rounded', 'IBM Plex Mono', 'M+1 Nerd Font']
-        if appearance['font']: families.append(appearance['font'])
-        for family in families:
-            found = subprocess.check_output(['fc-match', '-f', '%{file}', family], env=clean_env(), text=True).strip()
-            assert found and Path(found).is_file(), f'font unavailable: {family}'
-            fonts[Path(found).name] = Path(found)
-        for part in parts:
-            (base / part / 'appearance-default.json').write_text(json.dumps(appearance, indent=2) + '\n')
-            target = base / part / 'fonts'
-            target.mkdir(exist_ok=True)
-            for name, font in fonts.items(): shutil.copy2(font, target / name)
     manifest = {'kind': 'config', 'example': example, 'parts': parts,
                 'trees': [f'etc/xdg/morf/{example}/{part}' for part in parts]}
     if 'greet' in parts and CONFIG.is_file():
@@ -248,7 +218,7 @@ def commit(directory):
                         '-u', 'LD_LIBRARY_PATH', '-u', 'GREETD_SOCK', '-u', 'MORF_RUNTIME_PATH', '-u', 'MORF_FONT_PATH',
                         f'HOME={scratch}', f'XDG_CONFIG_HOME={scratch}/.config', f'XDG_DATA_HOME={scratch}/.local/share',
                         f'XDG_CACHE_HOME={scratch}/.cache', 'XDG_DATA_DIRS=/usr/local/share:/usr/share',
-                        'CAELESTIA_DRY_RUN=1', '/usr/bin/morf', 'check',
+                        '/usr/bin/morf', 'check',
                         f'/etc/xdg/morf/{manifest["example"]}/greet/init.lua', '--no-dbus', '--strict', '--after', '1200'],
                         check=True, timeout=90)
                 place('etc/greetd/config.toml')

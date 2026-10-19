@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 
 /// The configuration where it really is: a link, or a folder that is one,
 /// followed to the file. Its modules, fonts and watched folder are beside
-/// that file -- so `~/.config/morf/default` can be a link to `caelestia` and
-/// `require` finds caelestia's modules. A path that is not there is kept as
+/// that file -- so `~/.config/morf/default` can be a link to `eva` and
+/// `require` finds eva's modules. A path that is not there is kept as
 /// given, for the error to name.
 pub(crate) fn followed(path: PathBuf) -> PathBuf {
     fs::canonicalize(&path).unwrap_or(path)

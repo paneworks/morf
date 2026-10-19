@@ -15,17 +15,6 @@ spec.loader.exec_module(installer)
 
 
 class Migration(unittest.TestCase):
-    def test_applied_appearance_uses_selected_theme_for_greeter_defaults(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            config = Path(tmp) / 'morf/caelestia'
-            config.mkdir(parents=True)
-            with patch.dict(installer.os.environ, {'XDG_CONFIG_HOME': tmp}):
-                self.assertEqual(installer.appearance_defaults('caelestia'), {'theme': 'material', 'font': ''})
-                (config / 'appearance.json').write_text('{"theme":"tsugumori","font":"Goku"}')
-                self.assertEqual(installer.appearance_defaults('caelestia'), {'theme': 'tsugumori', 'font': 'Goku'})
-                (config / 'appearance.json').write_text('{"theme":"../invalid"}')
-                self.assertEqual(installer.appearance_defaults('caelestia')['theme'], 'material')
-
     def test_greetd_preserves_session_and_terminal_options(self):
         text = '''[terminal]
 vt = 2
@@ -38,16 +27,16 @@ user = "greeter"
 [general]
 source_profile = false
 '''
-        updated, user = installer.migrate_config(text, 'caelestia')
+        updated, user = installer.migrate_config(text, 'panacea')
         before, after = tomllib.loads(text), tomllib.loads(updated)
         self.assertEqual(user, 'greeter')
-        self.assertEqual(after['default_session']['command'], 'cage -m last -s -- /usr/bin/morf greet -c caelestia')
+        self.assertEqual(after['default_session']['command'], 'cage -m last -s -- /usr/bin/morf greet -c panacea')
         after['default_session']['command'] = before['default_session']['command']
         self.assertEqual(before, after)
 
     def test_multiline_command_is_rejected_without_modifying_settings(self):
         with self.assertRaises((AssertionError, tomllib.TOMLDecodeError)):
-            installer.migrate_config('[default_session]\nuser="greeter"\ncommand="""\ncage -- old\n"""\n', 'caelestia')
+            installer.migrate_config('[default_session]\nuser="greeter"\ncommand="""\ncage -- old\n"""\n', 'panacea')
 
     def test_checksum_rejects_changed_payload(self):
         with tempfile.TemporaryDirectory() as tmp:

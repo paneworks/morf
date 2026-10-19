@@ -1,6 +1,6 @@
 # Prek shell controller receiver
 
-Caelestia exposes ordinary same-user IPC verbs `prek-control` and `prek-status`.
+[eva](https://github.com/bresilla/eva) exposes ordinary same-user IPC verbs `prek-control` and `prek-status`.
 They reuse its existing drawers, menus, keyboard and workspace preview. They do
 not authenticate a Prek broker, prove rendered geometry, or transfer ownership
 from the native global recognizer. The status response explicitly reports
@@ -97,7 +97,7 @@ remain enforced; a slow or retired request is not replayed.
 Run the real controller/layout tests for both themes:
 
 ```sh
-morf test --no-dbus examples/shells/caelestia/tests/prek_controls_spec.lua
+morf test --no-dbus tests/prek_controls_spec.lua   # in eva
 ```
 
 Prek's optional local Cage `--morf-shell` acceptance also starts the real shell

@@ -6,7 +6,7 @@ Shell, lock and greeter run the same executable:
 morf shell                 # bare morf also starts the shell
 morf lock
 morf greet
-morf lock -c caelestia     # choose a named configuration
+morf lock -c eva           # choose a named configuration
 morf lock -- window preview
 morf greet -- preview
 ```
@@ -16,7 +16,7 @@ installation step (sudo may reuse an existing authentication timestamp):
 
 ```sh
 oslo make install
-oslo make apply --example caelestia
+oslo make apply --example panacea
 # Subsequent updates can use: oslo make apply
 ```
 
@@ -30,7 +30,9 @@ running engine and editor configurations to keep finding it.
 publishes the parts under `/etc/xdg/morf/NAME/` and `~/.config/morf/NAME/`, with
 `default` links in both roots. User appearance/settings JSON beside the parts
 is preserved. With no `--example`, it uses the user's current default shell
-(or Caelestia if none is selected). A system Morf installation is required first.
+(or panacea if none is selected). A system Morf installation is required first.
+Shells kept outside this repository, such as
+[eva](https://github.com/bresilla/eva), install their own way.
 
 When greetd is installed and the selected shell provides a greeter, apply
 validates the greeter under greetd's own account with an empty temporary home
@@ -38,7 +40,7 @@ before updating `/etc/greetd/config.toml`:
 
 ```toml
 [default_session]
-command = "cage -m last -s -- /usr/bin/morf greet -c caelestia"
+command = "cage -m last -s -- /usr/bin/morf greet -c NAME"
 user = "greeter"
 ```
 

@@ -1,5 +1,5 @@
 //! What a field's damage is when a layer joins or leaves it: a shape that
-//! takes or loses its size (caelestia's workspace swell coming out of the
+//! takes or loses its size (eva's workspace swell coming out of the
 //! frame) changes the layer count, and that is no reason to repaint the
 //! whole field.
 

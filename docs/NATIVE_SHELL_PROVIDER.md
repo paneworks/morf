@@ -208,7 +208,7 @@ policies before executing configuration.
 Queued effects and ownership are retired before a reload candidate executes,
 including a failed reload; successful VM replacement also advances UI generation.
 
-Caelestia cancels pending global panels/workspace previews and hides their edge
+eva cancels pending global panels/workspace previews and hides their edge
 regions while quiesced. Local panel navigation, keyboard keys and keyboard-local
 layout/hide gestures retain their handlers. An unmanaged external `lisgd`
 driver cannot acknowledge quiescence; stopping that process and confirming its

@@ -312,8 +312,5 @@
         apps.morf = flake-utils.lib.mkApp { drv = morf; };
         checks.morf = morf;
       } else {})
-    ) // {
-      nixosModules.default = import ./nix/nixos { flake = self; };
-      nixosModules.morf = self.nixosModules.default;
-    };
+    );
 }

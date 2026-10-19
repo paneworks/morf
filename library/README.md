@@ -339,7 +339,7 @@ used.rank(query, apps, { key = "name", id = "id", limit = 30 })   -- fuzzy hits,
 foreground, cursor, theme, wallpaper, colors }`. `lule.watch()` is a signal
 kept current as lule rewrites it. For the colours themselves as the tool
 sets them on terminals, whatever the tool, see `morf.terminal.listen`
-(docs/IO.md); the caelestia port uses both, the file as the backup.
+(docs/IO.md); eva uses both, the file as the backup.
 
 `lule.generate({ image = "/path/to/wallpaper.png", theme = "dark",
 palette = "pigment" }, callback)` runs generation asynchronously, with a

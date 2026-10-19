@@ -1,5 +1,5 @@
 -- Gallery samples for the editor instruments: name -> function(kit) returning a
--- node that fits a 260x190 cell (examples/shells/caelestia/tests/kit_gallery_spec.lua).
+-- node that fits a 260x190 cell (eva's tests/kit_gallery_spec.lua).
 return {
   envelope_editor = function(kit)
     return kit.envelope_editor { width = 260, height = 190, attack = .25, decay = .6, sustain = .55, release = 1.6 }
