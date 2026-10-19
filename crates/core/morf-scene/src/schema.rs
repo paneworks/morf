@@ -58,6 +58,9 @@ pub(crate) fn schema(element: Element) -> Vec<PropertySpec> {
         // pointer is mapped back through it.
         any("transform_matrix", Value::Nil),
         boolean("enabled", true),
+        // The axis this node's own drag moves along: "x", "y" or "both". A
+        // touch pan or swipe across it goes on to what holds it.
+        string("drag_axis", "both"),
         boolean("focus", false),
         // Whether Tab moves the keyboard away from this node while it has
         // it. False hands Tab to its own `on_key_pressed`. A terminal keeps

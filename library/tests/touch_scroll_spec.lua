@@ -13,7 +13,7 @@ local SOURCE=[[
     ui.Item {width=320,height=1000,
       w.push {id="button",x=30,y=120,width=150,height=40,on_clicked=function() clicks=clicks+1 end},
       w.slider {id="slider",x=30,y=200,width=200,height=30,from=0,to=1,
-        on_moved=function(v) value=v end},
+        on_moved=function(v) value=v end,on_value_changed=function(v) value=v end},
     },
   }
   ui.Item {width=400,height=400,root,
@@ -107,4 +107,33 @@ test.it("the same drag released twice as fast coasts over three times farther",f
   local slow,fast=coast(20),coast(10)
   test.truthy(slow>50)
   test.truthy(fast>slow*3.2 and fast<slow*3.5)
+end)
+
+test.it("a drag across a slider scrolls the page and leaves the slider as it was",function()
+  load()
+  drag(70,230,0,-120)
+  test.near(test.ipc("state").offset,120,1) test.eq(test.ipc("state").value,0)
+  test.touch("down",0,200,110) test.touch("up",0,200,110) test.advance(100)
+  test.truthy(test.ipc("state").value>.5,"a tap still sets the slider")
+  test.eq(test.logs("error"),{})
+end)
+
+test.it("a swipe across a slider goes on to the panel holding it",function()
+  test.load {source=[[
+    local ui=require("morf.ui")
+    local skin=require("lib.kit.skin")
+    local w=require("lib.kit.widgets")
+    skin.define("plain",{skins={Range=function() return {track=ui.Item{anchors={fill=true}}} end}})
+    skin.use("plain")
+    local swiped,value="",0
+    ui.Item {width=400,height=400,on_swiped=function(direction) swiped=direction end,
+      w.slider {id="slider",x=30,y=200,width=300,height=40,from=0,to=1,
+        on_moved=function(v) value=v end,on_value_changed=function(v) value=v end}}
+    morf.ipc.state=function() return {swiped=swiped,value=value} end
+  ]],size={400,400}} test.advance(100)
+  drag(100,220,0,-150,true)
+  test.eq(test.ipc("state").swiped,"up") test.eq(test.ipc("state").value,0)
+  drag(60,220,250,0,true)
+  test.eq(test.ipc("state").swiped,"up") test.truthy(test.ipc("state").value>.5)
+  test.eq(test.logs("error"),{})
 end)

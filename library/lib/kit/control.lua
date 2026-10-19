@@ -103,6 +103,60 @@ local SPOKEN = { checked = true, partial = true, expanded = true, value = true, 
 
 local function value(v) if type(v) == "function" then return v() end return v end
 
+-- The axis each archetype's drag moves along, from its spec.
+local AXIS = {
+  Range = function(spec)
+    local mode = value(spec.drag_mode)
+    if mode == "angular" then return "both" end
+    return (mode == "vertical" or value(spec.orientation) == "vertical") and "y" or "x"
+  end,
+  Drag = function(spec)
+    local axis = value(spec.axis)
+    return (axis == "x" or axis == "y") and axis or "both"
+  end,
+}
+
+-- A finger's press on a one-axis control waits until the drag is plainly
+-- along that axis (`SLOP` and the 1.2 ratio are the engine's pan decision)
+-- or the finger lifts.
+local SLOP = 8
+local function finger_gate(axis, send)
+  local touching, held, from_x, from_y, across
+  local g = {}
+  function g.touched() touching = true end
+  -- Whether the press waits.
+  function g.press(event, sx, sy)
+    if not touching or axis() == "both" then return false end
+    held, from_x, from_y, across = event, sx, sy, false
+    return true
+  end
+  -- Whether the drag goes on to the control.
+  function g.drag(sx, sy)
+    if across then return false end
+    if not held then return true end
+    local dx, dy = math.abs(sx - from_x), math.abs(sy - from_y)
+    if math.sqrt(dx * dx + dy * dy) < SLOP or math.max(dx, dy) < math.min(dx, dy) * 1.2 then return false end
+    if (dx > dy) ~= (axis() == "x") then across, held = true, nil return false end
+    local event = held
+    held = nil
+    send(table.unpack(event))
+    return true
+  end
+  -- Whether the release goes on to the control.
+  function g.release()
+    if held then
+      local event = held
+      held = nil
+      send(table.unpack(event))
+    end
+    local was = across
+    touching, across = false, false
+    return not was
+  end
+  function g.cancel() touching, held, across = false, nil, false end
+  return g
+end
+
 -- A list in the live state (a selection's indices) is kept as text,
 -- ",2,5,", so a binding compares it as one value: `control.has(t.selected, i)`.
 local function encode(v)
@@ -228,23 +282,35 @@ function M.make(archetype, widget, spec, extra)
   -- After the archetype has the event, the configuration's own handler
   -- for it, with what the pointer said.
   local function also(name, ...) local own = spec[name] if own then return own(...) end end
+  local axis = AXIS[archetype] and function() return AXIS[archetype](spec) end
+  local finger = axis and finger_gate(axis, send)
   local props = {
     focus_policy = POLICY[archetype] or "none",
+    drag_axis = axis or nil,
     on_entered = function(...) send("entered") also("on_entered", ...) end,
     on_exited = function(...) send("exited") also("on_exited", ...) end,
+    on_touch_pressed = finger and function(...) finger.touched() also("on_touch_pressed", ...) end or nil,
+    on_touch_canceled = finger and function(...) finger.cancel() also("on_touch_canceled", ...) end or nil,
     -- (With the button and the modifiers held: a canvas pans with the
     -- middle one, a Shift-click adds; Shift drags a slider finely.)
     on_pressed = function(sx, sy, x, y, button, modifiers, ...)
-      if SURFACE_POINTER[archetype] then send("pressed", sx, sy)
-      else local a, b, w, h = travel(x, y) send("pressed", a, b, w, h, button or "left", modifiers or "") end
+      local event
+      if SURFACE_POINTER[archetype] then event = { "pressed", sx, sy }
+      else local a, b, w, h = travel(x, y) event = { "pressed", a, b, w, h, button or "left", modifiers or "" } end
+      if not (finger and finger.press(event, sx, sy)) then send(table.unpack(event)) end
       also("on_pressed", sx, sy, x, y, button, modifiers, ...)
     end,
     on_dragged = (DRAG[archetype] or spec.on_dragged) and function(sx, sy, dx, dy, x, y, modifiers, ...)
-      if SURFACE_POINTER[archetype] then send("dragged", sx, sy)
-      else local a, b, w, h = travel(x, y) send("dragged", a, b, w, h, modifiers or "") end
+      if not finger or finger.drag(sx, sy) then
+        if SURFACE_POINTER[archetype] then send("dragged", sx, sy)
+        else local a, b, w, h = travel(x, y) send("dragged", a, b, w, h, modifiers or "") end
+      end
       also("on_dragged", sx, sy, dx, dy, x, y, modifiers, ...)
     end or nil,
-    on_released = function(...) send("released") also("on_released", ...) end,
+    on_released = function(...)
+      if not finger or finger.release() then send("released") end
+      also("on_released", ...)
+    end,
     on_clicked = function(...)
       click_args = { ... }
       send("clicked")

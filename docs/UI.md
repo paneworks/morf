@@ -1814,7 +1814,12 @@ while dragging and animate to a resting position on `end`. Restore the prior
 state on `cancel`, including when a second finger interrupts the pan.
 
 An accepted pan cancels the child's press and suppresses its click and legacy
-swipe. Sliders, text selection and explicit child drag handlers keep ownership.
+swipe. Sliders, text selection and explicit child drag handlers keep ownership
+along their `drag_axis` (`"x"`, `"y"` or `"both"`, the default): a pan across
+a horizontal slider or a reorderable tab row goes on to what holds it. The kit
+sets it on its sliders, drags and reorderable entries, and holds a finger's
+press on them until the drag is plainly theirs, so a pan across one leaves its
+value as it was; a tap still sets it.
 A Flickable that can scroll in the movement direction takes the drag; at its
 boundary it can yield to a containing panel. Ordinary taps remain clicks.
 
@@ -1823,9 +1828,9 @@ under them, as a touchpad does. A finger is the left button throughout: it
 presses, drags and clicks as the pointer does, so a swipe and a long press
 work under a finger and a mouse alike. A swipe on passive content goes to
 the nearest ancestor with `on_swiped`. A child with its own swipe/drag
-handler, a text input, or a terminal keeps the gesture; panel navigation
-does not take over sliders or text selection. Canceling a touch does not
-complete a swipe.
+handler along the swipe's axis, a text input, or a terminal keeps the
+gesture; panel navigation does not take over sliders or text selection.
+Canceling a touch does not complete a swipe.
 
 ### Overlays
 

@@ -296,6 +296,7 @@ function M.swipe(node, spec)
   -- only through the spec: give `on_pressed` there to keep one).
   node.on_pressed = function(sx, sy, ...) behaviour.send("pressed", sx, sy) if spec.on_pressed then spec.on_pressed(sx, sy, ...) end end
   node.on_dragged = function(sx, sy, ...) behaviour.send("dragged", sx, sy) end
+  node.drag_axis = axis
   node.on_released = function(...) behaviour.send("released", 0, 0) if spec.on_released then spec.on_released(...) end end
   node.on_swiped = function(_, vx, vy) behaviour.send("fling", vx, vy) end
   local property = axis == "y" and "translate_y" or "translate_x"

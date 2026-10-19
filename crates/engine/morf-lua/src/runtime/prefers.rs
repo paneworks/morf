@@ -7,12 +7,13 @@ use crate::{
     runtime::host_types::*, runtime::state::*, vm::types::*,
 };
 
-/// Writes one signal from the host side; the caller flushes.
-fn write_signal(state: &mut ReactiveState, id: SignalId, value: IpcValue) -> Result<(), String> {
+/// Writes one signal from the host side, saying whether it moved; the
+/// caller flushes.
+fn write_signal(state: &mut ReactiveState, id: SignalId, value: IpcValue) -> Result<bool, String> {
     if state.reactive().value(id) == Some(&value) {
-        return Ok(());
+        return Ok(false);
     }
-    state.reactive_mut().write(id, value)
+    state.reactive_mut().write(id, value).map(|()| true)
 }
 
 impl Runtime {
@@ -32,10 +33,10 @@ impl Runtime {
             .enter(|ctx| flush_reactive(&self.reactive, ctx, self.limits))
     }
 
-    fn write_preference(&mut self, name: &str, value: IpcValue) -> Result<(), String> {
+    fn write_preference(&mut self, name: &str, value: IpcValue) -> Result<bool, String> {
         let mut state = self.reactive.borrow_mut();
         let Some(prefers) = state.prefers() else {
-            return Ok(());
+            return Ok(false);
         };
         let id = match name {
             "color_scheme" => prefers.color_scheme,
@@ -82,7 +83,7 @@ impl Runtime {
         let mut moved = false;
         for (name, value) in changes {
             match self.write_preference(name, value) {
-                Ok(()) => moved = true,
+                Ok(changed) => moved |= changed,
                 Err(message) => self
                     .reactive
                     .borrow_mut()
@@ -106,7 +107,7 @@ impl Runtime {
             for (key, value) in tokens {
                 if let Some(&id) = fields.get(&key) {
                     match write_signal(&mut state, id, value) {
-                        Ok(()) => moved = true,
+                        Ok(changed) => moved |= changed,
                         Err(message) => {
                             state.log(LogLevel::Warn, format!("theme source: {message}"))
                         }

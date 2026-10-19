@@ -269,6 +269,7 @@ pub(crate) fn affects_layout(property: &str) -> bool {
             | "gradient"
             | "decoration"
             | "cursor"
+            | "drag_axis"
             | "blur"
             | "backdrop_blur"
             | "backdrop_saturation"

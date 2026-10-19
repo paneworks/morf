@@ -158,6 +158,13 @@ pub(crate) fn coerce(
                 return Err(invalid(format!("`{name}` is not quadratic or circular")));
             }
         }
+        "drag_axis" => {
+            if let Value::String(name) = &value
+                && !matches!(name.as_str(), "x" | "y" | "both")
+            {
+                return Err(invalid(format!("`{name}` is not x, y or both")));
+            }
+        }
         "layout_direction" => {
             if let Value::String(name) = &value
                 && !matches!(name.as_str(), "" | "ltr" | "rtl")
