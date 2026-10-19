@@ -47,6 +47,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -139,6 +140,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -237,6 +239,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -350,6 +353,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -467,6 +471,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -588,6 +593,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -717,6 +723,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -826,6 +833,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -928,6 +936,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -1034,6 +1043,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -1149,6 +1159,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -1258,6 +1269,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -1353,6 +1365,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -1445,6 +1458,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -1539,6 +1553,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -1633,6 +1648,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -1732,6 +1748,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -1825,6 +1842,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -1921,6 +1939,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -2014,6 +2033,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -2112,6 +2132,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(true)
 ---@field focus_policy (string|fun(): string)? default String("auto")
@@ -2203,6 +2224,7 @@
 ---@field transition_y (number|fun(): number)? default Number(0.0)
 ---@field transform_matrix (any|fun(): any)? default Nil
 ---@field enabled (boolean|fun(): boolean)? default Bool(true)
+---@field drag_axis (string|fun(): string)? default String("both")
 ---@field focus (boolean|fun(): boolean)? default Bool(false)
 ---@field tab_navigation (boolean|fun(): boolean)? default Bool(false)
 ---@field focus_policy (string|fun(): string)? default String("auto")

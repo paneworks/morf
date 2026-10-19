@@ -85,14 +85,18 @@ impl Runtime {
             return self.dispatch_ui_event_with_args(node, event, &args);
         }
         // A panel can own navigation without an input overlay stealing its
-        // buttons. Stop at a child that owns a swipe or a drag (a slider,
-        // selection or notification); otherwise find the nearest container.
+        // buttons. Stop at a child that owns a swipe or a drag along this
+        // axis (a slider, selection or notification); otherwise find the
+        // nearest container.
+        let horizontal =
+            matches!(args.first(), Some(IpcValue::String(d)) if d == "left" || d == "right");
         let mut target = Some(node);
         while let Some(current) = target {
-            if self.handles(current, UiEvent::Swiped) {
+            let along = self.along_drag_axis(current, horizontal);
+            if along && self.handles(current, UiEvent::Swiped) {
                 return self.dispatch_ui_event_with_args(current, event, &args);
             }
-            if self.handles(current, UiEvent::Dragged)
+            if (along && self.handles(current, UiEvent::Dragged))
                 || self.is_text_input(current)
                 || self.is_terminal(current)
             {
@@ -125,6 +129,21 @@ impl Runtime {
     /// Whether `node` has a handler for `event`.
     pub fn handles(&self, node: NodeHandle, event: UiEvent) -> bool {
         self.reactive.borrow().events().has(node, event)
+    }
+
+    /// Whether a drag along this axis is `node`'s own: it has a drag or swipe
+    /// handler, and its `drag_axis` is this axis or both.
+    pub fn drags_along(&self, node: NodeHandle, horizontal: bool) -> bool {
+        (self.handles(node, UiEvent::Dragged) || self.handles(node, UiEvent::Swiped))
+            && self.along_drag_axis(node, horizontal)
+    }
+
+    fn along_drag_axis(&self, node: NodeHandle, horizontal: bool) -> bool {
+        match self.scene().string_value(node, "drag_axis") {
+            Ok("x") => horizontal,
+            Ok("y") => !horizontal,
+            _ => true,
+        }
     }
 
     /// Calls `node`'s handler for a gesture the host recognised (a pinch, an

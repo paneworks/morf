@@ -356,6 +356,7 @@ function M.make(widget, spec)
             ui.MouseArea { anchors = { fill = true }, cursor = column.sortable and "pointer" or nil,
               on_clicked = function() if ctl then ctl.send("sort", column.key) end end, cell },
             ui.MouseArea { anchors = { right = true, top = true, bottom = true }, width = 8, cursor = "col_resize",
+              drag_axis = "x",
               on_pressed = function(sx) from, base = sx, widths[c]:get() end,
               on_dragged = function(sx)
                 local w = math.max(spec.min_column_width or 48, math.floor(base + (sx - from)))

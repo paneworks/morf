@@ -119,10 +119,10 @@ impl TouchPan {
             if runtime.offer_pan(node, UiEvent::Panned, &self.args("begin", None)) {
                 return Some(Owner::Handler(node, None));
             }
-            // Direct manipulation in a child keeps ownership. A passive button
-            // can give its drag to a panel while retaining an ordinary tap.
-            if runtime.handles(node, UiEvent::Dragged)
-                || runtime.handles(node, UiEvent::Swiped)
+            // Direct manipulation in a child keeps ownership along its axis. A
+            // passive button can give its drag to a panel while retaining an
+            // ordinary tap.
+            if runtime.drags_along(node, horizontal)
                 || runtime.is_text_input(node)
                 || runtime.is_terminal(node)
             {

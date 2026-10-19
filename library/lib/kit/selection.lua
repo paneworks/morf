@@ -139,6 +139,7 @@ function M.make(widget, spec)
           if dragging then dragging.send("pressed", sx, sy) end
         end,
         on_dragged = dragging and function(sx, sy) dragging.send("dragged", sx, sy) end or nil,
+        drag_axis = dragging and ((spec.orientation == "vertical") and "y" or "x") or nil,
         on_released = dragging and function() dragging.send("released", 0, 0) end or nil,
         on_double_clicked = function() deliver("item_activated", index) end,
         accessible_role = (type(value) == "table" and value.accessible_role) or item_role or "list_box_option",
@@ -337,7 +338,7 @@ function M.tumbler(root, t, ctl, areas, spec, ROW, ROWS)
   end
   -- The pointer: a drag turns, a release snaps, a tap turns to the entry.
   local press_y, press_pos, dragging, trail
-  local catcher = ui.MouseArea { anchors = { fill = true }, z = 100, cursor = "grab",
+  local catcher = ui.MouseArea { anchors = { fill = true }, z = 100, cursor = "grab", drag_axis = "y",
     on_pressed = function(_, sy)
       morf.focus.set(root, false)
       stop()
