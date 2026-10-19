@@ -10,7 +10,17 @@ use morf_lua::profile::{Stage, StageTimes, take_stages};
 use super::*;
 
 /// Fires every timer due 16 ms on, and says what each stage was charged.
+/// `morf.prefers` is held where it is first, so a settings portal on the
+/// machine answering meanwhile is charged to no timer.
 fn fire(runtime: &mut Runtime) -> StageTimes {
+    for (name, value) in [
+        ("color_scheme", IpcValue::String("none".into())),
+        ("contrast", IpcValue::String("none".into())),
+        ("reduced_motion", IpcValue::Boolean(false)),
+        ("accent_color", IpcValue::Nil),
+    ] {
+        runtime.set_preference(name, value).unwrap();
+    }
     runtime.advance_virtual_clock(Duration::from_millis(16));
     let _ = take_stages();
     runtime.poll_services();
