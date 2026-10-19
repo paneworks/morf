@@ -208,14 +208,7 @@ impl Service {
                 }
             }
         } else {
-            let mut ancestor = target.parent();
-            while let Some(dir) = ancestor {
-                if dir.is_dir() {
-                    dirs.push(dir.to_path_buf());
-                    break;
-                }
-                ancestor = dir.parent();
-            }
+            dirs.extend(nearest_dir(&target));
         }
         let mut armed = HashMap::new();
         let mut first_error = None;
@@ -259,8 +252,18 @@ impl Service {
         for wd in released {
             self.release(inner, wd, id);
         }
+        // What is made below the nearest directory before its watch takes
+        // hold is never reported by it: arm again until the path stops.
+        let behind = !target.is_dir()
+            && nearest_dir(&target).is_some_and(|dir| {
+                !inner.subscriptions[&id]
+                    .armed
+                    .values()
+                    .any(|armed| *armed == dir)
+            });
         match first_error {
             Some(error) => Err(error),
+            None if behind => Ok(self.arm(inner, id)? || queued),
             None => Ok(queued),
         }
     }
@@ -345,6 +348,15 @@ impl Service {
             let _ = join.join();
         }
     }
+}
+
+/// The nearest directory above `target` that is there.
+fn nearest_dir(target: &Path) -> Option<PathBuf> {
+    target
+        .ancestors()
+        .skip(1)
+        .find(|dir| dir.is_dir())
+        .map(Path::to_path_buf)
 }
 
 /// Rings the loop of every subscription with news since it was last rung,
