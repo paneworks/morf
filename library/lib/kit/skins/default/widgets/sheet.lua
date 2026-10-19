@@ -6,7 +6,7 @@
 -- in the accent, beats grouped by four, the playing column glowing; a seat
 -- map of seats free, taken and chosen; a plain cell grid. The ring springs
 -- from cell to cell and the plate stretches over the range. Every layout
--- here is shared with the caelestia themes' (material, tsugumori): only
+-- here is shared with eva's themes (material, tsugumori): only
 -- the style differs.
 local ui = require("morf.ui")
 

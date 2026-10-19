@@ -5,7 +5,7 @@
 # panel at about 1.29), with whatever morf configuration is under test
 # inside it, driven through a FIFO.
 #
-#   tools/sandbox/phone.sh &             opens it, running the caelestia shell
+#   tools/sandbox/phone.sh &             opens it, running eva (EVA: an eva checkout)
 #   tools/sandbox/phone.sh ctl 'greet'   one command (see phone.steps)
 #   tools/sandbox/phone.sh ctl 'shot greet-rest'
 #   tools/sandbox/phone.sh ctl quit
@@ -49,9 +49,9 @@ if command -v hyprctl > /dev/null && [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; 
       done ) &
   fi
 fi
-export BENCH_CTL=$CTL BENCH_REPO=$(cd "$HERE/../.." && pwd)
+export BENCH_CTL=$CTL BENCH_REPO=$(cd "$HERE/../.." && pwd) EVA=${EVA:-}
 VISIBLE=1 NESTED_SCALE=${NESTED_SCALE:-1} POINTER_SIZE="$BW $BH" TIMEOUT=${TIMEOUT:-36000} BOOT=${BOOT:-4} \
-  MORF_CONFIG=${MORF_CONFIG:-examples/shells/caelestia/shell/init.lua} \
-  MORF_ENV="CAELESTIA_STYLE=${STYLE:-tsugumori} CAELESTIA_DRY_RUN=1" \
+  MORF_CONFIG=${MORF_CONFIG:-${EVA:?EVA names an eva checkout (github.com/bresilla/eva)}/shell/init.lua} \
+  MORF_ENV="EVA_STYLE=${STYLE:-tsugumori} EVA_DRY_RUN=1" \
   "$HERE/nested.sh" morf phone "$HERE/phone.steps"
 rm -f "$CTL"

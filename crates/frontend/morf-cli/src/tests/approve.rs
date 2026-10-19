@@ -146,11 +146,7 @@ fn approve_reads_its_arguments_and_never_runs_a_file_named_approve() {
         _ => panic!("an approval"),
     }
     assert_eq!(
-        parse(&["-c", "caelestia"])
-            .unwrap()
-            .config
-            .file_name()
-            .unwrap(),
+        parse(&["-c", "eva"]).unwrap().config.file_name().unwrap(),
         "init.lua"
     );
 }

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.0] - 2026-10-19
+
+### <!-- 0 -->⛰️  Features
+
+- Refuse a shell made for a newer engine
+- Add eva as a submodule
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- Follow a missing path down as it is made
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- [**breaking**] Move caelestia and its module to eva
+
 ## [0.3.0] - 2026-10-18
 
 ### <!-- 0 -->⛰️  Features

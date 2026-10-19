@@ -2,7 +2,7 @@
 # sudo tools/pam/sudo-steps.sh [remove] -- markers in /etc/pam.d/sudo, so
 # the shell can show which step sudo is on: the eyes while it looks for a
 # face, a finger while it waits at the reader, a key at the password, a
-# tick once it is through (lib.authsteps; caelestia's authsteps.lua).
+# tick once it is through (lib.authsteps; eva's authsteps.lua).
 #
 # A marker (morf-auth-step, through pam_exec) goes before each step's
 # lines -- before a pam_succeed_if that may skip the step, not between them,

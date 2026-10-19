@@ -42,6 +42,7 @@ pub(crate) fn install_module_api<'gc>(
         "cache_dir",
         "cache_path",
         "has_version",
+        "satisfies",
         "reload",
         "on_reload_completed",
         "on_reload_failed",

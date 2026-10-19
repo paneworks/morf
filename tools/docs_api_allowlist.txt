@@ -146,7 +146,6 @@ morf.geometry.ticks	undocumented: path geometry generators; the guide documents 
 morf.greetd.connect	undocumented: greetd client for greeter configurations (docs/LOCK_PROVIDER.md)
 morf.greetd.converse	undocumented: greetd client for greeter configurations (docs/LOCK_PROVIDER.md)
 morf.has_icon	undocumented: icon theme lookups; the guide documents ui.Image sources
-morf.has_version	undocumented: no guide section yet
 morf.http.get	undocumented: HTTP client; no guide section yet
 morf.http.post	undocumented: HTTP client; no guide section yet
 morf.http.query	undocumented: HTTP client; no guide section yet
@@ -191,7 +190,6 @@ morf.pam.session	undocumented: PAM conversation for lock and greeter configurati
 morf.persistent	undocumented: lifecycle and reload hooks; no guide section yet
 morf.process_id	undocumented: process and path introspection; no guide section yet
 morf.quit	undocumented: lifecycle and reload hooks; no guide section yet
-morf.reload	undocumented: lifecycle and reload hooks; no guide section yet
 morf.retain_lock	undocumented: lifecycle and reload hooks; no guide section yet
 morf.retainable	undocumented: lifecycle and reload hooks; no guide section yet
 morf.scope	undocumented: lifecycle and reload hooks; no guide section yet
@@ -252,7 +250,6 @@ morf.ui.Icon	undocumented: constructor with no guide section yet
 morf.ui.Inset	undocumented: constructor with no guide section yet
 morf.ui.follow	undocumented: constructor with no guide section yet
 morf.variants	undocumented: lifecycle and reload hooks; no guide section yet
-morf.version	undocumented: process and path introspection; no guide section yet
 morf.view_extent	internal: layout helpers the library's list views call
 morf.view_item_start	internal: layout helpers the library's list views call
 morf.virtual_keyboard	undocumented: virtual-keyboard protocol for on-screen keyboards
@@ -275,6 +272,7 @@ morf.xkb.include_paths	undocumented: keymap compilation for keyboard layouts
 ui.Icon	undocumented: constructor with no guide section yet
 ui.Inset	undocumented: constructor with no guide section yet
 +morf.audio.sinks	dynamic: device list models served through __index in api/media/audio.rs
++morf.lua	dynamic: the file a shell names the engine it needs in (docs/IO.md), not an API name
 +morf.capabilities.backdrop_blur	dynamic: compositor capability filled by the host (turn/start.rs), not a types field
 +morf.capabilities.gamma_control	dynamic: compositor capability filled by the host, not a types field
 +morf.capabilities.hdr	dynamic: compositor capability filled by the host, not a types field

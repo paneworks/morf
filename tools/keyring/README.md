@@ -1,6 +1,6 @@
 # Morf keyring prompter
 
-The Caelestia keyring dialog uses GCR's `GcrSystemPrompter` and `GcrPrompt`
+The keyring dialog in [eva](https://github.com/bresilla/eva) uses GCR's `GcrSystemPrompter` and `GcrPrompt`
 interfaces. GCR implements the encrypted secret exchange with GNOME Keyring.
 This is independent of polkit and does not modify PAM or stored keyrings.
 
@@ -17,7 +17,7 @@ is `target/dist/morf-keyring`; install it on PATH, for example in
 `~/.local/bin/morf-keyring`. `MORF_KEYRING_HELPER` can name an explicit path.
 The runtime needs the corresponding shared libraries, not GTK or Python.
 
-Caelestia starts one bridge on its primary output. Request metadata is routed
+eva starts one bridge on its primary output. Request metadata is routed
 to the monitor focused when the request arrives, like polkit. The dialog stays
 there until it finishes, so changing focus cannot duplicate it or move typed
 input. Answers travel directly to the bridge through a private Unix socket;
@@ -58,8 +58,8 @@ sh tools/keyring/build.sh
 dbus-run-session -- /usr/bin/python3 tools/keyring/test_prompter.py
 TEST_GCR_VERSION=3 dbus-run-session -- /usr/bin/python3 tools/keyring/test_prompter.py
 TEST_KEYRING_SOCKET=1 dbus-run-session -- /usr/bin/python3 tools/keyring/test_prompter.py
-morf test --no-dbus examples/shells/caelestia/tests/keyring_spec.lua
-morf test --no-dbus examples/shells/caelestia/tests/auth_monitor_spec.lua
+morf test --no-dbus eva/tests/keyring_spec.lua
+morf test --no-dbus eva/tests/auth_monitor_spec.lua
 ```
 
 Protocol test clients need Python GObject introspection and GCR typelibs;

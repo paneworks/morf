@@ -16,7 +16,7 @@
 # The nested Hyprland reads a config of its own, never ~/.config/hypr.
 
 set -eu
-NAME=${1:-caelestia}
+NAME=${1:-eva}
 MORF=${MORF:-/usr/bin/morf}
 DIR=$(mktemp -d "${TMPDIR:-/tmp}/lockboxXXXX")
 # The machine's own libraries for morf, as outside a nix shell: the shell's

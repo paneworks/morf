@@ -51,7 +51,4 @@ jobs:
           export FONTCONFIG_FILE
           cargo build -p morf-cli
           target/debug/morf test --no-dbus library/tests/kit_spec.lua
-          target/debug/morf test --no-dbus examples/shells/caelestia/tests/kit_gallery_spec.lua
-          for style in material tsugumori; do
-            CAELESTIA_STYLE=$style target/debug/morf check --kit --no-dbus examples/shells/caelestia/shell/init.lua
-          done
+          target/debug/morf check --kit default --no-dbus

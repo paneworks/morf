@@ -304,6 +304,16 @@ pub(crate) fn install_shell_api<'gc>(
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "has_version", has_version);
+    // `morf.satisfies(">=0.4")`: whether this engine meets a requirement
+    // written as a shell's morf.lua writes one.
+    let satisfies = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+        let requirement: String = stack.consume(ctx)?;
+        let met = crate::vm::requirement::satisfies(&requirement, crate::vm::requirement::ENGINE)
+            .map_err(HostError)?;
+        stack.replace(ctx, met);
+        Ok(CallbackReturn::Return)
+    });
+    morf.set_field(ctx, "satisfies", satisfies);
     let reload_state = Rc::clone(&state);
     // `morf.reload(hard)`, or `morf.reload { hard = ..., output = ... }`:
     // `output`, only this output's runtime.

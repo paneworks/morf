@@ -14,6 +14,7 @@ mod operations;
 mod permission_cost;
 mod plugins;
 mod reload;
+mod shell_manifest;
 mod supervision;
 mod wake_plan;
 mod wheel;

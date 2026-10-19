@@ -87,6 +87,7 @@
 ---@field retain_lock fun(...): any
 ---@field retainable fun(...): any
 ---@field run fun(...): any
+---@field satisfies fun(...): any
 ---@field scope fun(...): any
 ---@field screencopy Morf.Screencopy
 ---@field screens Morf.Screens
@@ -250,6 +251,7 @@
 ---@field reloadable fun(...): any
 ---@field retain_lock fun(...): any
 ---@field retainable fun(...): any
+---@field satisfies fun(...): any
 ---@field scope fun(...): any
 ---@field screens Morf.Core.Screens
 ---@field session_paths fun(...): any

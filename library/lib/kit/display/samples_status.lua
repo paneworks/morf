@@ -1,5 +1,5 @@
 -- Gallery samples for the status display widgets: name -> function(kit) returning a
--- node that fits a 260x190 cell (examples/shells/caelestia/tests/kit_gallery_spec.lua).
+-- node that fits a 260x190 cell (eva's tests/kit_gallery_spec.lua).
 local morf = require("morf")
 local ui = require("morf.ui")
 

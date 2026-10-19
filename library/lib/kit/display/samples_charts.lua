@@ -1,5 +1,5 @@
 -- Gallery samples for the charts display widgets: name -> function(kit) returning a
--- node that fits a 260x190 cell (examples/shells/caelestia/tests/kit_gallery_spec.lua).
+-- node that fits a 260x190 cell (eva's tests/kit_gallery_spec.lua).
 local W, H = 260, 190
 
 local function wave(n, f)

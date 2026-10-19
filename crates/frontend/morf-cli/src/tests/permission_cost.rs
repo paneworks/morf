@@ -1,4 +1,4 @@
-//! What the permission bookkeeping costs one caelestia load, measured:
+//! What the permission bookkeeping costs one shell load (eva), measured:
 //! `cargo test --release -p morf-cli -- --ignored --nocapture permission_cost`.
 //!
 //! Before: every module outside the configuration's folder was hashed over
@@ -11,8 +11,8 @@ use std::time::{Duration, Instant};
 use morf_host::headless::{Headless, LoadOptions};
 use morf_lua::{Approvals, ModuleDeclaration, PermissionMode, module_fingerprint};
 
-fn caelestia() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../examples/shells/caelestia/shell/init.lua")
+fn shell() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../examples/shells/eva/shell/init.lua")
 }
 
 fn copy_tree(from: &Path, to: &Path) {
@@ -43,7 +43,7 @@ fn best_of<T>(runs: usize, mut work: impl FnMut() -> T) -> (Duration, T) {
 fn permission_cost() {
     #[cfg(feature = "kit")]
     morf_lua::register_kit();
-    let config = morf_lua::canonical_path(&caelestia());
+    let config = morf_lua::canonical_path(&shell());
     let mut options = LoadOptions::new(config.clone());
     options.permissions = PermissionMode::HoldImported;
     options.approvals = Some(std::env::temp_dir().join("morf-permission-cost.json"));
@@ -112,7 +112,7 @@ fn permission_cost() {
     });
     let _ = std::fs::remove_dir_all(&copy);
     println!(
-        "caelestia: {} modules, {} outside its folder, {imported} imported",
+        "eva: {} modules, {} outside its folder, {imported} imported",
         records.len(),
         outside.len()
     );

@@ -26,9 +26,10 @@ on as a screen reader would switch it on (the bus launcher keeps its
 switches in memory: no dconf in here; its registry is started by hand: no
 systemd), before the shell starts. The step `a11y LABEL` then writes what a
 screen reader sees -- every application's tree over AT-SPI, through
-libatspi (`a11ydump.py`) -- to `a11y-LABEL.txt`:
+libatspi (`a11ydump.py`) -- to `a11y-LABEL.txt` (`$EVA` is a checkout of
+[eva](https://github.com/bresilla/eva), the shell these steps were written for):
 
-    A11Y=1 MORF_CONFIG=examples/shells/caelestia/shell/init.lua MORF_ENV="CAELESTIA_DRY_RUN=1" \
+    A11Y=1 MORF_CONFIG=$EVA/shell/init.lua MORF_ENV="EVA_DRY_RUN=1" \
       tools/sandbox/nested.sh morf a11y tools/sandbox/caelestia-a11y.steps
 
 `wlproxy.py` sits between cage and the nested Hyprland: cage 0.3 offers
@@ -104,8 +105,8 @@ HOME and stubs stay private. `EXTRA_FONTS=DIR` adds a font folder to the
 scratch HOME. `caelestia-show.steps` is a short tour of the caelestia port
 that then leaves the session to you until `TIMEOUT`:
 
-    VISIBLE=1 TIMEOUT=3600 MORF_CONFIG=examples/shells/caelestia/shell/init.lua \
-      MORF_ENV="CAELESTIA_WALLPAPER=/path/to/wallpaper" \
+    VISIBLE=1 TIMEOUT=3600 MORF_CONFIG=$EVA/shell/init.lua \
+      MORF_ENV="EVA_WALLPAPER=/path/to/wallpaper" \
       tools/sandbox/nested.sh morf show tools/sandbox/caelestia-show.steps
 
 ## headless

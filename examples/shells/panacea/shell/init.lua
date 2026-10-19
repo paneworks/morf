@@ -84,8 +84,8 @@ function island.lock()
   local command = config.lockCommand
   if command == "" then
     local root = morf.env("XDG_CONFIG_HOME") or (morf.fs.home() .. "/.config")
-    if morf.fs.exists(root .. "/morf/caelestia/lock/init.lua") or morf.fs.exists("/etc/xdg/morf/caelestia/lock/init.lua") then
-      command = "morf lock -c caelestia"
+    if morf.fs.exists(root .. "/morf/eva/lock/init.lua") or morf.fs.exists("/etc/xdg/morf/eva/lock/init.lua") then
+      command = "morf lock -c eva"
     else command = "hyprlock" end
   end
   system.launch(command)

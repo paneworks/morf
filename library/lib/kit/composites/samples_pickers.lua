@@ -1,6 +1,6 @@
 -- Gallery samples for composites (pickers): name -> function(kit, composites)
 -- returning a node that fits a 520x340 area
--- (examples/shells/caelestia/tests/composites_gallery_spec.lua).
+-- (eva's tests/composites_gallery_spec.lua).
 local ui = require("morf.ui")
 
 local FONTS = { "Rubik", "IBM Plex Mono", "JetBrains Mono", "Noto Sans", "Noto Serif", "Adwaita Sans",

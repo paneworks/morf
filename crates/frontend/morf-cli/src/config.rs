@@ -204,7 +204,7 @@ pub(crate) fn parse_command(args: &[std::ffi::OsString]) -> Result<Command, Stri
         ["-V" | "--version"] => Ok(Command::Version),
         [part @ ("shell" | "lock" | "greet"), "-c", name, rest @ ..] => {
             if name.contains('/') {
-                return Err("use a shell name with a role, e.g. morf lock -c caelestia".to_owned());
+                return Err("use a shell name with a role, e.g. morf lock -c eva".to_owned());
             }
             Ok(Command::Run(
                 named_config_path(&format!("{name}/{part}"))?,

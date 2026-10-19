@@ -3,12 +3,12 @@
 # `quit`. Everything nested.sh defines is at hand (shot, point, click,
 # scroll, k, hc, ipc, wait); this adds
 #   run CONFIG [-- OPERANDS]   swap the morf under test for another config
-#   lock | greet | shell       the caelestia lock (preview), greeter (dry
+#   lock | greet | shell       eva's lock (preview), greeter (dry
 #                              run, preview) or shell
 # Output of each command goes to OUT/ctl.log, closed by a "done" line.
 CTL=${BENCH_CTL:?}
 REPO=${BENCH_REPO:?}
-C=examples/shells/caelestia
+C=${EVA:?EVA names an eva checkout (github.com/bresilla/eva)}
 run() {
   # The morf in here, whichever started it (this, or nested.sh at the
   # start): `morf kill` reaches only the instance in this private runtime
@@ -17,7 +17,7 @@ run() {
   [ -n "${S:-}" ] && kill "$S" 2>/dev/null
   sleep 1
   cd "$REPO"
-  ( env MORF_DENSITY_LOG=1 CAELESTIA_STYLE="${STYLE:-tsugumori}" CAELESTIA_DRY_RUN=1 IMPASTO_DRY_RUN=1 nixVulkanIntel "$REPO/target/release/morf" "$@"
+  ( env MORF_DENSITY_LOG=1 EVA_STYLE="${STYLE:-tsugumori}" EVA_DRY_RUN=1 IMPASTO_DRY_RUN=1 nixVulkanIntel "$REPO/target/release/morf" "$@"
     echo "morf exited: $?" ) > "$OUT/shell.log" 2>&1 &
   S=$!
 }
