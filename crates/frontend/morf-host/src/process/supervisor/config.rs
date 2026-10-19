@@ -65,6 +65,8 @@ pub fn execute_config_with(
             .unwrap_or_else(|| Path::new("."))
             .to_path_buf(),
     );
+    // Before any of it runs: a shell made for a newer engine is refused.
+    runtime.check_shell_manifest(&canonical)?;
     for plugin in policy
         .plugins
         .then(|| runtime_scripts(&roots, "plugin"))

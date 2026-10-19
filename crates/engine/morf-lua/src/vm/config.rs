@@ -14,6 +14,7 @@ pub(crate) mod cover;
 mod lint;
 mod permissions;
 pub(crate) mod reload_band;
+mod shell_manifest;
 
 pub use permissions::PermissionMode;
 

@@ -644,6 +644,35 @@ x, y, tolerance)` returns the last hit's 1-based index or nil. Tolerance default
 to 6 pixels. These native queries also accept blur and pixelate rectangles for
 editing; rendering their effects uses the regional operations above.
 
+## Which engine a shell needs: `morf.lua`
+
+A shell says which morf it is written for in `morf.lua`, beside its
+configuration or one folder up (at the root of a shell whose `shell/`,
+`lock/` and `greet/` each have a folder):
+
+```lua
+return {
+  name = "eva",
+  version = "0.1.0",
+  morf = ">=0.3.0",   -- the engines it runs on
+  tested = "0.3",     -- the release line it was last tested on
+}
+```
+
+It is read as data, in an empty environment, before any of the shell or its
+plugins runs, so an engine too old for the shell still says why: `morf`,
+`morf check` and `morf test` refuse it with `eva 0.1.0 needs morf >=0.4.0;
+this is morf 0.3.0`, and `morf check` exits non-zero. An engine past the
+`tested` line runs the shell and logs a warning instead. Every field is
+optional; a shell without the file runs as it is.
+
+A requirement is comparators joined by commas: `>=0.3`, `>=0.3, <0.5`,
+`=0.3` (any 0.3). A version on its own is a minimum; a missing part counts
+as zero. `morf.satisfies(">=0.4")` asks the same of the running engine from
+Lua, for a theme or a plugin that needs a newer one than the shell around
+it; `morf.version` is the engine's version and
+`morf.has_version(major, minor, features)` the older form of the question.
+
 ## Imported modules: declare, approve, hold
 
 Everything on this page runs with the user's privileges, and a

@@ -30,7 +30,7 @@ pub(crate) use gate::{Gate, GateMode, Holder, gate, gated, gated_write, refused,
 pub use loading::APPROVALS_FILE;
 pub(crate) use loading::Permissions;
 pub use manifest::manifest_path;
-pub(crate) use manifest::read_manifest;
+pub(crate) use manifest::{read_manifest, run_data};
 pub(crate) use origin::INTEGRATIONS;
 pub use origin::{Origin, Origins, canonical, engine_library};
 pub(crate) use services::read_catalog;
