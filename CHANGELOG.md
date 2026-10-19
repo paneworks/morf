@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.5.0] - 2026-10-19
+
+### <!-- 0 -->⛰️  Features
+
+- Let pans cross a drag's axis
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- Flush only when a preference moves
+
+### <!-- 6 -->🧪 Testing
+
+- Hold preferences while timing stages
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- Move eva to its gesture fixes
+- Move eva to its v0.4.1 pin
+
 ## [0.4.1] - 2026-10-19
 
 ### <!-- 1 -->🐛 Bug Fixes
