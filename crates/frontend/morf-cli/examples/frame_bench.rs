@@ -6,7 +6,7 @@
 //! display. Run it against any configuration:
 //!
 //! ```sh
-//! cargo run --release -p morf-cli --example frame_bench -- examples/shells/panacea/shell/init.lua
+//! cargo run --release -p morf-cli --example frame_bench -- examples/shells/eva/shell/init.lua
 //! ```
 //!
 //! Numbers are the fastest of several batches. Background load only ever adds

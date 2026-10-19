@@ -16,7 +16,7 @@ installation step (sudo may reuse an existing authentication timestamp):
 
 ```sh
 oslo make install
-oslo make apply --example panacea
+oslo make apply --example eva
 # Subsequent updates can use: oslo make apply
 ```
 
@@ -30,9 +30,7 @@ running engine and editor configurations to keep finding it.
 publishes the parts under `/etc/xdg/morf/NAME/` and `~/.config/morf/NAME/`, with
 `default` links in both roots. User appearance/settings JSON beside the parts
 is preserved. With no `--example`, it uses the user's current default shell
-(or panacea if none is selected). A system Morf installation is required first.
-Shells kept outside this repository, such as
-[eva](https://github.com/bresilla/eva), install their own way.
+(or eva if none is selected). A system Morf installation is required first.
 
 When greetd is installed and the selected shell provides a greeter, apply
 validates the greeter under greetd's own account with an empty temporary home

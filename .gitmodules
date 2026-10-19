@@ -1,0 +1,4 @@
+[submodule "examples/shells/eva"]
+	path = examples/shells/eva
+	url = https://github.com/bresilla/eva.git
+	branch = main

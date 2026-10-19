@@ -20,9 +20,12 @@ The library's own specs are in [`../library/tests`](../library/tests).
 
 ## Running
 
+eva is a submodule; `git submodule update --init examples/shells/eva` fetches
+it (or clone with `--recurse-submodules`).
+
 ```sh
 morf examples/demos/sdf/sdf-blobs.lua              # a demo
-morf examples/shells/panacea/shell/init.lua        # a shell, from here
+morf examples/shells/eva/shell/init.lua            # a shell, from here
 morf test examples/demos/tests/counter_spec.lua    # a spec
 morf check examples/shells/impasto/shell/init.lua  # load it headless, report errors
 ```
@@ -31,14 +34,14 @@ To make a shell yours -- copied to `~/.config/morf/NAME` and run by a bare
 `morf` -- after `make install`:
 
 ```sh
-make apply --example panacea       # then: morf, or morf -c panacea
+make apply --example eva           # then: morf, or morf -c eva
 ```
 
 ## Shells
 
 | | |
 |---|---|
-| [eva](https://github.com/bresilla/eva) | its own repository: a clean-room port of caelestia-dots/shell, a frame, drawers out of its edges, pills down its sides |
+| [`eva`](shells/eva) | a submodule ([bresilla/eva](https://github.com/bresilla/eva)): a clean-room port of caelestia-dots/shell, a frame, drawers out of its edges, pills down its sides |
 | [`chillpill`](shells/chillpill) | a port of ChillPill-Shell, the pill bar for Hyprland |
 | [`impasto`](shells/impasto) | a port of andreumassanet/impasto: an island, a dock, a desk |
 | [`panacea`](shells/panacea) | a port of Panacea: one capsule at the top edge is the whole shell |

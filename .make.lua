@@ -153,7 +153,7 @@ make.recipe{
 
 ---------------------------------------------------------------------------- rust
 
-local EXAMPLE = os.getenv("EXAMPLE") or "examples/shells/panacea/shell/init.lua"
+local EXAMPLE = os.getenv("EXAMPLE") or "examples/shells/eva/shell/init.lua"
 
 make.recipe{ name = "build", desc = "the workspace",
              run = function()
