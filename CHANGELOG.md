@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.1] - 2026-10-19
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- Keep the eva submodule out of the source
+
 ## [0.4.0] - 2026-10-19
 
 ### <!-- 0 -->⛰️  Features

@@ -166,10 +166,12 @@
           outputs = [ "out" "library" ];
           src = pkgs.lib.cleanSourceWith {
             src = ./.;
-            # Build outputs and research notes are no part of the source.
+            # Build outputs, research notes and the eva submodule are no part of
+            # the source.
             filter = path: _type:
               let name = baseNameOf path; in
-              name != "target" && name != "xtra" && name != "result";
+              name != "target" && name != "xtra" && name != "result"
+              && !(pkgs.lib.hasSuffix "/examples/shells/eva" (toString path));
           };
           cargoLock = {
             lockFile = ./Cargo.lock;
