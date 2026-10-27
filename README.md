@@ -60,6 +60,8 @@ An infinite Lua loop is terminated when its fuel budget is exhausted rather than
 
 How nodes are sized and placed, how state reaches them, and what makes a frame: [`docs/UI.md`](docs/UI.md). The demos under `examples/demos/` are the runnable versions of each section; whole shells are under `examples/shells/` (see [`examples/README.md`](examples/README.md)).
 
+Processes, files, sockets and every `morf.<namespace>`: [`docs/IO.md`](docs/IO.md). Coming from 0.5: [`docs/MIGRATING.md`](docs/MIGRATING.md).
+
 ## Testing a configuration
 
 `morf check`, `morf render` and `morf test` run a configuration with no compositor: nothing connects to Wayland and time is virtual. `check` loads it, lays out every surface and reports Lua errors and lint; `render` draws a surface to a PNG with the real GPU renderer; `test` runs Lua spec files that click, type, advance time and call IPC. See [`docs/TESTING.md`](docs/TESTING.md) and the specs in each shell's `tests/`, `examples/demos/tests/` and `library/tests/`.

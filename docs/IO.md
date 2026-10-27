@@ -1,4 +1,4 @@
-# Processes and sockets in morf
+# Processes, files and the system in morf
 
 A configuration talks to the rest of the system through child processes
 and sockets. Both are event-driven: you start one whenever you like — at
@@ -9,6 +9,55 @@ an idle shell costs nothing and a line is seen when it is written.
 ```lua
 local morf = require("morf")   -- require("morf.process") is morf.process
 ```
+
+## The API by namespace
+
+Every `morf.<namespace>` and what it holds; `require("morf.<namespace>")` is
+the same table. This guide covers the system side, [UI.md](UI.md) the screen.
+
+| Namespace | Members | Guide |
+|---|---|---|
+| `morf` | `app_id`, `args`, `broadcast`, `capabilities`, `channel`, `effect`, `env`, `executable`, `instance_id`, `ipc`, `launch_time_ms`, `list_model`, `on_reload`, `operands`, `options`, `prefers`, `process_id`, `quit`, `reload`, `reloadable`, `satisfies`, `screens`, `service`, `shared`, `shell_id`, `signal`, `state`, `surface`, `sync_view`, `theme`, `transform_watcher`, `version`, `windows` | both |
+| `morf.animation` | `active`, `finish`, `fling`, `impulse`, `pause`, `paused`, `play`, `progress`, `restart`, `resume`, `reverse`, `seek`, `set_enabled`, `stop` | [UI](UI.md) |
+| `morf.apps` | `entries` | [IO](IO.md) |
+| `morf.audio` | `available`, `default_sink`, `default_source`, `device`, `equalizer_curve`, `monitor`, `move_stream`, `on_changed`, `set_channel_volumes`, `set_default`, `set_mute`, `set_volume`, `spectrum_filter`, `spectrum_resample`, `stream` | [IO](IO.md) |
+| `morf.clipboard` | `set`, `supported`, `watch` | [UI](UI.md) |
+| `morf.color` | `distinct`, `hct`, `hsv`, `mix`, `oklch`, `random`, `rgb`, `scale`, `tonal_palette` | [UI](UI.md) |
+| `morf.dbus` | `call_async`, `list_names`, `name_has_owner`, `name_owner`, `on_name_owner_changed`, `proxy`, `serve` | [UI](UI.md) |
+| `morf.drag` | `start` | [UI](UI.md) |
+| `morf.easing` | `color`, `curve`, `number`, `point`, `rect`, `value` | [UI](UI.md) |
+| `morf.encoding` | `base64_decode`, `base64_encode`, `sha1`, `sha256`, `url_decode`, `url_encode`, `uuid` | [UI](UI.md) |
+| `morf.focus` | `clear`, `get`, `next`, `previous`, `set` | [UI](UI.md) |
+| `morf.fs` | `copy`, `dir`, `disk`, `exists`, `expand`, `file`, `glob`, `home`, `is_dir`, `is_file`, `join`, `lines`, `list`, `matches`, `mkdir`, `read`, `read_async`, `read_link`, `remove`, `rename`, `stat`, `symlink`, `view`, `watch`, `write` | [IO](IO.md) |
+| `morf.geometry` | `arc`, `graph_grid`, `hatch`, `hatch_under`, `lobes`, `polygon`, `regular`, `ruler`, `sector`, `segments`, `shape_curves`, `shape_names`, `shape_path`, `shape_segments`, `star`, `ticks` | [UI](UI.md) |
+| `morf.greetd` | `connect`, `converse` | [IO](IO.md) |
+| `morf.http` | `get`, `post`, `query`, `request` | [IO](IO.md) |
+| `morf.idle` | `inhibit`, `subscribe` | [IO](IO.md) |
+| `morf.image` | `annotation_bounds`, `annotation_hit`, `annotation_path`, `annotation_pick`, `compose`, `from_dbus`, `has_icon`, `icon`, `info`, `limits`, `palette`, `pixel`, `preview`, `process`, `release` | [IO](IO.md) |
+| `morf.input_method` | `commit`, `delete`, `subscribe` | [UI](UI.md) |
+| `morf.json` | `array`, `decode`, `encode`, `null`, `object` | [IO](IO.md) |
+| `morf.keys` | every named key's keysym (`Down`, `Return`, `F1`...) | [UI](UI.md) |
+| `morf.lock` | `on_locked`, `on_state`, `state`, `surface` | [UI](UI.md) |
+| `morf.log` | `debug`, `error`, `info`, `warn` | [UI](UI.md) |
+| `morf.output_power` | `set` | [UI](UI.md) |
+| `morf.overlay` | `close`, `is_open`, `open`, `track` | [UI](UI.md) |
+| `morf.pam` | `authenticate`, `session` | [IO](IO.md) |
+| `morf.paths` | `cache`, `session`, `shell`, `state` | [IO](IO.md) |
+| `morf.process` | `detach`, `kill`, `open`, `run`, `spawn`, `view` | [IO](IO.md) |
+| `morf.screencopy` | `capture`, `capture_window`, `release`, `save` | [IO](IO.md) |
+| `morf.shader` | `data`, `define` | [UI](UI.md) |
+| `morf.shortcuts` | `inhibit`, `subscribe` | [UI](UI.md) |
+| `morf.socket` | `connect`, `open`, `request`, `server` | [IO](IO.md) |
+| `morf.status_notifier` | `subscribe` | [IO](IO.md) |
+| `morf.terminal` | `listen`, `parse` | [IO](IO.md) |
+| `morf.text` | `axes`, `families`, `fuzzy` | [UI](UI.md) |
+| `morf.time` | `add`, `clock`, `date`, `days_in_month`, `duration`, `elapsed`, `format`, `hour_clock`, `minute_clock`, `month`, `now`, `now_ms`, `parse`, `start_of`, `time`, `timer`, `weekday` | [UI](UI.md) |
+| `morf.toplevels` | `activate`, `close`, `get`, `list`, `on_changed`, `revision`, `set_fullscreen`, `set_maximized`, `set_minimize_target`, `set_minimized` | [UI](UI.md) |
+| `morf.udev` | `subscribe` | [UI](UI.md) |
+| `morf.ui` | the element constructors (`Item`, `Rect`, `Text`...), `destroy`, `reparent`, `follow`, `spring`, `claims`, `view_extent`, `view_item_start` | [UI](UI.md) |
+| `morf.virtual_keyboard` | `key`, `modifiers` | [UI](UI.md) |
+| `morf.window` | `density`, `layer`, `menu`, `on_backdrop_click`, `on_keyboard_focus`, `on_primary`, `popup`, `primary`, `region`, `screens_revision`, `toplevel` | [UI](UI.md) |
+| `morf.xkb` | `include_paths` | [UI](UI.md) |
 
 ## Running a command: `morf.process.run`
 
@@ -119,6 +168,11 @@ It connects, writes the request, collects until the other side closes, and
 calls back once: `(reply, nil)`, or `(nil, err)` on a refused connection,
 `"timed out"`, or a reply over `max_bytes`. It returns a handle whose
 `:close()` abandons the request.
+
+## Polled handles: `morf.process.view`, `morf.process.open`, `morf.socket.open`
+
+These are pulled rather than pushed (`:next(timeout)`, `:receive(n,
+timeout)`), so something has to ask them on a timer. Prefer the calls above.
 
 ## Reading off the loop: `morf.fs.read_async`
 
@@ -487,12 +541,6 @@ screen, asks for its size, or reads keys one at a time — runs in a
 `ui.Terminal` node instead: a pseudo-terminal, watched by the same kind of
 reactor, with an emulator drawing its screen. It is described with the
 other nodes, in [UI.md](UI.md#terminal).
-
-## The older API
-
-`morf.process.view`, `morf.process.open` and `morf.socket.open` still work: they
-are pulled rather than pushed (`:next(timeout)`, `:receive(n, timeout)`),
-so something has to ask them on a timer. Prefer the calls above.
 
 ## Idle: `morf.idle`
 

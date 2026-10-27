@@ -118,7 +118,6 @@ morf.image.annotation_pick	undocumented: image inspection and annotation helpers
 morf.image.info	undocumented: image inspection and annotation helpers; the guide documents loading
 morf.image.palette	undocumented: image inspection and annotation helpers; the guide documents loading
 morf.image.pixel	undocumented: image inspection and annotation helpers; the guide documents loading
-morf.input_method	undocumented: input-method protocol for on-screen keyboards
 morf.input_method.commit	undocumented: input-method protocol for on-screen keyboards
 morf.input_method.delete	undocumented: input-method protocol for on-screen keyboards
 morf.input_method.subscribe	undocumented: input-method protocol for on-screen keyboards
@@ -129,7 +128,6 @@ morf.json.null	undocumented: JSON helpers beyond decode; no guide section yet
 morf.json.object	undocumented: JSON helpers beyond decode; no guide section yet
 morf.launch_time_ms	undocumented: process and path introspection; no guide section yet
 morf.lock.surface	undocumented: session-lock API for lock configurations (docs/PREK.md)
-morf.log	undocumented: Lua logging functions; reading the log is `morf log` (docs/TESTING.md)
 morf.log.debug	undocumented: Lua logging functions; reading the log is `morf log` (docs/TESTING.md)
 morf.log.error	undocumented: Lua logging functions; reading the log is `morf log` (docs/TESTING.md)
 morf.log.info	undocumented: Lua logging functions; reading the log is `morf log` (docs/TESTING.md)
@@ -141,7 +139,6 @@ morf.lock.on_state	undocumented: session-lock API for lock configurations (docs/
 morf.lock.on_locked	undocumented: session-lock API for lock configurations (docs/PREK.md)
 morf.operands	undocumented: process and path introspection; no guide section yet
 morf.options	undocumented: process and path introspection; no guide section yet
-morf.output_power	undocumented: output power control; no guide section yet
 morf.output_power.set	undocumented: output power control; no guide section yet
 morf.pam.authenticate	undocumented: PAM conversation for lock and greeter configurations (docs/PREK.md)
 morf.pam.session	undocumented: PAM conversation for lock and greeter configurations (docs/PREK.md)
@@ -154,7 +151,6 @@ morf.lock.state	undocumented: session-lock API for lock configurations (docs/PRE
 morf.shader.define	undocumented: shader programs; the guide documents shader properties on nodes
 morf.shader.data	undocumented: shader programs; the guide documents shader properties on nodes
 morf.shell_id	undocumented: process and path introspection; no guide section yet
-morf.shortcuts	undocumented: compositor shortcut inhibition and global shortcuts
 morf.shortcuts.inhibit	undocumented: compositor shortcut inhibition and global shortcuts
 morf.shortcuts.subscribe	undocumented: compositor shortcut inhibition and global shortcuts
 morf.time.add	undocumented: calendar and duration helpers; no guide section yet
@@ -177,18 +173,15 @@ morf.toplevels.set_minimize_target	undocumented: foreign-toplevel actions by ide
 morf.toplevels.set_minimized	undocumented: foreign-toplevel actions by identifier; the guide documents the rows
 morf.toplevels.get	undocumented: named in the guide only in shorthand (`.get(id)`, `.revision()`)
 morf.toplevels.revision	undocumented: named in the guide only in shorthand (`.get(id)`, `.revision()`)
-morf.udev	undocumented: udev device events; no guide section yet
 morf.udev.subscribe	undocumented: udev device events; no guide section yet
 morf.ui.Icon	undocumented: constructor with no guide section yet
 morf.ui.Inset	undocumented: constructor with no guide section yet
 morf.ui.follow	undocumented: constructor with no guide section yet
 morf.ui.view_extent	internal: layout helpers the library's list views call
 morf.ui.view_item_start	internal: layout helpers the library's list views call
-morf.virtual_keyboard	undocumented: virtual-keyboard protocol for on-screen keyboards
 morf.virtual_keyboard.key	undocumented: virtual-keyboard protocol for on-screen keyboards
 morf.virtual_keyboard.modifiers	undocumented: virtual-keyboard protocol for on-screen keyboards
 morf.window.region	undocumented: window kinds beyond toplevel and popup; no guide section yet
-morf.xkb	undocumented: keymap compilation for keyboard layouts
 morf.xkb.include_paths	undocumented: keymap compilation for keyboard layouts
 ui.Icon	undocumented: constructor with no guide section yet
 ui.Inset	undocumented: constructor with no guide section yet
@@ -210,6 +203,3 @@ ui.Inset	undocumented: constructor with no guide section yet
 +morf.surface.subpixel_text	dynamic: surface property served through __index in api/window/layer.rs
 +morf.surface.width	dynamic: surface property served through __index in api/window/layer.rs
 +morf.toplevels.model	dynamic: list model served through __index in api/desktop/toplevels.rs
-morf.lock	undocumented: session-lock API for lock configurations (docs/PREK.md)
-morf.encoding	undocumented: base64, URL encoding, digests and UUIDs; no guide section yet
-morf.shader	undocumented: shader programs; the guide documents shader properties on nodes

@@ -21,7 +21,8 @@ sources compete with each other for one property. Everything else nests.
 
 A configuration can be checked, drawn and tested without a compositor --
 `morf check`, `morf render`, `morf test` -- as [TESTING.md](TESTING.md)
-describes; give a node an `id` to find it from a test.
+describes; give a node an `id` to find it from a test. Every `morf.<namespace>`
+and its members are listed in [IO.md](IO.md#the-api-by-namespace).
 
 ## 1. Nodes
 
