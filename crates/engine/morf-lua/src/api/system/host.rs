@@ -83,17 +83,9 @@ pub(crate) fn install_host_service_api<'gc>(
             .set_idle_inhibited(inhibited);
         Ok(CallbackReturn::Return)
     });
-    // What was last asked for: whether this shell is keeping the session
-    // awake. Whether the compositor can is `morf.capabilities.idle_inhibit`.
-    let inhibited_state = Rc::clone(&state);
-    let idle_inhibited = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        stack.replace(ctx, inhibited_state.borrow().requests().idle_inhibited);
-        Ok(CallbackReturn::Return)
-    });
     let idle = Table::new(&ctx);
     idle.set_field(ctx, "subscribe", idle_subscribe);
     idle.set_field(ctx, "inhibit", idle_inhibit);
-    idle.set_field(ctx, "inhibited", idle_inhibited);
     morf.set_field(ctx, "idle", idle);
     let output_power_state = Rc::clone(&state);
     let output_power_set = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -115,7 +107,7 @@ pub(crate) fn install_host_service_api<'gc>(
     morf.set_field(ctx, "output_power", output_power);
     crate::api::desktop::gamma::install_gamma_api(ctx, Rc::clone(&state), morf);
     crate::api::desktop::clipboard::install_clipboard_api(ctx, Rc::clone(&state), morf);
-    // `morf.on_keyboard_focus(function(active) end)`: the keyboard came to
+    // `morf.window.on_keyboard_focus(function(active) end)`: the keyboard came to
     // the shell's surface, or left it. With `keyboard_focus = "on_demand"`
     // a click anywhere else is what takes it away.
     let keyboard_focus_state = Rc::clone(&state);
@@ -131,8 +123,12 @@ pub(crate) fn install_host_service_api<'gc>(
             .push(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "on_keyboard_focus", on_keyboard_focus);
-    // `morf.on_backdrop_click(function() end)`: a click anywhere on the
+    crate::api::namespace::table(ctx, morf, "window").set_field(
+        ctx,
+        "on_keyboard_focus",
+        on_keyboard_focus,
+    );
+    // `morf.window.on_backdrop_click(function() end)`: a click anywhere on the
     // output but the shell's surface, while `morf.surface.backdrop` is true.
     let backdrop_state = Rc::clone(&state);
     let on_backdrop_click = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -147,7 +143,11 @@ pub(crate) fn install_host_service_api<'gc>(
             .push(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "on_backdrop_click", on_backdrop_click);
+    crate::api::namespace::table(ctx, morf, "window").set_field(
+        ctx,
+        "on_backdrop_click",
+        on_backdrop_click,
+    );
     crate::api::desktop::screencopy::install_screencopy_api(ctx, Rc::clone(&state), morf);
     text_entry::install_text_entry(ctx, Rc::clone(&state), morf);
     crate::api::time::timer::install_timer_api(ctx, Rc::clone(&state), morf);
@@ -208,7 +208,7 @@ pub(crate) fn install_host_service_api<'gc>(
             .unwrap_or_default();
     }
     let revision_state = Rc::clone(&state);
-    morf.set_field(
+    crate::api::namespace::table(ctx, morf, "window").set_field(
         ctx,
         "screens_revision",
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -225,7 +225,7 @@ pub(crate) fn install_host_service_api<'gc>(
         }),
     );
 
-    // `morf.primary()`: whether this runtime is the one of the process that
+    // `morf.window.primary()`: whether this runtime is the one of the process that
     // does what must be done once (a bus name, a shared file). Tracked, so a
     // binding or an effect runs again when the duty moves here or away; a
     // runtime nobody else shares a process with is primary.
@@ -238,7 +238,7 @@ pub(crate) fn install_host_service_api<'gc>(
         state.session_mut().primary = Some((signal, true));
     }
     let primary_state = Rc::clone(&state);
-    morf.set_field(
+    crate::api::namespace::table(ctx, morf, "window").set_field(
         ctx,
         "primary",
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -255,7 +255,7 @@ pub(crate) fn install_host_service_api<'gc>(
         }),
     );
     let on_primary_state = Rc::clone(&state);
-    morf.set_field(
+    crate::api::namespace::table(ctx, morf, "window").set_field(
         ctx,
         "on_primary",
         Callback::from_fn(&ctx, move |ctx, _, mut stack| {

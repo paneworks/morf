@@ -78,32 +78,10 @@ impl Runtime {
         !watchers.is_empty()
     }
 
-    /// Dispatches a compositor clipboard selection to registered Lua callbacks.
+    /// Keeps the compositor's clipboard text, for a text input to paste.
     pub fn dispatch_clipboard(&mut self, text: Option<String>) -> bool {
-        // Kept for a text input to paste, whether or not anybody subscribed.
-        self.reactive.borrow_mut().requests_mut().clipboard_text = text.clone();
-        let callbacks = self
-            .reactive
-            .borrow()
-            .requests()
-            .clipboard_callbacks
-            .clone();
-        let value = text.map_or(IpcValue::Nil, IpcValue::String);
-        for callback in &callbacks {
-            if let Err(message) = self.run_handler(|ctx, limits| {
-                crate::vm::execute::execute_handler_args(
-                    ctx,
-                    callback,
-                    std::slice::from_ref(&value),
-                    limits,
-                )
-            }) {
-                self.reactive
-                    .borrow_mut()
-                    .log(LogLevel::Warn, format!("clipboard callback: {message}"));
-            }
-        }
-        !callbacks.is_empty()
+        self.reactive.borrow_mut().requests_mut().clipboard_text = text;
+        false
     }
 
     /// Takes the offer reads the configuration asked for.

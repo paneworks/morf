@@ -51,11 +51,11 @@ fn a_band_that_cannot_be_laid_out_is_taken_down_and_logged() {
 }
 
 #[test]
-fn a_handler_that_throws_has_not_reported_the_failure() {
-    let mut runtime = shell("morf.on_reload_failed(function() error('broke') end)");
+fn only_a_handler_that_returns_true_reports_the_failure() {
+    let mut runtime = shell("morf.on_reload(function() error('broke') end)");
     assert!(runtime.report_reload_failure("shell.lua:1: boom", Path::new("shell.lua")));
     assert!(logged(&mut runtime, "broke"));
-    let mut runtime = shell("morf.on_reload_failed(function() end)");
+    let mut runtime = shell("morf.on_reload(function() return true end)");
     assert!(!runtime.report_reload_failure("shell.lua:1: boom", Path::new("shell.lua")));
     assert!(!runtime.reload_error_shown());
 }
@@ -65,7 +65,7 @@ fn a_handler_registered_while_the_band_is_up_reports_it_and_takes_it_down() {
     let mut runtime = shell(
         "local heard = '' morf.ipc.heard = function() return heard end
          morf.ipc.listen = function()
-           morf.on_reload_failed(function(error) heard = error end)
+           morf.on_reload(function(ok, error) heard = error return true end)
          end",
     );
     assert!(runtime.report_reload_failure("shell.lua:1: boom", Path::new("shell.lua")));
@@ -136,4 +136,11 @@ fn the_message_says_where_and_what() {
     assert!(message.ends_with("\n/c/init.lua:4: boom"));
     let failure = ReloadFailure::new("/c/mod.lua:9: boom", Path::new("/c/init.lua"));
     assert!(failure.message().contains("failed at /c/mod.lua:9;"));
+}
+
+#[test]
+fn a_handler_that_returns_nothing_leaves_the_band() {
+    let mut runtime = shell("morf.on_reload(function() end)");
+    assert!(runtime.report_reload_failure("shell.lua:1: boom", Path::new("shell.lua")));
+    assert!(runtime.reload_error_shown());
 }

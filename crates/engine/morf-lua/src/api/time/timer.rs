@@ -2,17 +2,13 @@ use luna::{
     Callback, CallbackReturn, Closure, Context, Table, UserData, UserRef, Value as LuaValue,
 };
 use morf_runtime::timers::Timer;
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use crate::{api::ui::scene::*, runtime::state::*, value::lua::*, value::table::*};
 
-pub(crate) fn install_time_api<'gc>(
-    ctx: Context<'gc>,
-    state: Rc<StateCell<ReactiveState>>,
-    morf: Table<'gc>,
-) {
+pub(crate) fn install_time_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     let elapsed = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let timer: UserRef<ElapsedTimerToken> = stack.consume(ctx)?;
         stack.replace(ctx, timer.started.borrow().elapsed().as_secs_f64());
@@ -75,108 +71,7 @@ pub(crate) fn install_time_api<'gc>(
         stack.replace(ctx, timer);
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "elapsed_timer", elapsed_timer);
-    let system_clock_snapshot = Callback::from_fn(&ctx, {
-        let state = Rc::clone(&state);
-        move |ctx, _, mut stack| {
-            let clock: UserRef<SystemClockToken> = stack.consume(ctx)?;
-            let precision = crate::ClockPrecision::parse(&clock.precision.borrow());
-            track_clock_dependency(&state, clock.enabled.get(), precision);
-            stack.replace(ctx, local_time_table(ctx));
-            Ok(CallbackReturn::Return)
-        }
-    });
-    let system_clock_format = Callback::from_fn(&ctx, {
-        let state = Rc::clone(&state);
-        move |ctx, _, mut stack| {
-            let (clock, format): (UserRef<SystemClockToken>, String) = stack.consume(ctx)?;
-            if format.len() > 256 || format.as_bytes().contains(&0) {
-                return Err(HostError("clock format exceeds 256 bytes".into()).into());
-            }
-            // What the text can show bounds how often it can change: a
-            // format with no seconds in it needs no tick every second,
-            // whatever precision the clock was made with.
-            let precision = crate::ClockPrecision::parse(&clock.precision.borrow())
-                .min(crate::ClockPrecision::of_format(&format));
-            track_clock_dependency(&state, clock.enabled.get(), precision);
-            stack.replace(ctx, jiff::Zoned::now().strftime(&format).to_string());
-            Ok(CallbackReturn::Return)
-        }
-    });
-    let system_clock_enabled = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let clock: UserRef<SystemClockToken> = stack.consume(ctx)?;
-        stack.replace(ctx, clock.enabled.get());
-        Ok(CallbackReturn::Return)
-    });
-    let system_clock_set_enabled = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (clock, enabled): (UserRef<SystemClockToken>, bool) = stack.consume(ctx)?;
-        clock.enabled.set(enabled);
-        Ok(CallbackReturn::Return)
-    });
-    let system_clock_precision = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let clock: UserRef<SystemClockToken> = stack.consume(ctx)?;
-        stack.replace(ctx, clock.precision.borrow().as_str());
-        Ok(CallbackReturn::Return)
-    });
-    let system_clock_set_precision = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (clock, precision): (UserRef<SystemClockToken>, String) = stack.consume(ctx)?;
-        if !matches!(precision.as_str(), "hours" | "minutes" | "seconds") {
-            return Err(
-                HostError("clock precision must be hours, minutes, or seconds".into()).into(),
-            );
-        }
-        *clock.precision.borrow_mut() = precision;
-        Ok(CallbackReturn::Return)
-    });
-    let system_clock_methods = Table::new(&ctx);
-    system_clock_methods.set_field(ctx, "snapshot", system_clock_snapshot);
-    system_clock_methods.set_field(ctx, "format", system_clock_format);
-    system_clock_methods.set_field(ctx, "enabled", system_clock_enabled);
-    system_clock_methods.set_field(ctx, "set_enabled", system_clock_set_enabled);
-    system_clock_methods.set_field(ctx, "precision", system_clock_precision);
-    system_clock_methods.set_field(ctx, "set_precision", system_clock_set_precision);
-    let system_clock_metatable = Table::new(&ctx);
-    system_clock_metatable.set_field(ctx, "__index", system_clock_methods);
-    let system_clock_metatable = ctx.stash(system_clock_metatable);
-    let system_clock = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let options: LuaValue = stack.consume(ctx)?;
-        let (enabled, precision) = match options {
-            LuaValue::Nil => (true, "seconds".to_owned()),
-            LuaValue::Table(options) => {
-                let enabled = match options.get_value(ctx, "enabled") {
-                    LuaValue::Nil => true,
-                    LuaValue::Boolean(value) => value,
-                    _ => return Err(HostError("clock enabled must be boolean".into()).into()),
-                };
-                let precision = match options.get_value(ctx, "precision") {
-                    LuaValue::Nil => "seconds".to_owned(),
-                    LuaValue::String(value) => value.display_lossy().to_string(),
-                    _ => {
-                        return Err(HostError("clock precision must be a string".into()).into());
-                    }
-                };
-                if !matches!(precision.as_str(), "hours" | "minutes" | "seconds") {
-                    return Err(HostError(
-                        "clock precision must be hours, minutes, or seconds".into(),
-                    )
-                    .into());
-                }
-                (enabled, precision)
-            }
-            _ => return Err(HostError("system_clock options must be a table".into()).into()),
-        };
-        let clock = UserData::new_static(
-            &ctx,
-            SystemClockToken {
-                enabled: Cell::new(enabled),
-                precision: RefCell::new(precision),
-            },
-        );
-        clock.set_metatable(ctx, Some(ctx.fetch(&system_clock_metatable)));
-        stack.replace(ctx, clock);
-        Ok(CallbackReturn::Return)
-    });
-    morf.set_field(ctx, "system_clock", system_clock);
+    crate::api::namespace::table(ctx, morf, "time").set_field(ctx, "elapsed", elapsed_timer);
     let easing_value = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (curve, progress): (UserRef<EasingCurveToken>, f64) = stack.consume(ctx)?;
         if !progress.is_finite() {
@@ -248,10 +143,10 @@ pub(crate) fn install_time_api<'gc>(
         stack.replace(ctx, curve);
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "easing_curve", easing_curve);
+    crate::api::namespace::table(ctx, morf, "easing").set_field(ctx, "curve", easing_curve);
 }
 
-/// Installs `morf.timer`, which returns a handle that can stop it.
+/// Installs `morf.time.timer`, which returns a handle that can stop it.
 ///
 /// Here rather than beside the other host services, because a timer is a
 /// clock: it belongs with the elapsed timer and the system clock it shares
@@ -296,7 +191,7 @@ pub(crate) fn install_timer_api<'gc>(
                 frame.current_line
             )
             .into(),
-            None => "morf.timer".into(),
+            None => "morf.time.timer".into(),
         };
         if !milliseconds.is_finite() || milliseconds <= 0.0 {
             return Err(HostError("timer interval must be finite and positive".into()).into());
@@ -328,5 +223,5 @@ pub(crate) fn install_timer_api<'gc>(
         stack.replace(ctx, userdata);
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "timer", timer);
+    crate::api::namespace::table(ctx, morf, "time").set_field(ctx, "timer", timer);
 }

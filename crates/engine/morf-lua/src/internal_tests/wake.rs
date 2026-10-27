@@ -11,7 +11,7 @@ fn a_minute_binding_runs_once_a_minute_however_often_the_clock_ticks() {
     let mut runtime = runtime_with(
         r#"
         local ui = require("morf.ui")
-        ui.Text { text = function() return morf.minute_clock:get() end }
+        ui.Text { text = function() return morf.time.minute_clock:get() end }
         "#,
     );
     runtime.update_clock("12:34:56").unwrap();

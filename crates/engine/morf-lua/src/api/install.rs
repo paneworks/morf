@@ -12,40 +12,18 @@ use crate::{
     api::ui::view::*, api::window::surface::*, runtime::state::*, vm::types::*,
 };
 
-pub(crate) struct ApiModules<'gc> {
-    pub(crate) morf: Table<'gc>,
-    pub(crate) core: Table<'gc>,
-    pub(crate) ui: Table<'gc>,
-    pub(crate) io: Table<'gc>,
-    pub(crate) json: Table<'gc>,
-    pub(crate) window: Table<'gc>,
-}
-
 pub(crate) fn finish_reactive_api<'gc>(
     ctx: Context<'gc>,
-    modules: ApiModules<'gc>,
+    morf: Table<'gc>,
     state: Rc<StateCell<ReactiveState>>,
     module_roots: Rc<RefCell<Vec<PathBuf>>>,
     permissions: Rc<RefCell<crate::vm::permissions::Permissions>>,
     limits: Limits,
 ) {
-    let ApiModules {
-        morf,
-        core,
-        ui,
-        io,
-        json,
-        window,
-    } = modules;
     ctx.set_global("morf", morf);
 
     let loaded = Table::new(&ctx);
     loaded.set_field(ctx, "morf", morf);
-    loaded.set_field(ctx, "morf.core", core);
-    loaded.set_field(ctx, "morf.ui", ui);
-    loaded.set_field(ctx, "morf.io", io);
-    loaded.set_field(ctx, "morf.io.json", json);
-    loaded.set_field(ctx, "morf.window", window);
     let package = Table::new(&ctx);
     package.set_field(ctx, "loaded", loaded);
     ctx.set_global("package", package);
@@ -54,7 +32,6 @@ pub(crate) fn finish_reactive_api<'gc>(
         ctx,
         crate::vm::loader::Require {
             morf: ctx.stash(morf),
-            ui: ctx.stash(ui),
             loaded: ctx.stash(loaded),
             state,
             roots: module_roots,
@@ -83,7 +60,7 @@ pub(crate) fn install_reactive_api(
         crate::api::input::focus::install_focus_api(ctx, Rc::clone(&state), morf);
         crate::api::input::overlay::install_overlay_api(ctx, Rc::clone(&state), morf);
         install_shell_api(ctx, Rc::clone(&state), morf);
-        install_time_api(ctx, Rc::clone(&state), morf);
+        install_time_api(ctx, morf);
         install_image_api(ctx, Rc::clone(&state), morf);
         crate::api::media::image_ops::install_image_ops_api(ctx, Rc::clone(&state), morf);
         install_shader_api(ctx, morf, Rc::clone(&state));
@@ -111,27 +88,13 @@ pub(crate) fn install_reactive_api(
         install_socket_api(ctx, Rc::clone(&state), morf);
         install_system_service_api(ctx, Rc::clone(&state), morf);
         crate::api::system::service::install_service_api(ctx, Rc::clone(&state), morf);
-        let (ui, json, json_kinds) = install_ui_json_api(ctx, Rc::clone(&state), morf, limits);
+        let (ui, json_kinds) = install_ui_json_api(ctx, Rc::clone(&state), morf, limits);
         crate::api::motion::claims::install_claims_api(ctx, Rc::clone(&state), ui);
         crate::api::io::http::install_http_api(ctx, Rc::clone(&state), morf, json_kinds);
         crate::api::io::io::install_io_api(ctx, Rc::clone(&state), morf);
         install_menu_desktop_api(ctx, Rc::clone(&state), morf, limits);
-        let (core, io, window) = install_module_api(ctx, Rc::clone(&state), morf, limits);
-        finish_reactive_api(
-            ctx,
-            ApiModules {
-                morf,
-                core,
-                ui,
-                io,
-                json,
-                window,
-            },
-            state,
-            module_roots,
-            permissions,
-            limits,
-        );
+        install_module_api(ctx, Rc::clone(&state), morf, limits);
+        finish_reactive_api(ctx, morf, state, module_roots, permissions, limits);
     });
 }
 

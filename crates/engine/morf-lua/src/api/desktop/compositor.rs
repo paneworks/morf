@@ -28,7 +28,7 @@ fn push_workspace_request(
     Ok(())
 }
 
-/// Installs `morf.workspaces`, `morf.workspace` and `morf.toplevel`.
+/// Installs `morf.workspaces`, `morf.workspace` and `morf.toplevels`.
 pub(crate) fn install_compositor_api<'gc>(
     ctx: Context<'gc>,
     state: Rc<StateCell<ReactiveState>>,
@@ -66,7 +66,7 @@ pub(crate) fn install_compositor_api<'gc>(
     // Acting on somebody else's window. Named for the protocol rather than
     // called `morf.window`, which is this shell's own surface constructor and a
     // different thing entirely.
-    let toplevel = Table::new(&ctx);
+    let toplevel = crate::api::namespace::table(ctx, morf, "toplevels");
     for (name, takes_value) in [
         ("activate", false),
         ("close", false),
@@ -120,7 +120,6 @@ pub(crate) fn install_compositor_api<'gc>(
         Ok(CallbackReturn::Return)
     });
     toplevel.set_field(ctx, "set_minimize_target", set_minimize_target);
-    morf.set_field(ctx, "toplevel", toplevel);
 
     // The compositor's own key bindings, held off the shell while it has
     // focus. `active` is the compositor's answer, which is not always yes.

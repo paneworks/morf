@@ -178,7 +178,7 @@ pub(crate) fn install_toplevels_api<'gc>(
         });
     }
 
-    let toplevels = Table::new(&ctx);
+    let toplevels = crate::api::namespace::table(ctx, morf, "toplevels");
     toplevels.set_field(
         ctx,
         "list",

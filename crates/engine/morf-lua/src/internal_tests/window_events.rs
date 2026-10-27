@@ -66,7 +66,7 @@ fn floating() -> Runtime {
                 local resized, requests, closed = {}, 0, 0
                 local keep = false
                 local root = ui.Item {}
-                win = window.floating {
+                win = window.toplevel {
                   root = root, width = 640, height = 480, visible = true,
                   on_resize = function(w, h) resized[#resized + 1] = w .. "x" .. h end,
                 }

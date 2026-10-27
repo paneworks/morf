@@ -3,7 +3,7 @@
 //!
 //! One runtime -- not one per output -- whose own surface is nothing the
 //! person sees: the configuration's windows are its interface
-//! (`morf.window.floating`, through `lib.kit.app`), and the process ends
+//! (`morf.window.toplevel`, through `lib.kit.app`), and the process ends
 //! when the last of them closes. The configuration finds out it is an app
 //! from `morf.capabilities().app` (and the `MORF_APP` environment).
 

@@ -38,7 +38,7 @@ pub(crate) type HttpAnswer = (
 /// let go.
 #[derive(Default)]
 struct Collected {
-    ready: Vec<(Handler, bool, Result<(), morf_system::PamError>)>,
+    ready: Vec<(Handler, Result<(), morf_system::PamError>)>,
     timers: Vec<DueTimer>,
     dbus_signals: Vec<(
         u64,

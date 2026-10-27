@@ -1,5 +1,4 @@
-//! `morf.core`, `morf.io` and `morf.window`: the native modules a
-//! configuration requires, and the window constructors.
+//! `morf.window`: the window constructors.
 
 use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as LuaValue};
 use std::rc::Rc;
@@ -17,94 +16,7 @@ pub(crate) fn install_module_api<'gc>(
     state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     limits: crate::Limits,
-) -> (Table<'gc>, Table<'gc>, Table<'gc>) {
-    let core = Table::new(&ctx);
-    for name in [
-        "env",
-        "font_families",
-        "process_id",
-        "executable",
-        "args",
-        "options",
-        "operands",
-        "version",
-        "instance_id",
-        "shell_id",
-        "app_id",
-        "launch_time_ms",
-        "shell_dir",
-        "shell_path",
-        "config_path",
-        "data_dir",
-        "data_path",
-        "state_dir",
-        "state_path",
-        "cache_dir",
-        "cache_path",
-        "has_version",
-        "satisfies",
-        "reload",
-        "on_reload_completed",
-        "on_reload_failed",
-        "watch_files",
-        "working_directory",
-        "elapsed_timer",
-        "system_clock",
-        "easing_curve",
-        "color_quantizer",
-        "geometry",
-        "icon_path",
-        "has_icon",
-        "exec_detached",
-        "signal",
-        "theme",
-        "prefers",
-        "reloadable",
-        "persistent",
-        "scope",
-        "retainable",
-        "retain_lock",
-        "transform_watcher",
-        "effect",
-        "clock",
-        "timer",
-        "screens",
-        "primary",
-        "on_primary",
-        "variants",
-        "list_model",
-        "virtual_list",
-        "sync_view",
-        "flickable",
-        "transition_parent",
-        "desktop_entries",
-        "session_paths",
-        "menu",
-    ] {
-        core.set(ctx, name, morf.get_value(ctx, name))
-            .expect("core module accepts native fields");
-    }
-    let io = Table::new(&ctx);
-    for name in [
-        "process",
-        "process_view",
-        "file",
-        "file_view",
-        "socket_server",
-        "socket",
-        "line_parser",
-        "split_parser",
-        "stream_collector",
-        "json",
-        "spawn",
-        "run",
-        "kill",
-        "connect",
-        "request_socket",
-    ] {
-        io.set(ctx, name, morf.get_value(ctx, name))
-            .expect("IO module accepts native fields");
-    }
+) {
     let region = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let options: Table = stack.consume(ctx)?;
         let region = parse_region(ctx, options, 0).map_err(HostError)?;
@@ -256,17 +168,9 @@ pub(crate) fn install_module_api<'gc>(
             Ok(CallbackReturn::Return)
         }
     });
-    let window = Table::new(&ctx);
-    window.set_field(ctx, "layer_surface", morf.get_value(ctx, "surface"));
+    let window = crate::api::namespace::table(ctx, morf, "window");
     window.set_field(ctx, "region", region);
     window.set_field(ctx, "popup", popup_surface);
     window.set_field(ctx, "toplevel", floating_surface);
-    // The old name, kept for one release: the compositor, not morf, decides
-    // whether a toplevel floats.
-    window.set_field(ctx, "floating", floating_surface);
     window.set_field(ctx, "layer", layer_surface);
-    morf.set_field(ctx, "core", core);
-    morf.set_field(ctx, "io", io);
-    morf.set_field(ctx, "window", window);
-    (core, io, window)
 }

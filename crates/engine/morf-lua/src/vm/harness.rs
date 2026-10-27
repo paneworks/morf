@@ -21,7 +21,7 @@ impl Runtime {
     /// Moves every timer from the wall clock to a virtual one that stands at
     /// zero and moves only when [`Runtime::advance_virtual_clock`] says so.
     ///
-    /// Called before the configuration runs, so every `morf.timer` and
+    /// Called before the configuration runs, so every `morf.time.timer` and
     /// `ui.Timer` it makes is on that clock. Animations need nothing: they
     /// already advance by the delta [`Runtime::tick_animations`] is given.
     pub fn use_virtual_clock(&mut self) {

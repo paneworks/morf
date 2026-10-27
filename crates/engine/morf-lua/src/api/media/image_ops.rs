@@ -306,7 +306,7 @@ pub(crate) fn install_image_ops_api<'gc>(
     state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
 ) {
-    let image = Table::new(&ctx);
+    let image = crate::api::namespace::table(ctx, morf, "image");
 
     image.set_field(
         ctx,
@@ -431,7 +431,7 @@ pub(crate) fn install_image_ops_api<'gc>(
         crate::runtime::image_jobs::MAX_IN_FLIGHT as i64,
     );
     image.set_field(ctx, "limits", limits);
-    crate::api::media::image_raw::install_raw_image_api(ctx, image, &state);
+    crate::api::media::image_raw::install_raw_image_api(ctx, image);
     crate::api::media::image_annotation::install(ctx, image);
     crate::api::media::image_geometry::install(ctx, image);
     crate::api::media::image_preview::install(ctx, image, &state);

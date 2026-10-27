@@ -216,19 +216,6 @@ pub(crate) fn install_audio_api<'gc>(
         }),
     );
 
-    function(
-        "backend",
-        Callback::from_fn(&ctx, {
-            let state = Rc::clone(&state);
-            move |ctx, _, mut stack| {
-                let mut state = state.borrow_mut();
-                let name = host(&mut state).started().backend();
-                stack.replace(ctx, name);
-                Ok(CallbackReturn::Return)
-            }
-        }),
-    );
-
     for (name, kind) in [
         ("default_sink", DeviceKind::Sink),
         ("default_source", DeviceKind::Source),

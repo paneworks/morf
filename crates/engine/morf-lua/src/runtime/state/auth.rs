@@ -19,23 +19,18 @@ pub(crate) struct Auth {
 
 impl Auth {
     /// Waits on a PAM check for `callback`.
-    pub(crate) fn check(&mut self, task: PamTask, callback: Handler, unlock_on_success: bool) {
-        self.tasks.push(PendingPam {
-            task,
-            callback,
-            unlock_on_success,
-        });
+    pub(crate) fn check(&mut self, task: PamTask, callback: Handler) {
+        self.tasks.push(PendingPam { task, callback });
     }
 
-    /// The checks that have finished: who is told, whether a success
-    /// unlocks, and the verdict.
-    pub(crate) fn take_verdicts(&mut self) -> Vec<(Handler, bool, Result<(), PamError>)> {
+    /// The checks that have finished: who is told, and the verdict.
+    pub(crate) fn take_verdicts(&mut self) -> Vec<(Handler, Result<(), PamError>)> {
         let mut ready = Vec::new();
         let mut index = 0;
         while index < self.tasks.len() {
             if let Some(result) = self.tasks[index].task.wait(Duration::ZERO) {
                 let task = self.tasks.swap_remove(index);
-                ready.push((task.callback, task.unlock_on_success, result));
+                ready.push((task.callback, result));
             } else {
                 index += 1;
             }

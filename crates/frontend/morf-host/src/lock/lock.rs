@@ -97,7 +97,7 @@ pub enum WorkerCommand {
     /// runtime it ran it with and becomes the lock.
     BecomeLock,
     /// This worker's runtime is now the primary one, or no longer is
-    /// (`morf.primary()`).
+    /// (`morf.window.primary()`).
     Primary(bool),
 }
 
@@ -109,7 +109,6 @@ pub enum SupervisorMessage {
         /// Only this output's runtime, when one is named.
         output: Option<String>,
     },
-    WatchFiles(bool),
     /// The configuration asked the shell to stop.
     Quit,
     /// Ask the compositor which outputs it has, and run a worker on each:

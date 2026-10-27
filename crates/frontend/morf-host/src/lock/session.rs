@@ -83,7 +83,6 @@ impl LockSession {
     /// asked for it: by clearing `morf.surface.session_lock`. Which door was
     /// opened is the file's business, not the lock's.
     pub fn wants_unlock(&mut self, runtime: &mut Runtime) -> bool {
-        self.unlock_pending |= runtime.take_session_unlock_request();
         self.unlock_pending |= !runtime.layer_surface_config().session_lock;
         self.locked && self.unlock_pending
     }

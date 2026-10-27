@@ -80,7 +80,7 @@ impl ReactiveState {
         &mut self.toplevels
     }
 
-    /// `morf.spawn` children and `morf.connect` connections.
+    /// `morf.process.spawn` children and `morf.socket.connect` connections.
     pub(crate) fn io_mut(&mut self) -> &mut crate::api::io::io::IoHub {
         &mut self.io
     }

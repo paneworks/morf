@@ -79,8 +79,8 @@ pub(crate) fn install_shell_api<'gc>(
     let surface = Table::new(&ctx);
     surface.set_metatable(ctx, Some(surface_metatable));
     morf.set_field(ctx, "surface", surface);
-    // `morf.density("compositor")`, `morf.density(1.25)`,
-    // `morf.density({ ppi = 160 })` or `morf.density({ zoom = 0.8 })` (the
+    // `morf.window.density("compositor")`, `morf.window.density(1.25)`,
+    // `morf.window.density({ ppi = 160 })` or `morf.window.density({ zoom = 0.8 })` (the
     // compositor's scale times 0.8): how big one of morf's pixels is, at any
     // time (a scale slider); nil is the default, the compositor's.
     let density_state = Rc::clone(&state);
@@ -100,7 +100,7 @@ pub(crate) fn install_shell_api<'gc>(
                 if let Some(zoom) = number(table.get_value(ctx, "zoom")) {
                     if !(0.25..=4.0).contains(&zoom) {
                         return Err(HostError(
-                            "morf.density{ zoom = f } wants f between 0.25 and 4".into(),
+                            "morf.window.density{ zoom = f } wants f between 0.25 and 4".into(),
                         )
                         .into());
                     }
@@ -110,7 +110,7 @@ pub(crate) fn install_shell_api<'gc>(
                         Some(ppi) if (40.0..=600.0).contains(&ppi) => Density::Ppi(ppi),
                         _ => {
                             return Err(HostError(
-                                "morf.density takes { ppi = n } (40 to 600) or { zoom = f } (0.25 to 4)".into(),
+                                "morf.window.density takes { ppi = n } (40 to 600) or { zoom = f } (0.25 to 4)".into(),
                             )
                             .into());
                         }
@@ -121,7 +121,8 @@ pub(crate) fn install_shell_api<'gc>(
                 Some(scale) if (0.25..=10.0).contains(&scale) => Density::Scale(scale),
                 _ => {
                     return Err(HostError(
-                        "morf.density takes \"compositor\", \"ppi\", a scale or { ppi = n }".into(),
+                        "morf.window.density takes \"compositor\", \"ppi\", a scale or { ppi = n }"
+                            .into(),
                     )
                     .into());
                 }
@@ -146,7 +147,7 @@ pub(crate) fn install_shell_api<'gc>(
         }
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "density", density);
+    crate::api::namespace::table(ctx, morf, "window").set_field(ctx, "density", density);
     let env = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let name: String = stack.consume(ctx)?;
         if name.is_empty() || name.len() > 256 || name.as_bytes().contains(&0) {
@@ -172,7 +173,7 @@ pub(crate) fn install_shell_api<'gc>(
         stack.replace(ctx, table);
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "font_families", font_families);
+    crate::api::namespace::table(ctx, morf, "text").set_field(ctx, "families", font_families);
     // The variation axes an installed family defines, `{ tag, min, default,
     // max }` each: what a text node's `axes` can move, and how far.
     let font_axes = Callback::from_fn(&ctx, |ctx, _, mut stack| {
@@ -189,7 +190,7 @@ pub(crate) fn install_shell_api<'gc>(
         stack.replace(ctx, table);
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "font_axes", font_axes);
+    crate::api::namespace::table(ctx, morf, "text").set_field(ctx, "axes", font_axes);
     // What this configuration was started with. Three views of the same words:
     // `args` is what was typed, in order and unaltered; `options` is the flags
     // resolved into names and values; `operands` is what was left over. A
@@ -228,82 +229,32 @@ pub(crate) fn install_shell_api<'gc>(
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "shell_id", shell_id);
-    let shell_dir_state = Rc::clone(&state);
-    let shell_dir = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let root = shell_dir_state.borrow().shell_root().to_path_buf();
-        stack.replace(ctx, root.to_string_lossy().as_ref());
-        Ok(CallbackReturn::Return)
-    });
-    morf.set_field(ctx, "shell_dir", shell_dir);
-    let shell_root_state = Rc::clone(&state);
-    let shell_path = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let relative: String = stack.consume(ctx)?;
-        let path =
-            rooted_path(shell_root_state.borrow().shell_root(), &relative).map_err(HostError)?;
-        stack.replace(ctx, path.to_string_lossy().as_ref());
-        Ok(CallbackReturn::Return)
-    });
-    morf.set_field(ctx, "shell_path", shell_path);
-    morf.set_field(ctx, "config_path", morf.get_value(ctx, "shell_path"));
-    for (directory_name, path_name, kind) in [
-        ("data_dir", "data_path", StorageKind::Data),
-        ("state_dir", "state_path", StorageKind::State),
-        ("cache_dir", "cache_path", StorageKind::Cache),
+    // `morf.paths.shell(rel)`, `cache(rel)`, `state(rel)`: a path under the
+    // shell's directory or its own cache or state directory; with no `rel`,
+    // the directory itself.
+    let paths = crate::api::namespace::table(ctx, morf, "paths");
+    for (name, kind) in [
+        ("shell", None),
+        ("state", Some(StorageKind::State)),
+        ("cache", Some(StorageKind::Cache)),
     ] {
-        let directory_state = Rc::clone(&state);
-        let directory = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-            let root = shell_storage_dir(directory_state.borrow().shell_root(), kind)
-                .map_err(HostError)?;
-            stack.replace(ctx, root.to_string_lossy().as_ref());
-            Ok(CallbackReturn::Return)
-        });
-        morf.set(ctx, directory_name, directory)
-            .expect("core path directory accepts a native callback");
         let path_state = Rc::clone(&state);
         let path = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-            let relative: String = stack.consume(ctx)?;
-            let root =
-                shell_storage_dir(path_state.borrow().shell_root(), kind).map_err(HostError)?;
-            let path = rooted_path(&root, &relative).map_err(HostError)?;
+            let relative: Option<String> = stack.consume(ctx)?;
+            let shell_root = path_state.borrow().shell_root().to_path_buf();
+            let root = match kind {
+                Some(kind) => shell_storage_dir(&shell_root, kind).map_err(HostError)?,
+                None => shell_root,
+            };
+            let path = match relative {
+                Some(relative) => rooted_path(&root, &relative).map_err(HostError)?,
+                None => root,
+            };
             stack.replace(ctx, path.to_string_lossy().as_ref());
             Ok(CallbackReturn::Return)
         });
-        morf.set(ctx, path_name, path)
-            .expect("core path resolver accepts a native callback");
+        paths.set_field(ctx, name, path);
     }
-    let has_version = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (major, minor, features): (i64, i64, Option<Table>) = stack.consume(ctx)?;
-        let current = env!("CARGO_PKG_VERSION")
-            .split('.')
-            .take(2)
-            .map(|part| part.parse::<i64>().unwrap_or(0))
-            .collect::<Vec<_>>();
-        let available = current.first().copied().unwrap_or(0) > major
-            || current.first().copied().unwrap_or(0) == major
-                && current.get(1).copied().unwrap_or(0) >= minor;
-        let features_available = features.is_none_or(|features| {
-            table_string_array(ctx, features, 64).is_ok_and(|features| {
-                features.iter().all(|feature| {
-                    matches!(
-                        feature.as_str(),
-                        "wayland"
-                            | "vulkan"
-                            | "gles"
-                            | "lua"
-                            | "ipc"
-                            | "session-lock"
-                            | "screencopy"
-                            | "virtual-keyboard"
-                            | "input-method"
-                            | "text-input"
-                    )
-                })
-            })
-        });
-        stack.replace(ctx, available && features_available);
-        Ok(CallbackReturn::Return)
-    });
-    morf.set_field(ctx, "has_version", has_version);
     // `morf.satisfies(">=0.4")`: whether this engine meets a requirement
     // written as a shell's morf.lua writes one.
     let satisfies = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -337,44 +288,20 @@ pub(crate) fn install_shell_api<'gc>(
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "reload", reload);
-    let completed_state = Rc::clone(&state);
-    let on_reload_completed = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
+    // `morf.on_reload(fn(ok, err))`: told of every reload, `ok` false and
+    // `err` the error when it failed; a handler that returns true takes the
+    // failure, and the engine's band is not shown.
+    let reload_state = Rc::clone(&state);
+    let on_reload = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let callback: Closure = stack.consume(ctx)?;
-        completed_state.borrow_mut().lifecycle_mut().on_reload(
-            true,
-            crate::vm::handler_store::register(ctx.stash(callback)),
-        );
+        reload_state
+            .borrow_mut()
+            .lifecycle_mut()
+            .on_reload(crate::vm::handler_store::register(ctx.stash(callback)));
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "on_reload_completed", on_reload_completed);
-    let failed_state = Rc::clone(&state);
-    let on_reload_failed = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let callback: Closure = stack.consume(ctx)?;
-        failed_state.borrow_mut().lifecycle_mut().on_reload(
-            false,
-            crate::vm::handler_store::register(ctx.stash(callback)),
-        );
-        Ok(CallbackReturn::Return)
-    });
-    morf.set_field(ctx, "on_reload_failed", on_reload_failed);
-    let watch_state = Rc::clone(&state);
-    let watch_files = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let value: Option<bool> = stack.consume(ctx)?;
-        let mut state = watch_state.borrow_mut();
-        if let Some(value) = value {
-            state.lifecycle_mut().set_watch_files(value);
-        }
-        stack.replace(ctx, state.lifecycle().watch_files());
-        Ok(CallbackReturn::Return)
-    });
-    morf.set_field(ctx, "watch_files", watch_files);
-    let lock_state_state = Rc::clone(&state);
-    let session_lock_state = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let name = crate::runtime::session_lock::current(&lock_state_state.borrow()).name();
-        stack.replace(ctx, name);
-        Ok(CallbackReturn::Return)
-    });
-    morf.set_field(ctx, "session_lock_state", session_lock_state);
+    morf.set_field(ctx, "on_reload", on_reload);
+    let lock = crate::api::namespace::table(ctx, morf, "lock");
     // A lock screen built per output: `fn(screen)` returns that output's
     // root, and bindings in it close over its own screen. Without one, the
     // file's single root is shared by every output.
@@ -388,14 +315,11 @@ pub(crate) fn install_shell_api<'gc>(
             builder.map(|builder| crate::vm::handler_store::register(ctx.stash(builder)));
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "lock_surface", lock_surface);
+    lock.set_field(ctx, "surface", lock_surface);
     // Two ways to hear the compositor about the lock: every change, with the
     // new state, or only the one a lock screen usually waits for -- the
     // compositor confirming that it has hidden the session.
-    for (name, locked_only) in [
-        ("on_session_lock_state", false),
-        ("on_session_locked", true),
-    ] {
+    for (name, locked_only) in [("on_state", false), ("on_locked", true)] {
         let callbacks_state = Rc::clone(&state);
         let register = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let callback: Closure = stack.consume(ctx)?;
@@ -409,7 +333,7 @@ pub(crate) fn install_shell_api<'gc>(
             ));
             Ok(CallbackReturn::Return)
         });
-        morf.set_field(ctx, name, register);
+        lock.set_field(ctx, name, register);
     }
     let quit_state = Rc::clone(&state);
     // Asking to stop, rather than stopping. The call returns and the rest of
@@ -422,19 +346,6 @@ pub(crate) fn install_shell_api<'gc>(
         Ok(CallbackReturn::Return)
     });
     morf.set_field(ctx, "quit", quit);
-    let working_directory = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let path: Option<String> = stack.consume(ctx)?;
-        if let Some(path) = path {
-            if path.is_empty() || path.len() > 4_096 || path.as_bytes().contains(&0) {
-                return Err(HostError("working directory path is invalid".into()).into());
-            }
-            std::env::set_current_dir(&path).map_err(|error| HostError(error.to_string()))?;
-        }
-        let current = std::env::current_dir().map_err(|error| HostError(error.to_string()))?;
-        stack.replace(ctx, current.to_string_lossy().as_ref());
-        Ok(CallbackReturn::Return)
-    });
-    morf.set_field(ctx, "working_directory", working_directory);
 }
 
 /// Writes `morf.args`, `morf.options` and `morf.operands` from one command

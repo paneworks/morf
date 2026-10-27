@@ -15,7 +15,7 @@ fn asking() -> Runtime {
             "ask.lua",
             br#"
             morf.workspace.activate("2")
-            morf.toplevel.close("a")
+            morf.toplevels.close("a")
             morf.output_power.set("off")
             morf.ipc.active = function()
                 for _, w in ipairs(morf.workspaces) do

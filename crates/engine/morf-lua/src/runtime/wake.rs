@@ -15,8 +15,8 @@ use crate::{Error, api::ui::bindings::flush_reactive, vm::types::Runtime};
 pub use morf_runtime::wake::{ClockPrecision, DeadlineCause};
 
 impl Runtime {
-    /// Updates `morf.clock` ("HH:MM:SS"), and `morf.minute_clock` and
-    /// `morf.hour_clock` with it, and recomputes what reads them.
+    /// Updates `morf.time.clock` ("HH:MM:SS"), and `morf.time.minute_clock` and
+    /// `morf.time.hour_clock` with it, and recomputes what reads them.
     ///
     /// Only the grains that turned over are written, so a binding on the
     /// minute clock runs once a minute however often this is called. Returns

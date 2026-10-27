@@ -3,8 +3,8 @@
 //! A lock client asks for the lock and the compositor answers later: it
 //! confirms once every output shows a locked frame, or refuses, or ends the
 //! lock of its own accord. The configuration hears each of these through
-//! `morf.session_lock` (a signal), `morf.session_lock_state()`, and the
-//! `morf.on_session_lock_state` / `morf.on_session_locked` callbacks.
+//! `morf.lock.state` (a signal) and the
+//! `morf.lock.on_state` / `morf.lock.on_locked` callbacks.
 
 use crate::{api::ui::bindings::*, runtime::state::*, vm::execute::*, vm::types::*};
 

@@ -28,7 +28,6 @@ pub struct Requests {
     /// The compositor's selection as last heard, for a text input to paste.
     pub clipboard_text: Option<String>,
     pub clipboard_requests: Vec<ClipboardRequest>,
-    pub clipboard_callbacks: Vec<Handler>,
     /// `morf.clipboard.watch` callbacks, each with whether it wants the
     /// primary selection too.
     pub clipboard_watchers: Vec<(Handler, bool)>,

@@ -191,14 +191,12 @@ pub use morf_runtime::requests::{ReloadRequest, ToplevelRequest, WorkspaceReques
 
 #[derive(Clone, Copy)]
 pub(crate) enum StorageKind {
-    Data,
     State,
     Cache,
 }
 
 pub(crate) fn shell_storage_dir(shell_root: &Path, kind: StorageKind) -> Result<PathBuf, String> {
     let (variable, fallback) = match kind {
-        StorageKind::Data => ("XDG_DATA_HOME", ".local/share"),
         StorageKind::State => ("XDG_STATE_HOME", ".local/state"),
         StorageKind::Cache => ("XDG_CACHE_HOME", ".cache"),
     };

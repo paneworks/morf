@@ -181,7 +181,7 @@ pub(crate) fn window_handler_method<'gc>(
     })
 }
 
-/// The window callbacks a `window.popup { ... }` or `window.floating { ... }`
+/// The window callbacks a `window.popup { ... }` or `window.toplevel { ... }`
 /// table may carry, set as the methods would set them.
 pub(crate) fn window_handlers_from_options<'gc>(
     ctx: Context<'gc>,

@@ -3,7 +3,7 @@ use crate::api::ui::scene::HostError;
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
 use morf_vector::{
     geometry::{self, Cubic, Options, SEGMENTS},
-    geometry_named, graph, marks, series,
+    geometry_named, graph, marks,
 };
 
 mod charts;
@@ -34,17 +34,6 @@ fn reading(value: LuaValue<'_>, label: &str) -> Result<f64, HostError> {
         return Err(HostError(format!("{label} must be finite")));
     }
     Ok(n)
-}
-fn reading_field<'gc>(
-    ctx: Context<'gc>,
-    o: Table<'gc>,
-    key: &str,
-    default: f64,
-) -> Result<f64, HostError> {
-    match o.get_value(ctx, key) {
-        LuaValue::Nil => Ok(default),
-        value => reading(value, key),
-    }
 }
 fn field<'gc>(
     ctx: Context<'gc>,

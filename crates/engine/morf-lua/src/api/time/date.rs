@@ -175,7 +175,7 @@ fn span_of<'gc>(ctx: Context<'gc>, table: Table<'gc>) -> Result<Span, HostError>
 }
 
 pub(crate) fn install_date_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
-    let time = Table::new(&ctx);
+    let time = crate::api::namespace::table(ctx, morf, "time");
 
     time.set_field(
         ctx,
@@ -367,16 +367,6 @@ pub(crate) fn install_date_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     );
 
     calendar::install_calendar(ctx, time);
-
-    time.set_field(
-        ctx,
-        "timezone",
-        Callback::from_fn(&ctx, |ctx, _, mut stack| {
-            let tz = TimeZone::system();
-            stack.replace(ctx, tz.iana_name().unwrap_or("UTC").to_owned());
-            Ok(CallbackReturn::Return)
-        }),
-    );
 
     morf.set_field(ctx, "time", time);
 }

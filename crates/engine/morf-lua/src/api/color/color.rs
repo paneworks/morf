@@ -212,27 +212,13 @@ pub(crate) fn install_color_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
     callable.set_field(ctx, "__call", call);
     color.set_metatable(ctx, Some(callable));
 
-    for (name, space) in [
-        ("rgb", "rgb"),
-        ("hsl", "hsl"),
-        ("hsv", "hsv"),
-        ("lab", "lab"),
-        ("oklab", "oklab"),
-        ("lch", "lch"),
-        ("oklch", "oklch"),
-        ("xyz", "xyz"),
-        ("lms", "lms"),
-    ] {
+    for space in ["rgb", "hsv", "oklch"] {
         let constructor = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
             let values: Variadic<Vec<LuaValue>> = stack.consume(ctx)?;
             let names = match space {
                 "rgb" => ["r", "g", "b"],
-                "hsl" => ["h", "s", "l"],
                 "hsv" => ["h", "s", "v"],
-                "lab" | "oklab" => ["l", "a", "b"],
-                "lch" | "oklch" => ["l", "c", "h"],
-                "xyz" => ["x", "y", "z"],
-                _ => ["l", "m", "s"],
+                _ => ["l", "c", "h"],
             };
             let (a, b, c, alpha) = channels(&values, names).map_err(HostError)?;
             let color = match space {
@@ -243,56 +229,14 @@ pub(crate) fn install_color_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
                         Color::from_rgba_float(a, b, c, alpha)
                     }
                 }
-                "hsl" => Color::from_hsla(a, b, c, alpha),
                 "hsv" => Color::from_hsva(a, b, c, alpha),
-                "lab" => Color::from_lab(a, b, c, alpha),
-                "oklab" => Color::from_oklab(a, b, c, alpha),
-                "lch" => Color::from_lch(a, b, c, alpha),
-                "oklch" => Color::from_oklch(a, b, c, alpha),
-                "xyz" => Color::from_xyz(a, b, c, alpha),
-                _ => Color::from_lms(a, b, c, alpha),
+                _ => Color::from_oklch(a, b, c, alpha),
             };
             stack.replace(ctx, color_userdata(ctx, color));
             Ok(CallbackReturn::Return)
         });
-        color.set_field(ctx, name, constructor);
+        color.set_field(ctx, space, constructor);
     }
-    let cmyk = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (c, m, y, k): (f64, f64, f64, f64) = stack.consume(ctx)?;
-        stack.replace(ctx, color_userdata(ctx, from_cmyk(c, m, y, k)));
-        Ok(CallbackReturn::Return)
-    });
-    color.set_field(ctx, "cmyk", cmyk);
-    let gray = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (lightness, alpha): (f64, Option<f64>) = stack.consume(ctx)?;
-        let mut color = Color::graytone(lightness);
-        if let Some(alpha) = alpha {
-            let hsla = color.to_hsla();
-            color = Color::from_hsla(hsla.h, hsla.s, hsla.l, alpha);
-        }
-        stack.replace(ctx, color_userdata(ctx, color));
-        Ok(CallbackReturn::Return)
-    });
-    color.set_field(ctx, "gray", gray);
-    let named = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let name: String = stack.consume(ctx)?;
-        let found = pastel::named::NAMED_COLORS
-            .iter()
-            .find(|entry| entry.name.eq_ignore_ascii_case(&name))
-            .ok_or_else(|| HostError(format!("no colour is named `{name}`")))?;
-        stack.replace(ctx, color_userdata(ctx, found.color.clone()));
-        Ok(CallbackReturn::Return)
-    });
-    color.set_field(ctx, "named", named);
-    let names = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let table = Table::new(&ctx);
-        for entry in pastel::named::NAMED_COLORS.iter() {
-            table.set_field(ctx, entry.name, color_userdata(ctx, entry.color.clone()));
-        }
-        stack.replace(ctx, table);
-        Ok(CallbackReturn::Return)
-    });
-    color.set_field(ctx, "names", names);
     let mix = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (a, b, fraction, space): (LuaValue, LuaValue, Option<f64>, Option<String>) =
             stack.consume(ctx)?;

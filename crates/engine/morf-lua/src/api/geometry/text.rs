@@ -5,8 +5,6 @@
 //! for _, hit in ipairs(hits) do
 //!   -- hit.item, hit.index, hit.score, hit.key, hit.positions
 //! end
-//! local score, positions = morf.text.fuzzy_score("ffx", "Firefox")
-//! local spans = morf.text.highlight("Firefox", positions, { bold = true })
 //! ```
 //!
 //! Positions are 1-based byte offsets into the matched string, the way
@@ -16,7 +14,7 @@
 use std::borrow::Cow;
 
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
-use morf_text::fuzzy::{FuzzyMatcher, rank};
+use morf_text::fuzzy::rank;
 
 use crate::api::ui::scene::*;
 
@@ -82,7 +80,7 @@ fn positions_table<'gc>(ctx: Context<'gc>, positions: &[usize]) -> Table<'gc> {
 }
 
 pub(crate) fn install_text_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
-    let text = Table::new(&ctx);
+    let text = crate::api::namespace::table(ctx, morf, "text");
 
     let fuzzy = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (query, items, options): (LuaValue, Table, Option<Table>) = stack.consume(ctx)?;
@@ -159,90 +157,6 @@ pub(crate) fn install_text_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         Ok(CallbackReturn::Return)
     });
     text.set_field(ctx, "fuzzy", fuzzy);
-
-    let fuzzy_score = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (query, subject): (LuaValue, LuaValue) = stack.consume(ctx)?;
-        let (Some(query), Some(subject)) = (text_of(&query), text_of(&subject)) else {
-            return Err(HostError("fuzzy_score takes two strings".into()).into());
-        };
-        match FuzzyMatcher::new(&query).find(&subject) {
-            Some(found) => stack.replace(
-                ctx,
-                (
-                    i64::from(found.score),
-                    positions_table(ctx, &found.positions),
-                ),
-            ),
-            None => stack.replace(ctx, LuaValue::Nil),
-        }
-        Ok(CallbackReturn::Return)
-    });
-    text.set_field(ctx, "fuzzy_score", fuzzy_score);
-
-    // `highlight(text, positions, style)`: spans for a `ui.Text`, the
-    // characters at `positions` in runs styled by `style`, the rest plain.
-    let highlight = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (subject, positions, style): (luna::String, Option<Table>, Option<Table>) =
-            stack.consume(ctx)?;
-        let bytes = subject.as_bytes();
-        let subject = String::from_utf8_lossy(bytes);
-        let mut marked = vec![false; subject.len()];
-        if let Some(positions) = positions {
-            for index in 1..=positions.length(&ctx) {
-                if let LuaValue::Integer(position) = positions.get_value(ctx, index)
-                    && position >= 1
-                    && (position as usize) <= subject.len()
-                {
-                    marked[position as usize - 1] = true;
-                }
-            }
-        }
-        let spans = Table::new(&ctx);
-        let mut slot = 1;
-        let mut push = |piece: &str, hit: bool| -> Result<(), HostError> {
-            if piece.is_empty() {
-                return Ok(());
-            }
-            let value: LuaValue = match (hit, style) {
-                (true, Some(style)) => {
-                    let span = Table::new(&ctx);
-                    for (key, value) in style.iter(ctx) {
-                        span.set(ctx, key, value)
-                            .map_err(|error| HostError(error.to_string()))?;
-                    }
-                    span.set_field(ctx, "text", ctx.intern(piece.as_bytes()));
-                    span.into()
-                }
-                (true, None) => {
-                    let span = Table::new(&ctx);
-                    span.set_field(ctx, "text", ctx.intern(piece.as_bytes()));
-                    span.set_field(ctx, "bold", true);
-                    span.into()
-                }
-                (false, _) => ctx.intern(piece.as_bytes()).into(),
-            };
-            spans
-                .set(ctx, slot, value)
-                .map_err(|error| HostError(error.to_string()))?;
-            slot += 1;
-            Ok(())
-        };
-        // Runs of matched characters, and of the rest.
-        let mut run_start = 0;
-        let mut run_hit = false;
-        for (offset, _) in subject.char_indices() {
-            let hit = marked[offset];
-            if offset > 0 && hit != run_hit {
-                push(&subject[run_start..offset], run_hit)?;
-                run_start = offset;
-            }
-            run_hit = hit;
-        }
-        push(&subject[run_start..], run_hit)?;
-        stack.replace(ctx, spans);
-        Ok(CallbackReturn::Return)
-    });
-    text.set_field(ctx, "highlight", highlight);
 
     morf.set_field(ctx, "text", text);
 }

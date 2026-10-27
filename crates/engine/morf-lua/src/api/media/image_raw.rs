@@ -15,10 +15,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
 use morf_image::ImageData;
-use morf_image::ops::{self, OutputFormat};
 use morf_image::published::{self, PixelFormat};
 
-use crate::api::media::image_ops::{source_of, uint};
+use crate::api::media::image_ops::uint;
 use crate::api::ui::scene::HostError;
 
 /// The most pixel bytes one configuration may hold published at once.
@@ -137,26 +136,6 @@ fn option<'gc>(options: Option<Table<'gc>>, ctx: Context<'gc>, field: &str) -> L
     options.map_or(LuaValue::Nil, |options| options.get_value(ctx, field))
 }
 
-fn format_option<'gc>(value: LuaValue<'gc>) -> Result<PixelFormat, HostError> {
-    match value {
-        LuaValue::Nil => Ok(PixelFormat::Rgba),
-        LuaValue::String(name) => {
-            PixelFormat::parse(&name.display_lossy().to_string()).ok_or_else(|| {
-                HostError("format must be \"rgba\", \"rgb\", \"bgra\" or \"argb\"".into())
-            })
-        }
-        _ => Err(HostError("format must be a string".into())),
-    }
-}
-
-fn bool_option(value: LuaValue<'_>, what: &str) -> Result<bool, HostError> {
-    match value {
-        LuaValue::Nil => Ok(false),
-        LuaValue::Boolean(value) => Ok(value),
-        _ => Err(HostError(format!("{what} must be a boolean"))),
-    }
-}
-
 fn name_option(value: LuaValue<'_>) -> Result<Option<String>, HostError> {
     match value {
         LuaValue::Nil => Ok(None),
@@ -164,13 +143,6 @@ fn name_option(value: LuaValue<'_>) -> Result<Option<String>, HostError> {
             Ok(Some(name.display_lossy().to_string()))
         }
         _ => Err(HostError("name must be a string of 1..256 bytes".into())),
-    }
-}
-
-fn stride_of(value: LuaValue<'_>) -> Result<Option<usize>, HostError> {
-    match value {
-        LuaValue::Nil => Ok(None),
-        value => Ok(Some(uint(value, "stride")? as usize)),
     }
 }
 
@@ -211,44 +183,8 @@ fn dbus_image<'gc>(ctx: Context<'gc>, data: Table<'gc>) -> Result<(DbusImage, Ve
     Ok((image, bytes))
 }
 
-pub(crate) fn install_raw_image_api<'gc>(
-    ctx: Context<'gc>,
-    image: Table<'gc>,
-    state: &Rc<crate::runtime::state::StateCell<crate::runtime::state::ReactiveState>>,
-) {
+pub(crate) fn install_raw_image_api<'gc>(ctx: Context<'gc>, image: Table<'gc>) {
     let held = Rc::new(RefCell::new(Held::new()));
-
-    // from_rgba(bytes, width, height, stride, { format, premultiplied, name })
-    let from_rgba_held = Rc::clone(&held);
-    image.set_field(
-        ctx,
-        "from_rgba",
-        Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-            let (bytes, width, height, stride, options): (
-                LuaValue,
-                LuaValue,
-                LuaValue,
-                LuaValue,
-                Option<Table>,
-            ) = stack.consume(ctx)?;
-            let bytes = pixel_bytes(ctx, bytes)?;
-            let width = uint(width, "width")?;
-            let height = uint(height, "height")?;
-            let stride = stride_of(stride)?;
-            let format = format_option(option(options, ctx, "format"))?;
-            let premultiplied =
-                bool_option(option(options, ctx, "premultiplied"), "premultiplied")?;
-            let name = name_option(option(options, ctx, "name"))?;
-            let result = published::from_raw(&bytes, width, height, stride, format, premultiplied)
-                .map_err(|error| error.to_string())
-                .and_then(|image| from_rgba_held.borrow_mut().publish(name, image));
-            match result {
-                Ok(source) => stack.replace(ctx, source),
-                Err(error) => stack.replace(ctx, (LuaValue::Nil, error)),
-            }
-            Ok(CallbackReturn::Return)
-        }),
-    );
 
     // from_dbus(image_data, { name }): a notification's `image-data`.
     let from_dbus_held = Rc::clone(&held);
@@ -302,51 +238,5 @@ pub(crate) fn install_raw_image_api<'gc>(
             stack.replace(ctx, released);
             Ok(CallbackReturn::Return)
         }),
-    );
-
-    // encode_png(bytes, width, height, path, { stride, format, premultiplied })
-    image.set_field(
-        ctx,
-        "encode_png",
-        crate::vm::permissions::gated_write(
-            ctx,
-            state,
-            "morf.image.encode_png",
-            &[3],
-            |ctx, _, mut stack| {
-                let (bytes, width, height, path, options): (
-                    LuaValue,
-                    LuaValue,
-                    LuaValue,
-                    LuaValue,
-                    Option<Table>,
-                ) = stack.consume(ctx)?;
-                let bytes = pixel_bytes(ctx, bytes)?;
-                let width = uint(width, "width")?;
-                let height = uint(height, "height")?;
-                let path = source_of(path, "image.encode_png path")?;
-                let stride = stride_of(option(options, ctx, "stride"))?;
-                let format = format_option(option(options, ctx, "format"))?;
-                let premultiplied =
-                    bool_option(option(options, ctx, "premultiplied"), "premultiplied")?;
-                let result =
-                    published::from_raw(&bytes, width, height, stride, format, premultiplied)
-                        .and_then(|image| {
-                            ops::save_rgba(
-                                image.width,
-                                image.height,
-                                image.rgba,
-                                &path,
-                                OutputFormat::Png,
-                                100,
-                            )
-                        });
-                match result {
-                    Ok(_) => stack.replace(ctx, true),
-                    Err(error) => stack.replace(ctx, (LuaValue::Nil, error.to_string())),
-                }
-                Ok(CallbackReturn::Return)
-            },
-        ),
     );
 }

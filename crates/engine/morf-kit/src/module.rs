@@ -6,9 +6,8 @@
 //! - `configure(id, field, value) -> effects`: a setting written.
 //! - `state(id) -> state`, `drop(id)`; the scripting layer adds
 //!   `own(id, node)`, which drops it when the node is removed.
-//! - `slots(archetype) -> { names }`, `archetypes() -> { names }`.
+//! - `slots(archetype) -> { names }`.
 //! - `implicit_size(bw, bh, cw, ch, padding, insets) -> w, h`.
-//! - `merge_tokens(parent, overrides) -> tokens`.
 //!
 //! `effects` is `{ state = { field = value }, signals = { { name, ... } },
 //! handled = bool, others = { { id, effects } } }`: `handled` says whether
@@ -35,7 +34,6 @@ use crate::scroll::Scroll;
 use crate::selection::Selection;
 use crate::slots::{ARCHETYPES, slots_of};
 use crate::text_field::TextField;
-use crate::tokens::merge_tokens;
 use crate::value::{expect_number, number, text};
 use crate::{Archetype, Effects};
 
@@ -375,14 +373,6 @@ fn functions(registry: Rc<RefCell<Registry>>) -> Vec<(&'static str, NativeFuncti
         }),
     ));
     functions.push((
-        "archetypes",
-        Rc::new(|_| {
-            Ok(vec![list(
-                ARCHETYPES.iter().map(|s| IpcValue::from(*s)).collect(),
-            )])
-        }),
-    ));
-    functions.push((
         "implicit_size",
         Rc::new(|arguments| {
             let n = |i: usize, what: &str| expect_number(arguments.get(i), what);
@@ -393,14 +383,6 @@ fn functions(registry: Rc<RefCell<Registry>>) -> Vec<(&'static str, NativeFuncti
                 sides(arguments.get(5)),
             );
             Ok(vec![w.into(), h.into()])
-        }),
-    ));
-    functions.push((
-        "merge_tokens",
-        Rc::new(|arguments| {
-            let parent = arguments.first().cloned().unwrap_or(IpcValue::Nil);
-            let overrides = arguments.get(1).cloned().unwrap_or(IpcValue::Nil);
-            Ok(vec![merge_tokens(&parent, &overrides)])
         }),
     ));
     functions

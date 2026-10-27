@@ -18,7 +18,6 @@ use std::rc::Rc;
 pub(crate) struct PendingPam {
     pub(crate) task: PamTask,
     pub(crate) callback: Handler,
-    pub(crate) unlock_on_success: bool,
 }
 
 pub(crate) struct PendingDbusSignal {

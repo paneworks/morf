@@ -69,19 +69,19 @@ pub(crate) struct ReloadBand {
     rect: NodeHandle,
     inset: NodeHandle,
     label: NodeHandle,
-    /// How many `on_reload_failed` handlers have been offered the failure.
+    /// How many `on_reload` handlers have been offered the failure.
     offered: usize,
     /// The surface size the band was last fitted to.
     fitted: Option<(u32, u32)>,
 }
 
 impl Runtime {
-    /// Reports a failed reload: to the configuration's `on_reload_failed`
-    /// handlers, or, when none took it without an error, on the band.
+    /// Reports a failed reload: to the configuration's `on_reload`
+    /// handlers, or, when none took it (returned true), on the band.
     /// Returns whether the band is shown.
     pub fn report_reload_failure(&mut self, error: &str, path: &Path) -> bool {
         self.clear_reload_error();
-        let (offered, reported) = self.dispatch_reload_callbacks(false, Some(error.to_owned()), 0);
+        let (offered, reported) = self.dispatch_reload_callbacks(Some(error.to_owned()), 0);
         if reported > 0 {
             return false;
         }
@@ -166,8 +166,8 @@ impl Runtime {
         }
     }
 
-    /// Offers the shown failure to `on_reload_failed` handlers registered
-    /// since it was shown; one that takes it without an error reports it,
+    /// Offers the shown failure to `on_reload` handlers registered
+    /// since it was shown; one that takes it (returns true) reports it,
     /// and the band comes down. Returns whether it did.
     pub(crate) fn offer_reload_failure(&mut self) -> bool {
         let Some((offered, error)) = self
@@ -178,11 +178,11 @@ impl Runtime {
         else {
             return false;
         };
-        let registered = self.reactive.borrow().lifecycle().reload_callbacks(false);
+        let registered = self.reactive.borrow().lifecycle().reload_callbacks();
         if registered.len() <= offered {
             return false;
         }
-        let (offered, reported) = self.dispatch_reload_callbacks(false, Some(error), offered);
+        let (offered, reported) = self.dispatch_reload_callbacks(Some(error), offered);
         if reported > 0 {
             self.clear_reload_error();
             return true;

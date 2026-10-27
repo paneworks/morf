@@ -1,13 +1,11 @@
 use luna::{Context, Table, Value as LuaValue};
 use morf_system::desktop_entries::DesktopEntry;
-use std::rc::Rc;
 use std::time::Duration;
 
 use morf_scene::Easing;
 use morf_system::{AuthMessageType, GreetdResponse};
 
 use crate::api::ui::bindings::lua_to_scene;
-use crate::runtime::state::*;
 
 pub(crate) fn string_table<'gc>(
     ctx: Context<'gc>,
@@ -93,48 +91,6 @@ pub(crate) fn greetd_response<'gc>(ctx: Context<'gc>, response: GreetdResponse) 
             value.set_field(ctx, "description", description.as_str());
         }
     }
-    value
-}
-
-pub(crate) fn track_clock_dependency(
-    state: &Rc<StateCell<ReactiveState>>,
-    enabled: bool,
-    precision: crate::ClockPrecision,
-) {
-    if !enabled {
-        return;
-    }
-    let mut state = state.borrow_mut();
-    let clock = state.clock_signal(precision);
-    if let Some(active) = state.tracking_mut().capture() {
-        active.reads.insert(clock);
-    }
-}
-
-pub(crate) fn local_time_table<'gc>(ctx: Context<'gc>) -> Table<'gc> {
-    let now = jiff::Zoned::now();
-    let numeric = now.strftime("%Y\t%m\t%d\t%H\t%M\t%S\t%u").to_string();
-    let parts = numeric
-        .split('\t')
-        .map(|value| value.parse::<i64>().unwrap_or(0))
-        .collect::<Vec<_>>();
-    let value = Table::new(&ctx);
-    for (field, index) in [
-        ("year", 0),
-        ("month", 1),
-        ("day", 2),
-        ("hours", 3),
-        ("minutes", 4),
-        ("seconds", 5),
-        ("weekday", 6),
-    ] {
-        value.set_field(ctx, field, parts.get(index).copied().unwrap_or(0));
-    }
-    value.set_field(ctx, "date", now.strftime("%F").to_string());
-    value.set_field(ctx, "time", now.strftime("%T").to_string());
-    value.set_field(ctx, "month_name", now.strftime("%B").to_string());
-    value.set_field(ctx, "weekday_name", now.strftime("%A").to_string());
-    value.set_field(ctx, "timezone", now.strftime("%Z").to_string());
     value
 }
 

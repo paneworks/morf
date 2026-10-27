@@ -1,47 +1,10 @@
-//! `morf.geometry`'s charts and marks: graph series and grids, arcs and
-//! sectors, hatching, ticks and rulers, segments and plots.
+//! `morf.geometry`'s charts and marks: graph grids, arcs and sectors,
+//! hatching, ticks and rulers, segments.
 
 use super::*;
 
 /// Installs the chart and mark calls on `api`.
 pub(super) fn install_charts<'gc>(ctx: Context<'gc>, api: Table<'gc>) {
-    api.set_field(
-        ctx,
-        "graph_series",
-        Callback::from_fn(&ctx, |ctx, _, mut stack| {
-            let (values, o): (Table, Table) = stack.consume(ctx)?;
-            let len = values.length(&ctx);
-            if len > graph::MAX_SAMPLES as i64 {
-                return Err(HostError("graph exceeds 8192 samples".into()).into());
-            }
-            let samples = count(o.get_value(ctx, "samples"), graph::MAX_SAMPLES)?;
-            let read = |key, default| field(ctx, Some(o), key, default);
-            let values = (1..=len)
-                .map(|i| {
-                    let v = values.get_value(ctx, i);
-                    if matches!(v, LuaValue::Nil) {
-                        Ok(0.0)
-                    } else {
-                        reading(v, "sample")
-                    }
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let path = graph::series(
-                &values,
-                graph::Series {
-                    width: read("width", 100.0)?,
-                    height: read("height", 100.0)?,
-                    bottom: reading_field(ctx, o, "bottom", 0.0)?,
-                    top: reading_field(ctx, o, "top", 1.0)?,
-                    samples,
-                    closed: matches!(o.get_value(ctx, "closed"), LuaValue::Boolean(true)),
-                },
-            )
-            .map_err(HostError)?;
-            stack.replace(ctx, path);
-            Ok(CallbackReturn::Return)
-        }),
-    );
     api.set_field(
         ctx,
         "graph_grid",
@@ -235,46 +198,6 @@ pub(super) fn install_charts<'gc>(ctx: Context<'gc>, api: Table<'gc>) {
                 vertical,
             );
             stack.replace(ctx, d);
-            Ok(CallbackReturn::Return)
-        }),
-    );
-    api.set_field(
-        ctx,
-        "plot",
-        Callback::from_fn(&ctx, |ctx, _, mut stack| {
-            // (values, { kind, width, height, samples, bottom, top, ... }): what
-            // a Path reading a channel with that `plot` draws.
-            let (values, o): (Table, Option<Table>) = stack.consume(ctx)?;
-            let mut list = Vec::new();
-            for i in 1..=graph::MAX_SAMPLES as i64 {
-                match values.get_value(ctx, i) {
-                    LuaValue::Nil => break,
-                    v => list.push(reading(v, "value")? as f32),
-                }
-            }
-            let get = |key: &str| o.map_or(LuaValue::Nil, |o| o.get_value(ctx, key));
-            let number = |key: &str| match get(key) {
-                LuaValue::Integer(n) => Some(n as f64),
-                LuaValue::Number(n) if n.is_finite() => Some(n),
-                _ => None,
-            };
-            let flag = |key: &str| matches!(get(key), LuaValue::Boolean(true));
-            let word = |key: &str| match get(key) {
-                LuaValue::String(s) => Some(s.display_lossy().to_string()),
-                _ => None,
-            };
-            let top = match get("top") {
-                LuaValue::Nil => None,
-                LuaValue::Boolean(false) => Some(None),
-                v => Some(Some(reading(v, "top")?)),
-            };
-            if let Some(kind) = word("kind")
-                && series::Kind::parse(&kind).is_none()
-            {
-                return Err(HostError(format!("unknown plot kind `{kind}`")).into());
-            }
-            let plot = series::Plot::from_fields(number, flag, word, top, (100.0, 100.0), 0);
-            stack.replace(ctx, series::path(&list, &[], &plot));
             Ok(CallbackReturn::Return)
         }),
     );

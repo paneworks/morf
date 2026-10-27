@@ -8,7 +8,7 @@ pub struct Display {
     /// What this output's compositor and GPU can do, as name = value pairs.
     capabilities: Vec<(String, String)>,
     /// How big one of morf's pixels is, as the configuration said
-    /// (`morf.density`).
+    /// (`morf.window.density`).
     density: Density,
     /// Whether `density` changed since the host last took it.
     density_changed: bool,

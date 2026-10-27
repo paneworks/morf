@@ -34,7 +34,7 @@ pub struct HeadlessLock {
 
 impl HeadlessLock {
     /// Whether a loaded configuration is a lock built per output: one that
-    /// asked for the session lock and gave `morf.lock_surface` a builder.
+    /// asked for the session lock and gave `morf.lock.surface` a builder.
     pub fn wanted(runtime: &Runtime) -> bool {
         runtime.layer_surface_config().session_lock && runtime.has_lock_surface_builder()
     }

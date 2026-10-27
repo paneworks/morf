@@ -29,38 +29,35 @@ pub(crate) fn install_pam_api<'gc>(
     morf: Table<'gc>,
 ) {
     let pam = Table::new(&ctx);
-
     // The password path: answered from what was handed in, verdict to the
-    // callback. `unlock` is the one difference between the two entries -- a
-    // success on the second also lifts the session lock, which is the lock
-    // screen's whole reason to call it.
-    for (name, api, unlock_on_success) in [
-        ("authenticate", "morf.pam.authenticate", false),
-        ("authenticate_unlock", "morf.pam.authenticate_unlock", true),
-    ] {
+    // callback.
+    {
         let pam_state = Rc::clone(&state);
-        let entry = gated(ctx, &state, "pam", api, move |ctx, _, mut stack| {
-            let (service, username, password, callback, confdir): (
-                String,
-                String,
-                luna::String,
-                Closure,
-                Option<String>,
-            ) = stack.consume(ctx)?;
-            let task = PamAuthenticator::authenticate_async(
-                &service,
-                &username,
-                secret(password),
-                confdir.as_deref(),
-            );
-            let callback = crate::vm::handler_store::register(ctx.stash(callback));
-            pam_state
-                .borrow_mut()
-                .auth_mut()
-                .check(task, callback, unlock_on_success);
-            Ok(CallbackReturn::Return)
-        });
-        pam.set_field(ctx, name, entry);
+        let entry = gated(
+            ctx,
+            &state,
+            "pam",
+            "morf.pam.authenticate",
+            move |ctx, _, mut stack| {
+                let (service, username, password, callback, confdir): (
+                    String,
+                    String,
+                    luna::String,
+                    Closure,
+                    Option<String>,
+                ) = stack.consume(ctx)?;
+                let task = PamAuthenticator::authenticate_async(
+                    &service,
+                    &username,
+                    secret(password),
+                    confdir.as_deref(),
+                );
+                let callback = crate::vm::handler_store::register(ctx.stash(callback));
+                pam_state.borrow_mut().auth_mut().check(task, callback);
+                Ok(CallbackReturn::Return)
+            },
+        );
+        pam.set_field(ctx, "authenticate", entry);
     }
 
     // The conversation: what a session hands back and what it takes.

@@ -18,8 +18,8 @@
 //! morf.http.get(url, { headers = ... }, function(response) end)
 //! morf.http.post(url, "raw body", function(response) end)
 //! morf.http.post(url, { a = 1 }, { headers = ... }, function(response) end) -- a table is sent as JSON
-//! morf.http.url_encode("a b")        --> "a%20b"
-//! morf.http.url_decode("a%20b")      --> "a b"
+//! morf.encoding.url_encode("a b")        --> "a%20b"
+//! morf.encoding.url_decode("a%20b")      --> "a b"
 //! morf.http.query { q = "x y", n = 2 } --> "n=2&q=x%20y"
 //! ```
 //!
@@ -174,18 +174,6 @@ pub(crate) fn install_http_api<'gc>(
     );
     http.set_field(ctx, "post", post);
 
-    let url_encode = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let text: luna::String = stack.consume(ctx)?;
-        stack.replace(ctx, morf_io::url_encode(text.as_bytes()));
-        Ok(CallbackReturn::Return)
-    });
-    http.set_field(ctx, "url_encode", url_encode);
-    let url_decode = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let text: luna::String = stack.consume(ctx)?;
-        stack.replace(ctx, ctx.intern(&morf_io::url_decode(text.as_bytes())));
-        Ok(CallbackReturn::Return)
-    });
-    http.set_field(ctx, "url_decode", url_decode);
     let query = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let values: Table = stack.consume(ctx)?;
         stack.replace(ctx, encode_query(ctx, values)?);

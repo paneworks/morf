@@ -174,14 +174,6 @@ pub(crate) fn install_palette_constructors<'gc>(ctx: Context<'gc>, color: Table<
         Ok(CallbackReturn::Return)
     });
     color.set_field(ctx, "random", random);
-
-    let ansi8 = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let index: i64 = stack.consume(ctx)?;
-        let index = u8::try_from(index).map_err(|_| HostError("an ANSI index is 0..255".into()))?;
-        stack.replace(ctx, color_userdata(ctx, Color::from_ansi_8bit(index)));
-        Ok(CallbackReturn::Return)
-    });
-    color.set_field(ctx, "ansi8", ansi8);
 }
 
 /// `pastel`'s search, with the iteration budget in the caller's hands: a

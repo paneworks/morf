@@ -30,14 +30,12 @@ mod selection;
 mod shell;
 mod slots;
 mod text_field;
-mod tokens;
 mod value;
 
 pub use access::{item_role, role_of, states_of};
 pub use control::{ControlState, implicit_size};
 pub use module::{NativeFunction, NativeKit, native_module};
 pub use slots::{ARCHETYPES, slots_of};
-pub use tokens::merge_tokens;
 
 use morf_value::IpcValue;
 

@@ -77,7 +77,7 @@ pub(crate) fn install_file_api<'gc>(
         stack.replace(ctx, userdata);
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "file", file_view);
+    crate::api::namespace::table(ctx, morf, "fs").set_field(ctx, "file", file_view);
 
     let document_path = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let file: UserRef<FileDocumentToken> = stack.consume(ctx)?;
@@ -264,5 +264,5 @@ pub(crate) fn install_file_api<'gc>(
         stack.replace(ctx, userdata);
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "file_view", file_document);
+    crate::api::namespace::table(ctx, morf, "fs").set_field(ctx, "view", file_document);
 }

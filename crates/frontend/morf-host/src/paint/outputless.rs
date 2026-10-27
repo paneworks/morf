@@ -213,10 +213,6 @@ fn drive_outputless(
                 .map_err(|_| "output supervisor stopped".to_owned())?;
             return Ok(());
         }
-        if let Some(enabled) = runtime.take_watch_files_change() {
-            tx.send(SupervisorMessage::WatchFiles(enabled))
-                .map_err(|_| "output supervisor stopped".to_owned())?;
-        }
         // Declared and left unmapped: nothing here draws, so what a surface
         // change or a removed node would tell a renderer is dropped.
         runtime.take_layer_surface_change();

@@ -12,9 +12,9 @@ pub struct ResourceCounts {
     pub dbus_calls: usize,
     /// Timers, one-shot and repeating, still due.
     pub timers: usize,
-    /// Children of `morf.run` and `morf.spawn` still held.
+    /// Children of `morf.process.run` and `morf.process.spawn` still held.
     pub processes: usize,
-    /// `morf.connect` connections still open.
+    /// `morf.socket.connect` connections still open.
     pub connections: usize,
     /// `morf.fs.watch` watches still open.
     pub file_watches: usize,

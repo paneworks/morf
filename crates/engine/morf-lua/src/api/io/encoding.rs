@@ -57,14 +57,6 @@ fn count_option<'gc>(
     }
 }
 
-fn format_name(value: LuaValue<'_>) -> Result<Option<String>, HostError> {
-    match value {
-        LuaValue::Nil => Ok(None),
-        LuaValue::String(name) => Ok(Some(String::from_utf8_lossy(name.as_bytes()).into_owned())),
-        _ => Err(HostError("format must be a string".into())),
-    }
-}
-
 fn entry_table<'gc>(
     ctx: Context<'gc>,
     entry: &archive::TarEntry,
@@ -198,33 +190,6 @@ pub(crate) fn install_encoding_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         }),
     );
 
-    // hex_encode(bytes, { upper = false })
-    encoding.set_field(
-        ctx,
-        "hex_encode",
-        Callback::from_fn(&ctx, |ctx, _, mut stack| {
-            let (input, options): (LuaValue, LuaValue) = stack.consume(ctx)?;
-            let input = bytes(input, "hex_encode")?;
-            stack.replace(
-                ctx,
-                codec::hex_encode(input, flag(ctx, options, "upper", false)?),
-            );
-            Ok(CallbackReturn::Return)
-        }),
-    );
-    encoding.set_field(
-        ctx,
-        "hex_decode",
-        Callback::from_fn(&ctx, |ctx, _, mut stack| {
-            let input: LuaValue = stack.consume(ctx)?;
-            match codec::hex_decode(bytes(input, "hex_decode")?) {
-                Ok(out) => stack.replace(ctx, luna::String::from_slice(&ctx, out)),
-                Err(error) => stack.replace(ctx, (LuaValue::Nil, error.into_message())),
-            }
-            Ok(CallbackReturn::Return)
-        }),
-    );
-
     // url_encode(text, { component = true, plus = false }): a query value
     // by default; `component = false` keeps a path's `/` and `:`.
     encoding.set_field(
@@ -281,69 +246,13 @@ pub(crate) fn install_encoding_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
             Ok(CallbackReturn::Return)
         }),
     );
-    encoding.set_field(
-        ctx,
-        "crc32",
-        Callback::from_fn(&ctx, |ctx, _, mut stack| {
-            let input: LuaValue = stack.consume(ctx)?;
-            stack.replace(ctx, i64::from(codec::crc32(bytes(input, "crc32")?)));
-            Ok(CallbackReturn::Return)
-        }),
-    );
 
-    encoding.set_field(
-        ctx,
-        "random_bytes",
-        Callback::from_fn(&ctx, |ctx, _, mut stack| {
-            let count: i64 = stack.consume(ctx)?;
-            let count = usize::try_from(count)
-                .ok()
-                .filter(|count| *count <= 1024 * 1024)
-                .ok_or_else(|| HostError("random_bytes count must be 0..1048576".into()))?;
-            let out = codec::random_bytes(count).map_err(|error| HostError(error.to_string()))?;
-            stack.replace(ctx, luna::String::from_slice(&ctx, out));
-            Ok(CallbackReturn::Return)
-        }),
-    );
     encoding.set_field(
         ctx,
         "uuid",
         Callback::from_fn(&ctx, |ctx, _, mut stack| {
             let id = codec::uuid_v4().map_err(|error| HostError(error.to_string()))?;
             stack.replace(ctx, id);
-            Ok(CallbackReturn::Return)
-        }),
-    );
-
-    // decompress(bytes, format, { max_size }): gzip, zlib, deflate, zstd, xz
-    // or lzma; `format` nil or "auto" goes by the magic number.
-    encoding.set_field(
-        ctx,
-        "decompress",
-        Callback::from_fn(&ctx, |ctx, _, mut stack| {
-            let (input, format, options): (LuaValue, LuaValue, LuaValue) = stack.consume(ctx)?;
-            let input = bytes(input, "decompress")?;
-            let format = format_name(format)?;
-            let max_output =
-                count_option(ctx, options, "max_size", DEFAULT_MAX_OUTPUT, MAX_OUTPUT)?;
-            match archive::inflate(input, format.as_deref(), max_output) {
-                Ok(out) => stack.replace(ctx, luna::String::from_slice(&ctx, out)),
-                Err(error) => stack.replace(ctx, (LuaValue::Nil, error.into_message())),
-            }
-            Ok(CallbackReturn::Return)
-        }),
-    );
-    // compression(bytes): the format a magic number names, or nil.
-    encoding.set_field(
-        ctx,
-        "compression",
-        Callback::from_fn(&ctx, |ctx, _, mut stack| {
-            let input: LuaValue = stack.consume(ctx)?;
-            let input = bytes(input, "compression")?;
-            match archive::detect(input) {
-                Some(format) => stack.replace(ctx, format.name()),
-                None => stack.replace(ctx, LuaValue::Nil),
-            }
             Ok(CallbackReturn::Return)
         }),
     );
