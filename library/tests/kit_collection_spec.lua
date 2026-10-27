@@ -1,4 +1,4 @@
--- lib.kit.collection on the Collection archetype and the engine's list
+-- lib.kit.archetypes.collection on the Collection archetype and the engine's list
 -- view, with a plain skin: ten thousand rows scrolled with no delegate
 -- built after the first screen, rows of mixed heights, a sortable table and
 -- a tree the arrows open.
@@ -27,18 +27,18 @@ local HOST = [[
   skin.use("plain")
   local rows = {}
   for i = 1, 10000 do rows[i] = { key = "r" .. i, label = "Row " .. i } end
-  local big, big_handle = w.list { id = "big", x = 0, y = 0, width = 300, height = 360, rows = rows, row_height = 36 }
+  local big, big_handle = w.list_view { id = "big", x = 0, y = 0, width = 300, height = 360, rows = rows, row_height = 36 }
   local mixed_rows = {}
   for i = 1, 50 do mixed_rows[i] = { key = "m" .. i, label = "M" .. i, kind = i % 5 == 1 and "header" or "row",
     height = i % 5 == 1 and 24 or 40 } end
-  local mixed, mixed_handle = w.list { id = "mixed", x = 320, y = 0, width = 200, height = 200, rows = mixed_rows,
+  local mixed, mixed_handle = w.list_view { id = "mixed", x = 320, y = 0, width = 200, height = 200, rows = mixed_rows,
     row_height = 40, size_field = "height", kind_field = "kind" }
   local sorts = {}
   local files = morf.list_model({ { key = "a", name = "b.txt", size = 3 }, { key = "b", name = "a.txt", size = 9 } })
-  local table_node = w.data_table { id = "files", x = 0, y = 380, width = 300, height = 120, rows = files,
+  local table_node = w.column_view { id = "files", x = 0, y = 380, width = 300, height = 120, rows = files,
     columns = { { key = "name", title = "Name", width = 200, sortable = true }, { key = "size", title = "Size", width = 100 } },
     on_sort_changed = function(key, asc) sorts[#sorts + 1] = key .. ":" .. tostring(asc) end }
-  local tree = w.tree_view { id = "tree", x = 320, y = 220, width = 200, height = 200,
+  local tree = w.tree_expander { id = "tree", x = 320, y = 220, width = 200, height = 200,
     tree = { { key = "docs", label = "Docs", children = { { key = "a", label = "A" }, { key = "b", label = "B" } } },
              { key = "pics", label = "Pics" } } }
   ui.Item { width = 800, height = 600, big, mixed, table_node, tree }

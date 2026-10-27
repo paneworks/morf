@@ -10,55 +10,71 @@ local HOST = [[
   local function join(list) return table.concat(list, "\n") end
   morf.ipc.empty_kit = function() return join(check.kit({})) end
   morf.ipc.not_a_kit = function() return join(check.kit(42)) end
-  morf.ipc.stage = function() return contract.stage end
-  -- A kit that has every function due at the current stage.
+  -- A theme with every token and every skin, and no editor group.
   morf.ipc.full_kit = function()
-    local kit = {}
-    for _, entry in ipairs(contract.functions) do
-      if not entry.value then kit[entry.name] = function() end end
+    local kit = { tokens = {}, skins = {} }
+    for group, names in pairs(contract.tokens) do
+      kit.tokens[group] = {}
+      for _, name in ipairs(names) do kit.tokens[group][name] = 1 end
     end
-    for _, list in pairs(contract.display) do
-      for _, entry in ipairs(list) do
-        if entry.stage <= contract.stage then kit[entry.fn] = function() end end
-      end
-    end
-    kit.skins = {}
-    for name, archetype in pairs(contract.archetypes) do
-      if archetype.stage <= contract.stage then kit.skins[name] = function() end end
-    end
-    return join(check.kit(kit))
+    for name in pairs(contract.archetypes) do kit.skins[name] = function() end end
+    for _, entry in ipairs(contract.display) do kit.skins[entry.name] = function() end end
+    return join(check.kit(kit)), join(check.editor(kit))
   end
-  -- Every archetype says what it is; every composite is made of archetypes.
+  -- Every archetype says what it is; every widget names its class; every
+  -- composite is made of archetypes.
   morf.ipc.shapes = function()
     local wrong = {}
     for name, a in pairs(contract.archetypes) do
-      for _, field in ipairs { "role", "state", "signals", "keys", "slots", "widgets" } do
+      for _, field in ipairs { "role", "state", "signals", "keys", "slots" } do
         if type(a[field]) ~= "table" or #a[field] == 0 then wrong[#wrong + 1] = name .. "." .. field end
       end
-      if type(a.stage) ~= "number" then wrong[#wrong + 1] = name .. ".stage" end
-    end
-    for name, c in pairs(contract.composites) do
-      for _, part in ipairs(c.parts) do
-        if not contract.archetypes[part] then wrong[#wrong + 1] = name .. " uses " .. part end
+      if type(a.adw) ~= "string" then wrong[#wrong + 1] = name .. ".adw" end
+      for _, w in ipairs(a.widgets) do
+        if type(w.adw) ~= "string" then wrong[#wrong + 1] = w.name .. ".adw" end
       end
+    end
+    for _, c in ipairs(contract.composites) do
+      for _, part in ipairs(c.parts) do
+        if not contract.archetypes[part] then wrong[#wrong + 1] = c.name .. " uses " .. part end
+      end
+    end
+    for _, s in ipairs(contract.shell) do
+      if type(s.surface) ~= "string" then wrong[#wrong + 1] = s.name .. ".surface" end
     end
     return join(wrong)
   end
-  morf.ipc.archetype_count = function()
-    local n = 0
-    for _ in pairs(contract.archetypes) do n = n + 1 end
-    return n
+  morf.ipc.counts = function()
+    local archetypes, names = 0, #contract.display + #contract.composites + #contract.shell
+    for _, a in pairs(contract.archetypes) do archetypes = archetypes + 1 names = names + #a.widgets end
+    return archetypes, names
+  end
+  -- Each name once across the contract: a constructor of lib.kit.widgets.
+  morf.ipc.unique = function()
+    local widgets = require("lib.kit.widgets")
+    local seen, wrong = {}, {}
+    local function see(name)
+      if seen[name] then wrong[#wrong + 1] = name .. " twice" end
+      seen[name] = true
+      if type(widgets[name]) ~= "function" then wrong[#wrong + 1] = name .. " has no constructor" end
+    end
+    for _, a in pairs(contract.archetypes) do for _, w in ipairs(a.widgets) do see(w.name) end end
+    for _, a in pairs(contract.editor) do for _, w in ipairs(a.widgets) do see(w.name) end end
+    for _, group in ipairs { "display", "composites", "shell" } do
+      for _, w in ipairs(contract[group]) do see(w.name) end
+    end
+    return join(wrong)
   end
 ]]
 
 local function load() test.load { source = HOST } end
 
-test.it("names every function an empty kit lacks", function()
+test.it("names every token and skin an empty kit lacks", function()
   load()
   local problems = test.ipc("empty_kit")
-  test.contains(problems, "kit.text (text) is missing")
-  test.contains(problems, "kit.ring (reading) is missing")
-  test.contains(problems, "display readings.gauge: kit.gauge is missing")
+  test.contains(problems, "token colors.accent_bg is missing")
+  test.contains(problems, "archetype Press: kit.skins.Press is missing")
+  test.contains(problems, "display label: kit.skins.label is missing")
 end)
 
 test.it("refuses a kit that is not a table", function()
@@ -66,13 +82,22 @@ test.it("refuses a kit that is not a table", function()
   test.contains(test.ipc("not_a_kit"), "the kit is not a table")
 end)
 
-test.it("passes a kit that has everything due", function()
+test.it("passes a kit that has every token and skin, and reports the editor group apart", function()
   load()
-  test.eq(test.ipc("full_kit"), "")
+  local problems, editor = test.ipc("full_kit")
+  test.eq(problems, "")
+  test.contains(editor, "editor Canvas: kit.skins.Canvas is missing")
 end)
 
-test.it("describes all nineteen archetypes and builds composites from them", function()
+test.it("describes twelve archetypes and builds composites from them", function()
   load()
-  test.eq(test.ipc("archetype_count"), 19)
+  local archetypes, names = test.ipc("counts")
+  test.eq(archetypes, 12)
+  test.eq(names, 99)
   test.eq(test.ipc("shapes"), "")
+end)
+
+test.it("names each widget once, and makes every one", function()
+  load()
+  test.eq(test.ipc("unique"), "")
 end)

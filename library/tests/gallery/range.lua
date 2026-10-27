@@ -1,28 +1,26 @@
--- Gallery samples for the Range widgets (library/tests/gallery): each one as a
--- configuration would make it, at a value that shows its look.
-local S = {}
+-- Gallery samples for the Range widgets: a scale as it is used -- with
+-- marks and a reading, standing up, on the osd ground -- a spin button and
+-- the scroll bars.
+local ui = require("morf.ui")
 
-S.slider = function(_, w) return w.slider { width = 240, value = 0.42 } end
-S.vertical_slider = function(_, w) return w.vertical_slider { width = 48, height = 200, value = 0.6 } end
-S.range_slider = function(_, w) return w.range_slider { width = 240, first = 0.25, second = 0.7 } end
-S.discrete_slider = function(_, w) return w.discrete_slider { width = 240, value = 6 } end
-S.log_slider = function(_, w) return w.log_slider { width = 260, value = 1200 } end
-S.angle_slider = function(_, w) return w.angle_slider { value = 135 } end
-S.knob = function(_, w) return w.knob { value = 0.68 } end
-S.bipolar_knob = function(_, w) return w.bipolar_knob { value = -0.35 } end
-S.stepped_knob = function(_, w) return w.stepped_knob { value = 4 } end
-S.fader = function(_, w) return w.fader { value = 0.62 } end
-S.spin_button = function(_, w) return w.spin_button { value = 42 } end
-S.scrubber = function(_, w) return w.scrubber { width = 260, value = 0.38, duration = 214 } end
-S.scroll_bar = function(_, w)
-  return w.scroll_bar { width = 12, height = 200, orientation = "vertical", value = 0.3, size = 0.35 }
+local M = { span = { scale = { 2, 1 } } }
+
+function M.scale(_, w)
+  local level = morf.signal("gallery.scale", 0.4)
+  return ui.Row { gap = 24,
+    ui.Column { gap = 16,
+      w.scale { width = 300, value = function() return level:get() end, on_moved = function(v) level:set(v) end,
+        icon = "volume_up", digits = 0, from = 0, to = 100, format = function(v) return ("%d"):format(math.floor(v + 0.5)) end },
+      w.scale { width = 300, from = 0, to = 4, step = 1, snap = "always", value = 2,
+        marks = { { value = 0, label = "0" }, { value = 2, label = "2" }, { value = 4, label = "4" } } },
+      w.scale { width = 300, variant = "osd", icon = "brightness_6", value = 0.7 } },
+    w.scale { orientation = "vertical", height = 180, value = 0.6 } }
 end
-S.seek_bar = function(_, w) return w.seek_bar { width = 240, value = 0.35 } end
-S.volume = function(_, w) return w.volume { width = 260, value = 0.72 } end
-S.brightness = function(_, w) return w.brightness { width = 260, value = 0.45 } end
-S.zoom = function(_, w) return w.zoom { width = 270, value = 1.5 } end
-S.rating = function(_, w) return w.rating { value = 3 } end
-S.level_control = function(_, w) return w.level_control { width = 250, value = 0.58 } end
-S.osd_level = function(_, w) return w.osd_level { width = 260, value = 0.64, icon = "volume_up" } end
+function M.spin_button(_, w) return w.spin_button { value = 12, from = 6, to = 72, width = 150, accessible_name = "Size" } end
+function M.scrollbar(_, w)
+  return ui.Item { width = 240, height = 160,
+    w.scrollbar { x = 0, y = 150, width = 220, height = 10, size = 0.4, value = 0.3 },
+    w.scrollbar { x = 230, y = 0, width = 10, height = 140, orientation = "vertical", size = 0.25, value = 0.6 } }
+end
 
-return S
+return M

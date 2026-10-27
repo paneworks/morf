@@ -1,103 +1,51 @@
--- Gallery samples for the Press archetype's widgets (see samples/init.lua):
--- each as an application would use it -- a label and an icon where one
--- belongs, a group where the widget only makes sense in one.
+-- Gallery samples for the Press widgets: each as an application would use
+-- it, every variant of a button side by side.
 local ui = require("morf.ui")
 
-local M = {}
+local M = { span = { button = { 2, 1 } } }
 
-local function row(gap, list)
-  local r = ui.Row { gap = gap, align = "center" }
-  for _, node in ipairs(list) do ui.reparent(node, r) end
-  return r
-end
-
-function M.push(_, w) return w.push { label = "Save", width = 120, height = 40 } end
-function M.suggested(_, w) return w.suggested { label = "Continue", width = 140, height = 40 } end
-function M.destructive(_, w) return w.destructive { label = "Delete", icon = "delete", width = 140, height = 40 } end
-function M.flat(_, w) return w.flat { label = "Cancel", width = 120, height = 40 } end
-function M.raised(_, w) return w.raised { label = "Options", icon = "tune", width = 140, height = 40 } end
-function M.outlined(_, w) return w.outlined { label = "Learn more", width = 140, height = 40 } end
-function M.text(_, w) return w.text { label = "Skip", width = 100, height = 40 } end
-function M.tonal(_, w) return w.tonal { label = "Add to list", icon = "playlist_add", width = 170, height = 40 } end
-function M.elevated(_, w) return w.elevated { label = "Share", icon = "share", width = 130, height = 40 } end
-function M.pill(_, w) return w.pill { label = "Get started", width = 170, height = 48 } end
-function M.circular(_, w) return w.circular { icon = "add", accessible_name = "Add", width = 48, height = 48 } end
-function M.icon(_, w)
-  return w.icon { icon_off = "volume_up", icon_on = "volume_off", accessible_name = "Mute", width = 40, height = 40 }
-end
-function M.link(_, w) return w.link { label = "Read the docs", width = 160, height = 32 } end
-function M.close(_, w) return w.close { accessible_name = "Close", width = 40, height = 40 } end
-function M.copy(_, w) return w.copy { label = "Copy", icon = "content_copy", width = 130, height = 40 } end
-function M.loading(_, w) return w.loading { label = "Saving", width = 140, height = 40 } end
-function M.toggle(_, w) return w.toggle { label = "Bold", icon = "format_bold", checked = true, width = 120, height = 40 } end
-function M.toggle_group_member(_, w)
-  local out = {}
-  for i, entry in ipairs { { "Left", "format_align_left", "first" }, { "Centre", "format_align_center", "middle" },
-    { "Right", "format_align_right", "last" } } do
-    out[i] = w.toggle_group_member { icon = entry[2], accessible_name = entry[1], position = entry[3],
-      group = "sample-align", checked = i == 1, width = 56, height = 40 }
-  end
-  return row(0, out)
-end
-function M.switch(_, w) return w.switch { checked = true, accessible_name = "Wi-Fi" } end
-function M.checkbox(_, w) return w.checkbox { checked = true, accessible_name = "Remember me" } end
-function M.radio(_, w) return w.radio { checked = true, group = "sample-radio", accessible_name = "Daily" } end
-function M.chip_assist(_, w) return w.chip_assist { label = "Directions", icon = "directions", width = 150, height = 32 } end
-function M.chip_filter(_, w) return w.chip_filter { label = "Vegetarian", checked = true, width = 150, height = 32 } end
-function M.chip_input(_, w) return w.chip_input { label = "Ada Lovelace", icon = "person", width = 170, height = 32 } end
-function M.chip_suggestion(_, w) return w.chip_suggestion { label = "Sounds good", width = 140, height = 32 } end
-function M.tag(_, w) return w.tag { label = "Beta", width = 72, height = 26 } end
-function M.tile(_, w)
-  return w.tile { label = "Wi-Fi", subtitle = "Home", icon = "wifi", checkable = true, checked = true,
-    width = 200, height = 64 }
-end
-function M.card_action(_, w)
-  return w.card_action { label = "Storage", subtitle = "48 GB free", icon = "storage", width = 240, height = 80 }
-end
-function M.row_activation(_, w)
-  return w.row_activation { label = "Notifications", subtitle = "Banners and sounds", icon = "notifications",
-    width = 260, height = 56 }
-end
-function M.menu_item(_, w) return w.menu_item { label = "Open", icon = "folder_open", width = 220, height = 40 } end
-function M.check_menu_item(_, w)
-  return w.check_menu_item { label = "Show hidden files", checked = true, width = 240, height = 40 }
-end
-function M.radio_menu_item(_, w)
-  return w.radio_menu_item { label = "Sort by name", checked = true, group = "sample-sort", width = 240, height = 40 }
-end
-function M.keycap(_, w)
-  return row(6, { w.keycap { label = "Ctrl", width = 56, height = 34 }, w.keycap { label = "K", width = 38, height = 34 } })
-end
-function M.fab(_, w) return w.fab { icon = "edit", accessible_name = "Compose", width = 56, height = 56 } end
-function M.extended_fab(_, w) return w.extended_fab { icon = "edit", label = "Compose", width = 160, height = 56 } end
-function M.speed_dial_item(_, w)
-  return w.speed_dial_item { icon = "photo_camera", label = "Camera", width = 170, height = 48 }
-end
-function M.segment(_, w)
-  local out = {}
-  for i, entry in ipairs { { "Day", "first" }, { "Week", "middle" }, { "Month", "last" } } do
-    out[i] = w.segment { label = entry[1], position = entry[2], group = "sample-range", checked = i == 2,
-      width = 80, height = 40 }
-  end
-  return row(0, out)
-end
-function M.rating_star(_, w)
-  local out = {}
-  for i = 1, 5 do out[i] = w.rating_star { checked = i <= 3, accessible_name = i .. " stars", width = 36, height = 36 } end
-  return row(2, out)
-end
-function M.help(_, w) return w.help { accessible_name = "Help", width = 40, height = 40 } end
-function M.disclosure_button(_, w) return w.disclosure_button { label = "Advanced", width = 150, height = 40 } end
-function M.repeat_button(_, w)
-  return row(8, { w.repeat_button { icon = "remove", accessible_name = "Less", width = 40, height = 40 },
-    w.repeat_button { icon = "add", accessible_name = "More", width = 40, height = 40 } })
-end
-function M.back(_, w) return w.back { accessible_name = "Back", width = 40, height = 40 } end
-function M.forward(_, w) return w.forward { accessible_name = "Forward", width = 40, height = 40 } end
-function M.hold_button(_, w)
-  return w.hold_button { label = "Hold to delete", icon = "delete", width = 200, height = 44, hold = 800 }
+local function flow(width, list)
+  local f = ui.Flex { direction = "row", wrap = true, gap = 10, width = width }
+  for _, node in ipairs(list) do ui.reparent(node, f) end
+  return f
 end
 
-M.span = {}
+function M.button(_, w)
+  return flow(560, {
+    w.button { label = "Save", width = 110 },
+    w.button { label = "Continue", variant = "suggested", width = 120 },
+    w.button { label = "Delete", icon = "delete", variant = "destructive", width = 120 },
+    w.button { label = "Cancel", variant = "flat", width = 100 },
+    w.button { label = "Options", icon = "tune", variant = "raised", width = 120 },
+    w.button { label = "Tinted", variant = "opaque", color = function() return morf.color("#26a269") end, width = 110 },
+    w.button { label = "Get started", variant = "pill suggested", width = 160, height = 44 },
+    w.button { icon = "add", variant = "circular", accessible_name = "Add" },
+    w.button { icon = "play_arrow", variant = "osd circular", accessible_name = "Play" },
+    w.button { label = "Saving", loading = true, width = 110 },
+  })
+end
+function M.toggle_button(_, w)
+  return ui.Row { gap = 10, w.toggle_button { label = "Bold", icon = "format_bold", checked = true, width = 110 },
+    w.toggle_button { icon = "format_italic", variant = "flat", accessible_name = "Italic" } }
+end
+function M.check_button(_, w)
+  return ui.Column { gap = 8,
+    w.check_button { label = "Show hidden files", checked = true },
+    w.check_button { label = "Partly", partial = true },
+    w.check_button { label = "Small", group = "sample-size", checked = true },
+    w.check_button { label = "Large", group = "sample-size" } }
+end
+function M.switch(_, w)
+  return ui.Row { gap = 12, w.switch { checked = true, accessible_name = "Wi-Fi" }, w.switch { accessible_name = "Bluetooth" } }
+end
+function M.link_button(_, w) return w.link_button { label = "Read the docs", uri = "https://gnome.org", width = 140, height = 32 } end
+function M.menu_item(_, w)
+  return ui.Column { gap = 0,
+    w.menu_item { label = "New window", icon = "open_in_new", width = 240, height = 36 },
+    w.menu_item { label = "Word wrap", kind = "check", checked = true, width = 240, height = 36 },
+    w.menu_item { label = "Light", kind = "radio", group = "sample-scheme", checked = true, width = 240, height = 36 },
+    w.menu_item { label = "Dark", kind = "radio", group = "sample-scheme", width = 240, height = 36 } }
+end
+function M.tab_button(_, w) return w.tab_button { count = 3, accessible_name = "Tabs" } end
 
 return M

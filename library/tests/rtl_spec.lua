@@ -28,7 +28,7 @@ local HOST = [[
     ui.Flex { id = "flex", y = 170, width = 300, height = 20, direction = "row",
       ui.Rect { id = "f1", width = 50, height = 20 }, ui.Rect { id = "f2", width = 50, height = 20 } },
     ui.Item { y = 220, width = 200, height = 20,
-      w.slider { id = "slider", width = 200, height = 20, step = 0.25,
+      w.scale { id = "slider", width = 200, height = 20, step = 0.25,
         value = function() return level:get() end, on_moved = function(v) level:set(v) end } },
   }
   morf.ipc.level = function() return level:get() end

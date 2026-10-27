@@ -1,4 +1,4 @@
--- lib.kit.popup on the Popup archetype and the overlay layer, with a plain
+-- lib.kit.archetypes.popup on the Popup archetype and the overlay layer, with a plain
 -- skin: a menu beside its button, a modal dialog, a toast that times out,
 -- and a panel tracked where it is.
 --
@@ -10,7 +10,7 @@ local HOST = [[
   local ui = require("morf.ui")
   local skin = require("lib.kit.skin")
   local w = require("lib.kit.widgets")
-  local popup = require("lib.kit.popup")
+  local popup = require("lib.kit.archetypes.popup")
   morf.surface.height = 600
   skin.define("plain", { skins = {
     Popup = function() return { background = ui.Rect { anchors = { fill = true }, color = "#202020" } } end,
@@ -21,7 +21,7 @@ local HOST = [[
   local log = {}
   local function note(s) log[#log + 1] = s end
   local open_panel = morf.signal("test.panel", false)
-  local menu = w.menu { id = "menu", width = 160,
+  local menu = w.popover_menu { id = "menu", width = 160,
     items = { { label = "Copy", on_clicked = function() note("copy") end },
               { label = "Paste", on_clicked = function() note("paste") end } },
     on_closed = function(reason) note("menu-closed:" .. reason) end }
@@ -29,7 +29,7 @@ local HOST = [[
     buttons = { { label = "Cancel" }, { label = "Discard", on_clicked = function() note("discard") end } },
     on_closed = function(reason) note("dialog-closed:" .. reason) end }
   local opener
-  opener = w.push { id = "opener", x = 20, y = 20, width = 100, height = 30, label = "Menu",
+  opener = w.button { id = "opener", x = 20, y = 20, width = 100, height = 30, label = "Menu",
     on_clicked = function() menu.toggle(opener) end }
   local panel = ui.Item { id = "panel", x = 400, y = 100, width = 200, height = 200,
     visible = function() return open_panel:get() end,

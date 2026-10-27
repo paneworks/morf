@@ -2,12 +2,12 @@
 -- used -- an editor's area of file tree, documents and console, a
 -- workshop's shelves round a viewport, a settings box of tabs, a row of
 -- open documents, an IDE's tool windows. Panel contents are plain kit
--- text: the dock is what is shown.
+-- labels: the dock is what is shown.
 local ui = require("morf.ui")
 
 local S = { span = {} }
 
-local function mono(kit) return kit.theme and kit.theme.mono or nil end
+local function mono() return require("lib.kit.tokens").type("monospace").family end
 
 -- A column of lines, `{ text, dim }` each, `size` px apart.
 local function lines(kit, list, opts)
@@ -17,9 +17,9 @@ local function lines(kit, list, opts)
     local text, dim, icon = line, false, nil
     if type(line) == "table" then text, dim, icon = line[1], line.dim, line.icon end
     local row = ui.Row { gap = 8, align = "center", height = opts.row or 20 }
-    if icon then ui.reparent(kit.icon(icon, 16, dim and kit.ink("lo") or nil), row) end
-    ui.reparent(kit.text { text = text, font_size = opts.size or 14, font_family = opts.mono and mono(kit) or nil,
-      color = dim and kit.ink("lo") or nil, height = opts.row or 20, vertical_alignment = "center" }, row)
+    if icon then ui.reparent(require("lib.kit.widgets").image { icon = icon, pixel_size = 16, variant = dim and "dim" or nil }, row) end
+    ui.reparent(require("lib.kit.widgets").label { text = text, font_size = opts.size or 14, font_family = opts.mono and mono() or nil,
+      variant = dim and "dim" or nil, height = opts.row or 20, vertical_alignment = "center" }, row)
     ui.reparent(row, col)
   end
   return ui.Item { anchors = { fill = true }, clip = true, col }
@@ -33,7 +33,7 @@ local function files(kit)
 end
 local function code(kit)
   return lines(kit, {
-    { "local dock = require(\"lib.kit.dock\")", dim = false },
+    { "local dock = require(\"lib.kit.archetypes.dock\")", dim = false },
     { "", dim = true },
     { "-- Panels in splits and tab stacks.", dim = true },
     "function M.make(widget, spec)",
