@@ -87,17 +87,18 @@ knows the tree. Risk is the risk of the change breaking morf or a shell.
 
 ### First reading
 
-Read on 2026-10-25 from `contract.lua`, the morf-kit sources and the
-composites. Step 1 confirms each row. "R" means the logic is in Rust, "L"
-means it sits in a Lua composite.
+Read on 2026-10-27 from `contract.lua` (the libadwaita contract the
+slimdown branch left: 12 archetypes, 13 display widgets, 28 composites),
+the morf-kit sources and the composites. Step 1 confirms each row. "R"
+means the logic is in Rust, "L" means it sits in a Lua composite.
 
 **Windows and chrome**
 
 | Adw | morf today | Gap |
 | --- | --- | --- |
-| Application, ApplicationWindow, Window | `lib.kit.app` `application` under `morf app`, `morf.window.floating` (L + host) | Adw names; breakpoints on the window (§5) |
-| HeaderBar | `header_bar` composite (L) | centering policy, start/end title buttons, decoration layout, back button tied to `can_pop` (§6) |
-| WindowTitle | inside `header_bar` | a display widget of its own |
+| Application, ApplicationWindow, Window | `lib.kit.app` `application` under `morf app`, `morf.window.toplevel` (L + host); Shell widget `application_window` (R) | breakpoints on the window (§5) |
+| HeaderBar | Shell widget `header_bar` (L) | centering policy, start/end title buttons, decoration layout, back button tied to `can_pop` (§6) |
+| WindowTitle | display `window_title` | none |
 | ToolbarView | Shell widget `toolbar_view` (R) | ToolbarStyle (flat, raised, raised border), revealing the top and bottom bars, content extending to the edges |
 | Bin | any `ui.Item` | alias only |
 
@@ -105,10 +106,10 @@ means it sits in a Lua composite.
 
 | Adw | morf today | Gap |
 | --- | --- | --- |
-| Breakpoint, BreakpointBin, BreakpointCondition | Shell `breakpoints`: ascending widths only (R) | height and aspect-ratio conditions, `and`/`or`, px/pt/sp units, any container, setters applied and reverted (§5) |
+| Breakpoint, BreakpointBin, BreakpointCondition | Shell `breakpoints`: ascending widths only (R); Shell widget `breakpoint_bin` | height and aspect-ratio conditions, `and`/`or`, px/pt/sp units, any container, setters applied and reverted (§5) |
 | Clamp, ClampLayout, ClampScrollable | Shell widget `clamp` | maximum size and tightening threshold as a layout, scrollable form |
-| MultiLayoutView, Layout, LayoutSlot | missing | §5 |
-| WrapBox, WrapLayout | flex wrap in morf-layout, Collection `flow` layout | child and line spacing, JustifyMode, WrapPolicy, natural line length |
+| MultiLayoutView, Layout, LayoutSlot | Shell widget `multi_layout_view` | layouts by name and slots (§5) |
+| WrapBox, WrapLayout | flex wrap in morf-layout, Collection `flow_box` | child and line spacing, JustifyMode, WrapPolicy, natural line length |
 | NavigationSplitView | Shell widget (R) | sidebar width fraction with min and max, `show_content`, collapsing into navigation pages (§6) |
 | OverlaySplitView | Shell widget (R) | `pin_sidebar`, sidebar position, show and hide swipes (§4, §6) |
 
@@ -116,40 +117,39 @@ means it sits in a Lua composite.
 
 | Adw | morf today | Gap |
 | --- | --- | --- |
-| NavigationView, NavigationPage | Navigation `stack` mode (R) | pages with tag, title and `can_pop`; push and pop by tag, replace, pop on Escape, back swipe, `get_next_page` (§6) |
-| ViewStack, ViewStackPage, ViewStackPages | Navigation `switcher` mode (R) | page title, icon, badge number, `needs_attention`, `visible`, homogeneous sizing |
-| ViewSwitcher, InlineViewSwitcher | Selection widgets (R) | ViewSwitcherPolicy (narrow/wide), InlineViewSwitcherDisplayMode |
-| ViewSwitcherBar, ViewSwitcherSidebar | missing | revealing on narrow, sidebar form |
+| NavigationView, NavigationPage | Navigation `navigation_view` (R) | pages with tag, title and `can_pop`; push and pop by tag, replace, pop on Escape, back swipe, `get_next_page` (§6) |
+| ViewStack, ViewStackPage, ViewStackPages | Navigation `view_stack` (R) | page title, icon, badge number, `needs_attention`, `visible`, homogeneous sizing |
+| ViewSwitcher, InlineViewSwitcher, ViewSwitcherBar | Selection widgets (R) | ViewSwitcherPolicy (narrow/wide), InlineViewSwitcherDisplayMode, revealing the bar on narrow |
+| ViewSwitcherSidebar | missing | the sidebar form |
 | Sidebar, SidebarItem, SidebarSection | `sidebar` composite (L: Selection + Disclosure) | SidebarMode; logic into Rust (§6) |
-| Carousel, CarouselIndicatorDots, CarouselIndicatorLines | `carousel` composite (L state) over Navigation `carousel` (R) and Drag swipe; `carousel_dots` | fractional position, spacing, wheel, long swipes, reveal duration; lines indicator (§8) |
-| TabView, TabPage, TabBar, TabButton, TabOverview | `tab_view` composite (L) with reorder and an overview | pinned pages, close confirmation, indicator/loading/attention, TabViewShortcuts, transfer between views, TabButton (§9) |
+| Carousel, CarouselIndicatorDots, CarouselIndicatorLines | Navigation `carousel` (L state over R, Drag swipe); Selection `carousel_indicator_dots`, `carousel_indicator_lines` | fractional position, spacing, wheel, long swipes, reveal duration (§8) |
+| TabView, TabPage, TabBar, TabButton, TabOverview | Navigation `tab_view` (L) with the `tab_bar` and `tab_overview` composites and Press `tab_button` | pinned pages, close confirmation, indicator/loading/attention, TabViewShortcuts, transfer between views (§9) |
 
 **Rows and preferences**
 
 | Adw | morf today | Gap |
 | --- | --- | --- |
-| PreferencesRow, ActionRow, SwitchRow, ComboRow, EntryRow, SpinRow, ExpanderRow, ButtonRow | `rows` variants (L layout over Press, Range, TextField, Disclosure and Selection, R) | per-row property parity, EntryRow apply state, ExpanderRow enable switch (§11) |
-| PasswordEntryRow | TextField `echo = "password"` | the row under its name |
-| PreferencesGroup, PreferencesPage | `rows.preferences_group`, `rows.preferences_page` | header suffix, description, separate rows, page icon and name for a dialog's switcher |
-| PreferencesDialog | Popup widget `preferences_dialog` | search over rows, subpages, toasts inside it (§10) |
+| PreferencesRow, ActionRow, SwitchRow, ComboRow, EntryRow, PasswordEntryRow, SpinRow, ExpanderRow, ButtonRow | the row composites by those names (L over Press, Range, TextField, Disclosure and Selection, R) | per-row property parity, EntryRow apply state, ExpanderRow enable switch (§11) |
+| PreferencesGroup, PreferencesPage | `preferences_group`, `preferences_page` | header suffix, description, separate rows, page icon and name for a dialog's switcher |
+| PreferencesDialog | `preferences_dialog` composite (L) | search over rows, subpages, toasts inside it (§10) |
 
 **Dialogs and sheets**
 
 | Adw | morf today | Gap |
 | --- | --- | --- |
 | Dialog | Popup `dialog` (R) | DialogPresentationMode (auto, floating, bottom sheet by size), `can_close` with `close_attempt`, content size, `follows_content_size` |
-| AlertDialog | Popup `alert_dialog` skin | responses (id, label, ResponseAppearance, enabled), default and close response, `choose` with a callback, extra child |
+| AlertDialog | Popup `alert_dialog` | responses (id, label, ResponseAppearance, enabled), default and close response, `choose` with a callback, extra child |
 | AboutDialog | `about_dialog` composite (L) | release notes, credit and legal sections, troubleshooting, `show_about_dialog`, AppStream input |
-| ShortcutsDialog, ShortcutsSection, ShortcutsItem, ShortcutLabel | `shortcuts_window` composite (L), `keycap` display | Adw names |
+| ShortcutsDialog, ShortcutsSection, ShortcutsItem, ShortcutLabel | `shortcuts_dialog` composite (L), display `shortcut_label` | the section and item names |
 | BottomSheet | Popup `bottom_sheet`, modal only | a non-modal sheet with a bottom bar and drag handle, opening and closing by swipe, full width, align |
 
 **Feedback**
 
 | Adw | morf today | Gap |
 | --- | --- | --- |
-| Toast, ToastOverlay | `notification_stack` with `mode = "toast"` (L: timeouts, actions) | queue in Rust with ToastPriority, one toast shown at a time, timeout 0 meaning until dismissed, `dismissed` and `button_clicked` (§7) |
-| Banner | display `banner` | `revealed` through Disclosure, button label, BannerButtonStyle |
-| StatusPage | display `empty_state`, `result_page` | the Adw name and fields |
+| Toast, ToastOverlay | `toast_overlay` composite (L: timeouts, actions) | queue in Rust with ToastPriority, one toast shown at a time, timeout 0 meaning until dismissed, `dismissed` and `button_clicked` (§7) |
+| Banner | `banner` composite (Disclosure + Press) | BannerButtonStyle |
+| StatusPage | display `status_page` | none |
 | Spinner, SpinnerPaintable | display `spinner` | the paintable form (a spinner as an image) |
 | Avatar | display `avatar` with initials | colour from the text, custom image, rendering to an image |
 
@@ -157,38 +157,34 @@ means it sits in a Lua composite.
 
 | Adw | morf today | Gap |
 | --- | --- | --- |
-| ButtonContent | Press slots `icon` and `label` | the name, `can_shrink`, `use_underline` |
-| SplitButton | missing (`menu_button` composite exists) | two presses and one menu with shared focus and keys (§12) |
-| Toggle, ToggleGroup | Selection `toggle_group` with Press `toggle_group_member` (R) | active by name, homogeneous, `can_shrink`, a Toggle's icon, label and tooltip |
+| ButtonContent | display `button_content` | `can_shrink`, `use_underline` |
+| SplitButton | `split_button` composite (L) | its focus and keys in Rust (§12) |
+| Toggle, ToggleGroup | Selection `toggle_group` (R) | active by name, homogeneous, `can_shrink`, a Toggle's icon, label and tooltip |
 
 **Style and motion**
 
 | Adw | morf today | Gap |
 | --- | --- | --- |
-| StyleManager, ColorScheme, AccentColor | portal preferences in `morf-system/src/prefers.rs` (color scheme, contrast, reduced motion, accent colour); `skin.use` | one owner with an app override of the scheme, `dark`, `high_contrast`, accent as a named colour (§3) |
-| Animation, TimedAnimation, SpringAnimation, SpringParams, Easing, AnimationTarget family | `morf.animation` tweens and springs (morf-scene, animato) | Adw parameter names, the full Easing set by Adw name, following reduced motion (§4) |
-| SwipeTracker, Swipeable | Drag `swipe` mode, scroll fling | one tracker with snap points, overshoot, long swipes and mouse drag, shared by navigation, split views, carousel and sheets (§4) |
+| StyleManager, ColorScheme, AccentColor | portal preferences in `morf-system/src/prefers.rs` (color scheme, contrast, reduced motion, accent colour); `skin.use`; the default kit's `light`, `dark` and `high_contrast` | one owner with an app override of the scheme, accent as a named colour (§3) |
+| Animation, TimedAnimation, SpringAnimation, SpringParams, Easing, AnimationTarget family | `morf.animation` tweens and springs (morf-scene, animato); the contract's motion tokens | Adw parameter names on `morf.animation`, following reduced motion (§4) |
+| SwipeTracker, Swipeable | Drag `swipe`, scroll fling | one tracker with snap points, overshoot, long swipes and mouse drag, shared by navigation, split views, carousel and sheets (§4) |
 | LengthUnit, lerp, rgba_to_standalone | morf-value density, Color and HCT | sp units in breakpoints, standalone accent |
 
 ---
 
 ## 2. Names and aliases
 
-**Why.** Several rows lack only the name. These are cheap, and they shrink
-the inventory before any real work starts.
+**Why.** The slimdown branch named the contract after libadwaita, so only a
+few rows still lack just the name.
 
-**Build.** For each one, add a contract entry with `adw`, an alias in
-`widgets.lua` or `composites/`, and a default-skin entry that falls back to
-the existing look:
+**Build.** For each one, add a contract entry with `adw`, and a
+default-skin entry that falls back to the existing look:
 
-- `bin`, `window_title`, `status_page`, `password_entry_row`;
-- `shortcuts_dialog`, `shortcuts_section`, `shortcuts_item`,
-  `shortcut_label`;
-- `button_content`, and `application_window` and `window` over
-  `lib.kit.app`.
+- `shortcuts_section`, `shortcuts_item`, over `shortcuts_dialog`'s groups;
+- `view_switcher_sidebar`.
 
-**Proof.** Those rows turn `done`. Existing specs pass unchanged, and one
-spec builds each widget by its Adw name.
+**Proof.** Those rows turn `done`, and one spec builds each widget by its
+Adw name.
 
 ## 3. Style manager
 
