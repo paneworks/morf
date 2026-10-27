@@ -8,7 +8,7 @@
 # Output of each command goes to OUT/ctl.log, closed by a "done" line.
 CTL=${BENCH_CTL:?}
 REPO=${BENCH_REPO:?}
-C=${EVA:?EVA names an eva checkout (github.com/bresilla/eva)}
+C=${EVA:?EVA names the eva shell directory}
 run() {
   # The morf in here, whichever started it (this, or nested.sh at the
   # start): `morf kill` reaches only the instance in this private runtime

@@ -26,8 +26,8 @@ on as a screen reader would switch it on (the bus launcher keeps its
 switches in memory: no dconf in here; its registry is started by hand: no
 systemd), before the shell starts. The step `a11y LABEL` then writes what a
 screen reader sees -- every application's tree over AT-SPI, through
-libatspi (`a11ydump.py`) -- to `a11y-LABEL.txt` (`$EVA` is a checkout of
-[eva](https://github.com/bresilla/eva), the shell these steps were written for):
+libatspi (`a11ydump.py`) -- to `a11y-LABEL.txt` (`$EVA` is the directory of
+eva, the shell these steps were written for):
 
     A11Y=1 MORF_CONFIG=$EVA/shell/init.lua MORF_ENV="EVA_DRY_RUN=1" \
       tools/sandbox/nested.sh morf a11y tools/sandbox/caelestia-a11y.steps

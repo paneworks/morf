@@ -296,7 +296,7 @@ can supply it. No semantic annotation changes native lock or handoff authority.
 
 ## The shell controller receiver
 
-[eva](https://github.com/bresilla/eva) exposes ordinary same-user IPC verbs `prek-control` and `prek-status`.
+eva exposes ordinary same-user IPC verbs `prek-control` and `prek-status`.
 They reuse its existing drawers, menus, keyboard and workspace preview. They do
 not authenticate a Prek broker, prove rendered geometry, or transfer ownership
 from the native global recognizer. The status response explicitly reports

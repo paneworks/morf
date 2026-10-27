@@ -1,6 +1,6 @@
 # Morf keyring prompter
 
-The keyring dialog in [eva](https://github.com/bresilla/eva) uses GCR's `GcrSystemPrompter` and `GcrPrompt`
+The keyring dialog in eva uses GCR's `GcrSystemPrompter` and `GcrPrompt`
 interfaces. GCR implements the encrypted secret exchange with GNOME Keyring.
 This is independent of polkit and does not modify PAM or stored keyrings.
 

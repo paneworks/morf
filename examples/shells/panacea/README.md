@@ -191,7 +191,7 @@ layout from Hyprland's sockets), `proc.lua`, `media.lua`, `field.lua`,
 
 Not here: the file manager, the media viewer, the password vault, the
 agents panel and the lock screen. The login
-shell [eva](https://github.com/bresilla/eva) carries a lock of its own, which the lock button runs with
+shell eva carries a lock of its own, which the lock button runs with
 `morf lock -c eva` when it is installed.
 
 Needs: `wpctl`, `pactl`, `nmcli` or `iwctl`; optionally `wf-recorder`,

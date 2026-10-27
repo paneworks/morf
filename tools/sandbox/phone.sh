@@ -51,7 +51,7 @@ if command -v hyprctl > /dev/null && [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; 
 fi
 export BENCH_CTL=$CTL BENCH_REPO=$(cd "$HERE/../.." && pwd) EVA=${EVA:-}
 VISIBLE=1 NESTED_SCALE=${NESTED_SCALE:-1} POINTER_SIZE="$BW $BH" TIMEOUT=${TIMEOUT:-36000} BOOT=${BOOT:-4} \
-  MORF_CONFIG=${MORF_CONFIG:-${EVA:?EVA names an eva checkout (github.com/bresilla/eva)}/shell/init.lua} \
+  MORF_CONFIG=${MORF_CONFIG:-${EVA:?EVA names the eva shell directory}/shell/init.lua} \
   MORF_ENV="EVA_STYLE=${STYLE:-tsugumori} EVA_DRY_RUN=1" \
   "$HERE/nested.sh" morf phone "$HERE/phone.steps"
 rm -f "$CTL"

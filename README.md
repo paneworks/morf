@@ -143,10 +143,8 @@ and `FONTCONFIG_FILE`, without installing fonts into the system.
 
 This flake provides the engine and its Lua library: `packages.morf` and
 `packages.morf-library`. The desktop integration (greetd, the lock screen, idle,
-phone gestures, scaling and wallpapers shared with the greeter) ships with the
-shell it was written for, [eva](https://github.com/bresilla/eva). Its flake pins
-the morf release it runs on and provides `nixosModules.default`, with options
-under `programs.eva`.
+phone gestures, scaling and wallpapers shared with the greeter) is not part of
+this flake; it belongs to the system configuration that installs a shell.
 
 ### Cache publishing and retention
 
