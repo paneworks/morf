@@ -24,10 +24,10 @@ use std::time::Duration;
 const SHELL: &str = r#"
     morf.surface.outputless = true
     local heard = {}
-    morf.on_primary(function(primary) heard[#heard + 1] = tostring(primary) end)
+    morf.window.on_primary(function(primary) heard[#heard + 1] = tostring(primary) end)
     local runs = 0
-    morf.effect("follow primary", function() morf.primary() runs = runs + 1 end)
-    morf.ipc.primary = function() return morf.primary() end
+    morf.effect("follow primary", function() morf.window.primary() runs = runs + 1 end)
+    morf.ipc.primary = function() return morf.window.primary() end
     morf.ipc.heard = function() return table.concat(heard, ",") end
     morf.ipc.runs = function() return runs end
     if #morf.screens > 0 then morf.ui.Item {} end

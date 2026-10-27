@@ -99,8 +99,8 @@ fn every_surface_names_the_space_it_blends_in() {
                 assert(not pcall(function() morf.surface.blend = true end))
                 window.layer { root = ui.Item {}, blend = "srgb" }
                 window.popup { root = ui.Item {}, blend = "srgb" }
-                window.floating { root = ui.Item {} }
-                assert(not pcall(window.floating, { root = ui.Item {}, blend = "cmyk" }))
+                window.toplevel { root = ui.Item {} }
+                assert(not pcall(window.toplevel, { root = ui.Item {}, blend = "cmyk" }))
             "#,
         )
         .unwrap();

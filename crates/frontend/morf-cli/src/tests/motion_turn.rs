@@ -34,7 +34,7 @@ const SPRING: &str = r#"
     morf.ipc.x = function() return box.translate_x end
     morf.ipc.fired = function() return fired end
     morf.ipc.clicks = function() return clicks end
-    morf.timer(48, function() fired = fired + 1 box.width = 10 + fired end, false)
+    morf.time.timer(48, function() fired = fired + 1 box.width = 10 + fired end, false)
 "#;
 
 const STILL: &str = r##"
@@ -46,7 +46,7 @@ const STILL: &str = r##"
     local face = ui.Rect { width = 50, height = 50, color = "#000000" }
     ui.Item { anchors = { fill = true }, face }
     morf.ipc.fired = function() return fired end
-    morf.timer(48, function() fired = fired + 1 face.color = "#ff0000" end, false)
+    morf.time.timer(48, function() fired = fired + 1 face.color = "#ff0000" end, false)
 "##;
 
 fn load_source(source: &str) -> Headless {

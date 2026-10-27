@@ -6,43 +6,39 @@ use super::{Fixture, appears, refusals, stays_absent, touch};
 
 /// Each gated API, called the way the probe calls it.
 const CALLS: &[(&str, &str)] = &[
-    ("morf.spawn", "morf.spawn, { command = { 'touch', MARK } }"),
-    ("morf.run", "morf.run, { 'touch', MARK }"),
-    ("morf.kill", "morf.kill, 999999"),
-    ("morf.process", "morf.process, 'touch', { MARK }"),
     (
-        "morf.process_view",
-        "morf.process_view, { command = { 'touch', MARK }, running = true }",
+        "morf.process.spawn",
+        "morf.process.spawn, { command = { 'touch', MARK } }",
+    ),
+    ("morf.process.run", "morf.process.run, { 'touch', MARK }"),
+    ("morf.process.kill", "morf.process.kill, 999999"),
+    ("morf.process.open", "morf.process.open, 'touch', { MARK }"),
+    (
+        "morf.process.view",
+        "morf.process.view, { command = { 'touch', MARK }, running = true }",
     ),
     (
-        "morf.exec_detached",
-        "morf.exec_detached, { 'touch', MARK }",
+        "morf.process.detach",
+        "morf.process.detach, { 'touch', MARK }",
     ),
-    (
-        "core.exec_detached",
-        "require('morf.core').exec_detached, { 'touch', MARK }",
-    ),
-    (
-        "io.spawn",
-        "require('morf.io').spawn, { command = { 'touch', MARK } }",
-    ),
-    ("io.run", "require('morf.io').run, { 'touch', MARK }"),
     (
         "ui.Terminal",
         "require('morf.ui').Terminal, { command = { 'touch', MARK } }",
     ),
     (
         "launch",
-        "morf.desktop_entries({ OUT }).launch, morf.desktop_entries({ OUT }), 'x'",
+        "morf.apps.entries({ OUT }).launch, morf.apps.entries({ OUT }), 'x'",
     ),
-    ("morf.connect", "morf.connect, { path = OUT .. '/socket' }"),
     (
-        "morf.request_socket",
-        "morf.request_socket, OUT .. '/socket', 'hello'",
+        "morf.socket.connect",
+        "morf.socket.connect, { path = OUT .. '/socket' }",
     ),
-    ("morf.socket", "morf.socket, OUT .. '/socket'"),
-    ("morf.socket_server", "morf.socket_server, OUT .. '/server'"),
-    ("io.socket", "require('morf.io').socket, OUT .. '/socket'"),
+    (
+        "morf.socket.request",
+        "morf.socket.request, OUT .. '/socket', 'hello'",
+    ),
+    ("morf.socket.open", "morf.socket.open, OUT .. '/socket'"),
+    ("morf.socket.server", "morf.socket.server, OUT .. '/server'"),
     ("morf.broadcast", "morf.broadcast, 'verb'"),
     (
         "morf.http.request",
@@ -84,7 +80,6 @@ const CALLS: &[(&str, &str)] = &[
     ("morf.greetd.connect", "morf.greetd.connect"),
     ("morf.greetd.converse", "morf.greetd.converse, 'u'"),
     ("morf.fs.write", "morf.fs.write, OUT .. '/written', 'x'"),
-    ("morf.fs.append", "morf.fs.append, OUT .. '/written', 'x'"),
     ("morf.fs.mkdir", "morf.fs.mkdir, OUT .. '/made'"),
     ("morf.fs.remove", "morf.fs.remove, OUT .. '/keep'"),
     (
@@ -103,14 +98,6 @@ const CALLS: &[(&str, &str)] = &[
     (
         "file_view:set_text",
         "HANDLES.view.set_text, HANDLES.view, 'x'",
-    ),
-    (
-        "morf.json.write_file",
-        "morf.json.write_file, HANDLES.view, { a = 1 }",
-    ),
-    (
-        "morf.image.encode_png",
-        "morf.image.encode_png, '\\0\\0\\0\\0', 1, 1, OUT .. '/i.png'",
     ),
     (
         "morf.image.process",
@@ -148,7 +135,7 @@ fn every_gated_api_refuses_while_an_unapproved_module_loads() {
         r#"
         MARK = "{mark}"
         OUT = "{out}"
-        HANDLES = {{ file = morf.file(OUT .. "/handle"), view = morf.file_view {{ path = OUT .. "/view" }} }}
+        HANDLES = {{ file = morf.fs.file(OUT .. "/handle"), view = morf.fs.view {{ path = OUT .. "/view" }} }}
         local results = require("probe")
         local wrong = {{}}
         for name, result in pairs(results) do

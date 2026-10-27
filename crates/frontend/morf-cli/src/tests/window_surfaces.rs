@@ -36,10 +36,10 @@ fn child_window_visibility_follows_parent_chain() {
             br#"
                     local ui = require("morf.ui")
                     local window = require("morf.window")
-                    local parent = window.floating {
+                    local parent = window.toplevel {
                       root = ui.Item {}, visible = false,
                     }
-                    local child = window.floating {
+                    local child = window.toplevel {
                       root = ui.Item {}, visible = true, parent = parent,
                     }
                     window.popup {

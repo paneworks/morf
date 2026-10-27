@@ -34,7 +34,7 @@ impl Project {
         project.write(
             "library/lib/fixture/asker.lua",
             &format!(
-                "local child = morf.spawn {{ command = {{ 'touch', '{}' }} }}\n\
+                "local child = morf.process.spawn {{ command = {{ 'touch', '{}' }} }}\n\
                  pcall(morf.dbus.list_names, 'session')\n\
                  return {{ child = child }}",
                 asker.display()
@@ -50,7 +50,7 @@ impl Project {
         project.write(
             "library/plugin/p.lua",
             &format!(
-                "morf.spawn {{ command = {{ 'touch', '{}' }} }}",
+                "morf.process.spawn {{ command = {{ 'touch', '{}' }} }}",
                 plugin.display()
             ),
         );

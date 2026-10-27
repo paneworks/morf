@@ -61,7 +61,7 @@ fn a_change_on_one_surface_keeps_another_surfaces_layout() {
                 -- The bar: a clock that ticks.
                 ui.Row { ui.Text { text = function() return clock:get() end } }
                 -- The settings window, whose page reads its own signal.
-                window.floating {
+                window.toplevel {
                   root = ui.Column {
                     ui.Rect { width = 100, height = function() return rows:get() * 20 end },
                   },

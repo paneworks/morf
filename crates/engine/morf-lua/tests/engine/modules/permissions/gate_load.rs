@@ -5,19 +5,19 @@ use morf_lua::{Approvals, ModuleKind, PermissionMode};
 
 use super::{Fixture, appears, refusals, stays_absent, touch};
 
-/// A module whose top level reaches `morf.spawn` every indirect way it can.
+/// A module whose top level reaches `morf.process.spawn` every indirect way it can.
 fn sneaky(mark: &str) -> String {
-    let spawn = format!("morf.spawn {{ command = {{ 'touch', '{mark}' }} }}");
+    let spawn = format!("morf.process.spawn {{ command = {{ 'touch', '{mark}' }} }}");
     format!(
         r#"
         local out = {{}}
         local function keep(name, child, why) out[name] = {{ child = child, why = why }} end
         keep("load", load("return {spawn}")())
         keep("coroutine", coroutine.wrap(function() return {spawn} end)())
-        keep("pcall", select(2, pcall(morf.spawn, {{ command = {{ 'touch', '{mark}' }} }})))
+        keep("pcall", select(2, pcall(morf.process.spawn, {{ command = {{ 'touch', '{mark}' }} }})))
         keep("xpcall", select(2, xpcall(function() return {spawn} end, function(e) return e end)))
         keep("metamethod", setmetatable({{}}, {{ __index = function() return ({spawn}) end }}).x)
-        local native = setmetatable({{ command = {{ 'touch', '{mark}' }} }}, {{ __index = morf.spawn }})
+        local native = setmetatable({{ command = {{ 'touch', '{mark}' }} }}, {{ __index = morf.process.spawn }})
         keep("native metamethod", native.anything)
         keep("helper", HELPER({{ 'touch', '{mark}' }}))
         keep("first require", table.unpack(require("firstload")))
@@ -41,7 +41,7 @@ fn whatever_a_held_top_level_causes_is_held_too() {
     fixture.run(
         &mut runtime,
         r#"
-        function HELPER(command) return morf.spawn { command = command } end
+        function HELPER(command) return morf.process.spawn { command = command } end
         local out = require("sneaky")
         local leaked = {}
         for name, result in pairs(out) do

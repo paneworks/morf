@@ -1,5 +1,5 @@
 use morf_lua::*;
-use morf_scene::{Easing, Value as SceneValue};
+use morf_scene::Value as SceneValue;
 use std::time::Duration;
 
 #[test]
@@ -63,38 +63,6 @@ fn a_flicked_view_coasts_on_the_engine_clock_within_its_bounds() {
     let settled = runtime.scene().number(list, "content_y").unwrap();
     assert!(settled > 100.0, "it coasted onwards: {settled}");
     assert!(settled <= 500.0, "and the bound held: {settled}");
-}
-
-#[test]
-fn lua_queues_parent_and_anchor_transition() {
-    let mut runtime = Runtime::default();
-    runtime
-        .execute(
-            "parent.lua",
-            br#"
-                local morf = require("morf")
-                local ui = require("morf.ui")
-                local tile = ui.Rect { width = 20, height = 20 }
-                local left = ui.Item { x = 10, width = 100, height = 100, tile }
-                local right = ui.Item { x = 200, width = 100, height = 100 }
-                ui.Item { left, right }
-                morf.transition_parent(tile, right, {
-                  duration = 300,
-                  easing = "out_cubic",
-                  anchors = { center_in = true },
-                })
-            "#,
-        )
-        .unwrap();
-
-    let transitions = runtime.take_parent_transitions();
-    assert_eq!(transitions.len(), 1);
-    assert_eq!(transitions[0].behavior.duration, Duration::from_millis(300));
-    assert_eq!(transitions[0].behavior.easing, Easing::OutCubic);
-    assert_eq!(
-        transitions[0].anchors.as_ref().unwrap().get("center_in"),
-        Some(&SceneValue::Bool(true))
-    );
 }
 
 #[test]

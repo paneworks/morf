@@ -98,17 +98,8 @@ fn gamma_requests_keep_the_last_word_per_output() {
 fn clipboard_bridges_publications_and_selections() {
     let mut runtime = Runtime::default();
     runtime
-        .execute(
-            "clipboard.lua",
-            br#"
-                local current = morf.signal("clipboard", "")
-                morf.clipboard.subscribe(function(text) current:set(text or "none") end)
-                morf.clipboard.set("copied")
-                morf.ipc["clipboard.get"] = function() return current:get() end
-            "#,
-        )
+        .execute("clipboard.lua", br#"morf.clipboard.set("copied")"#)
         .unwrap();
-
     assert_eq!(
         runtime.take_clipboard_requests(),
         [ClipboardRequest {
@@ -116,16 +107,6 @@ fn clipboard_bridges_publications_and_selections() {
             mime: None,
             primary: false,
         }]
-    );
-    assert!(runtime.dispatch_clipboard(Some("pasted".to_owned())));
-    assert_eq!(
-        runtime.call_ipc("clipboard.get", &[]).unwrap(),
-        [IpcValue::String("pasted".to_owned())]
-    );
-    assert!(runtime.dispatch_clipboard(None));
-    assert_eq!(
-        runtime.call_ipc("clipboard.get", &[]).unwrap(),
-        [IpcValue::String("none".to_owned())]
     );
 }
 

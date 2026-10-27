@@ -219,47 +219,6 @@ fn destroy_plays_the_exit_unless_asked_not_to() {
 }
 
 #[test]
-fn a_retainable_lock_outlasts_the_exit() {
-    let mut runtime = runtime();
-    runtime
-        .execute(
-            "retained.lua",
-            br#"
-                local morf = require("morf")
-                local core = require("morf.core")
-                local ui = require("morf.ui")
-                local active = morf.signal("active", true)
-                _G.gone = 0
-                ui.Loader {
-                    active = function() return active:get() end,
-                    source = function()
-                        local item = ui.Rect {
-                            exit = { opacity = 0, duration = 50 },
-                            on_destroyed = function() _G.gone = _G.gone + 1 end,
-                        }
-                        _G.retained = core.retainable(item, {})
-                        _G.lock = core.retain_lock(_G.retained, true)
-                        return item
-                    end,
-                }
-                morf.ipc.close = function() active:set(false) end
-                morf.ipc.release = function() _G.lock:set_locked(false) end
-                morf.ipc.gone = function() return _G.gone end
-            "#,
-        )
-        .unwrap();
-    runtime.poll_services();
-    runtime.call_ipc("close", &[]).unwrap();
-    runtime.poll_services();
-    tick(&mut runtime, 80);
-    runtime.poll_services();
-    assert_eq!(number(&mut runtime, "gone"), 0.0, "still locked");
-    runtime.call_ipc("release", &[]).unwrap();
-    runtime.poll_services();
-    assert_eq!(number(&mut runtime, "gone"), 1.0, "gone with the lock");
-}
-
-#[test]
 fn enter_may_time_itself_and_exit_is_checked_where_it_is_written() {
     let mut runtime = runtime();
     runtime

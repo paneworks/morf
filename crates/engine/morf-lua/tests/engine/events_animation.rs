@@ -210,38 +210,6 @@ fn lua_spring_chases_a_reactive_target_in_rust() {
 }
 
 #[test]
-fn lua_list_model_virtualizes_five_hundred_items() {
-    let mut runtime = Runtime::default();
-    runtime
-        .execute(
-            "list.lua",
-            br#"
-                local morf = require("morf")
-                local items = {}
-                for index = 1, 500 do items[index] = { name = "app" .. index } end
-                local model = morf.list_model(items)
-                local view = morf.virtual_list(model, 40, 400, 1)
-                local initial = view:sync()
-                assert(#initial == 12)
-                assert(initial[1].kind == "populate")
-                assert(#view:visible() == 12)
-                model:move(3, 8)
-                local changes = view:sync()
-                local moved = false
-                local displaced = false
-                for _, change in ipairs(changes) do
-                  moved = moved or change.kind == "move"
-                  displaced = displaced or change.kind == "displaced"
-                end
-                assert(moved and displaced)
-                view:set_offset(4000)
-                assert(view:visible()[1].index == 100)
-            "#,
-        )
-        .unwrap();
-}
-
-#[test]
 fn lua_list_model_reconciles_structured_values_by_property() {
     let mut runtime = Runtime::default();
     runtime
@@ -254,8 +222,6 @@ fn lua_list_model_reconciles_structured_values_by_property() {
                   { id = "b", label = "second" },
                   { id = "c", label = "third" },
                 }
-                local view = morf.virtual_list(model, 20, 100, 0)
-                view:sync()
                 model:replace({
                   { id = "b", label = "changed" },
                   { id = "d", label = "new" },
@@ -267,13 +233,6 @@ fn lua_list_model_reconciles_structured_values_by_property() {
                 assert(model:get(2).id == "d")
                 assert(model:index_of(model:get(2)) == 2)
                 assert(model:index_of({ id = "missing" }) == nil)
-                local moved, added, removed = false, false, false
-                for _, change in ipairs(view:sync()) do
-                  moved = moved or change.kind == "move"
-                  added = added or change.kind == "add"
-                  removed = removed or change.kind == "remove"
-                end
-                assert(moved and added and removed)
             "#,
         )
         .unwrap();

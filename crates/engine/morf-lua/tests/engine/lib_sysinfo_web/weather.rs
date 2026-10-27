@@ -87,7 +87,7 @@ fn weather_from_open_meteo_with_a_geocoded_place_and_a_cache() {
                 assert(#now.daily == 7 and now.daily[6].condition == "Thunderstorm")
                 assert(now.daily[7].icon == "weather-snow")
                 assert(now.units.temperature == "°C" and now.units.wind == "km/h")
-                morf.timer(1, function()
+                morf.time.timer(1, function()
                   -- A second instance for the same place reads the cache and
                   -- asks nobody.
                   local again = weather.new {{ location = "Wageningen", cache_dir = "{cache}",
@@ -97,7 +97,7 @@ fn weather_from_open_meteo_with_a_geocoded_place_and_a_cache() {
                     local value = again:get()
                     if value.available and not noted then
                       noted = true
-                      morf.timer(1, function() note(value.temperature) note("done") end, false)
+                      morf.time.timer(1, function() note(value.temperature) note("done") end, false)
                     end
                     return ""
                   end }}
@@ -144,7 +144,7 @@ fn weather_falls_back_to_wttr_and_keeps_the_last_answer_offline() {
                 assert(#now.hourly == 2 and now.hourly[2].condition == "Light rain")
                 assert(now.units.temperature == "°F")
                 assert(not now.stale)
-                morf.timer(1, function()
+                morf.time.timer(1, function()
                   -- Everything down: the last answer comes back, stale.
                   here.forecast_url = "http://127.0.0.1:9/"
                   here.wttr_url = "http://127.0.0.1:9"
@@ -152,7 +152,7 @@ fn weather_falls_back_to_wttr_and_keeps_the_last_answer_offline() {
                 end, false)
               elseif stage == 1 and now.stale then
                 stage = 2
-                morf.timer(1, function() note("stale " .. now.temperature) note("done") end, false)
+                morf.time.timer(1, function() note("stale " .. now.temperature) note("done") end, false)
               end
               return ""
             end }}

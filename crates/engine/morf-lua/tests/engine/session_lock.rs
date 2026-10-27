@@ -10,12 +10,12 @@ fn lock_runtime() -> Runtime {
             br#"
                 local ui = require("morf.ui")
                 local heard, confirmed = {}, 0
-                morf.on_session_lock_state(function(state) heard[#heard + 1] = state end)
-                morf.on_session_locked(function() confirmed = confirmed + 1 end)
+                morf.lock.on_state(function(state) heard[#heard + 1] = state end)
+                morf.lock.on_locked(function() confirmed = confirmed + 1 end)
                 morf.ipc.heard = function() return table.concat(heard, ",") end
                 morf.ipc.confirmed = function() return confirmed end
-                morf.ipc.now = function() return morf.session_lock_state() end
-                ui.Text { text = function() return morf.session_lock:get() end }
+                morf.ipc.now = function() return morf.lock.state:get() end
+                ui.Text { text = function() return morf.lock.state:get() end }
             "#,
         )
         .unwrap();

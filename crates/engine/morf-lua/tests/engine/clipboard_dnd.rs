@@ -49,32 +49,22 @@ fn clipboard_supported_follows_capabilities() {
             "clipboard-supported.lua",
             br#"
                 morf.ipc["supported"] = function()
-                    return morf.clipboard.supported(), morf.clipboard.supported("primary"),
-                        morf.drag.supported()
+                    return morf.clipboard.supported(), morf.clipboard.supported("primary")
                 end
             "#,
         )
         .unwrap();
     assert_eq!(
         runtime.call_ipc("supported", &[]).unwrap(),
-        [
-            IpcValue::Boolean(false),
-            IpcValue::Boolean(false),
-            IpcValue::Boolean(false)
-        ]
+        [IpcValue::Boolean(false), IpcValue::Boolean(false)]
     );
     runtime.set_capabilities(&[
         ("data_control".to_owned(), "true".to_owned()),
         ("primary_selection".to_owned(), "false".to_owned()),
-        ("drag_and_drop".to_owned(), "true".to_owned()),
     ]);
     assert_eq!(
         runtime.call_ipc("supported", &[]).unwrap(),
-        [
-            IpcValue::Boolean(true),
-            IpcValue::Boolean(false),
-            IpcValue::Boolean(true)
-        ]
+        [IpcValue::Boolean(true), IpcValue::Boolean(false)]
     );
 }
 

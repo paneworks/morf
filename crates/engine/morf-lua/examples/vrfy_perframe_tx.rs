@@ -24,7 +24,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "perframe_tx.lua",
         br#"
             local morf = require("morf")
-            local core = require("morf.core")
             local ui = require("morf.ui")
 
             -- driver: a purely visual transform property, no layout effect
@@ -39,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             local root = ui.Item { carrier, bubble, column }
             local calls = 0
             local flips = 0
-            core.transform_watcher {
+            morf.transform_watcher {
               a = root,
               b = carrier,
               common_parent = root,

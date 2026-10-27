@@ -2,7 +2,7 @@
 //!
 //! A shell whose surface is only as big as what it shows still wants to close
 //! on a click beside it. `morf.surface.backdrop` declares the blank surface
-//! that hears one, and `morf.on_backdrop_click` is where the click lands.
+//! that hears one, and `morf.window.on_backdrop_click` is where the click lands.
 
 use super::*;
 
@@ -17,7 +17,7 @@ fn a_backdrop_is_declared_at_load_and_woken_later() {
                 local ui = require("morf.ui")
                 morf.surface.backdrop = false
                 local clicks = morf.signal("backdrop.clicks", 0)
-                morf.on_backdrop_click(function() clicks:set(clicks:get() + 1) end)
+                morf.window.on_backdrop_click(function() clicks:set(clicks:get() + 1) end)
                 morf.ipc.open = function() morf.surface.backdrop = true end
                 morf.ipc.declared = function() return morf.surface.backdrop end
                 ui.Text { text = function() return tostring(clicks:get()) end }

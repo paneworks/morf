@@ -184,40 +184,6 @@ fn pointer_handlers_receive_both_coordinate_spaces() {
 }
 
 #[test]
-fn a_runaway_variant_factory_is_cut_off_once_not_once_per_entry() {
-    // The fuel budget is what stands between a configuration and the shell
-    // locking up. `morf.variants` runs its factory once per model entry, and
-    // when each run took a fresh budget a 256-entry model could spend 256 times
-    // what any other Lua entry point is allowed before anything stopped it.
-    let mut runtime = Runtime::new(Limits {
-        effect_fuel: 20_000,
-        slice_fuel: 64,
-        ..Limits::default()
-    });
-    let error = runtime
-        .execute(
-            "variant-fuel.lua",
-            br#"
-                local morf = require("morf")
-                local ui = require("morf.ui")
-                local model = {}
-                for index = 1, 200 do model[index] = index end
-                morf.variants(model, function(entry)
-                    local total = 0
-                    for step = 1, 100000 do total = total + step end
-                    return ui.Rect { width = total }
-                end)
-            "#,
-        )
-        .unwrap_err();
-    let message = error.to_string();
-    assert!(
-        message.contains("variant factory fuel exhausted"),
-        "the whole call is cut off, not each entry: {message}"
-    );
-}
-
-#[test]
 fn an_easing_curve_interpolates_between_an_integer_and_a_float() {
     // Lua writes `0` and `1.0` as different kinds of number, and matching the
     // two kinds pairwise rejected the mix — so the most ordinary way to say
@@ -227,8 +193,7 @@ fn an_easing_curve_interpolates_between_an_integer_and_a_float() {
         .execute(
             "easing-mixed.lua",
             br#"
-                local core = require("morf.core")
-                local curve = core.easing_curve("in_out_cubic")
+                local curve = morf.easing.curve("in_out_cubic")
                 assert(curve:interpolate(0.5, 0, 1.0) == curve:interpolate(0.5, 0.0, 1.0))
                 assert(curve:interpolate(1.0, 0, 10) == 10.0)
                 assert(curve:interpolate(1.0, 2.5, 4) == 4.0)
@@ -238,11 +203,10 @@ fn an_easing_curve_interpolates_between_an_integer_and_a_float() {
 }
 
 #[test]
-fn a_shared_behavior_table_can_be_both_a_spring_and_a_smoothing() {
+fn a_spring_leaves_the_table_it_was_given_alone() {
     // `ui.spring` used to write `kind` into the table it was handed and return
-    // the same reference, so reusing one settings table for both wrote the
-    // second kind over the first — in both places, including the node already
-    // built, and with nothing to say it had happened.
+    // the same reference, so a settings table reused elsewhere carried the
+    // spring's kind there too.
     let mut runtime = Runtime::default();
     runtime
         .execute(
@@ -251,11 +215,9 @@ fn a_shared_behavior_table_can_be_both_a_spring_and_a_smoothing() {
                 local ui = require("morf.ui")
                 local settle = { duration = 200 }
                 local springy = ui.spring(settle)
-                local smooth = ui.smoothed(settle)
-                assert(springy.kind == "spring", "the first keeps its kind")
-                assert(smooth.kind == "smoothed")
-                assert(settle.kind == nil, "and the caller's table is untouched")
-                assert(springy.duration == 200 and smooth.duration == 200)
+                assert(springy.kind == "spring")
+                assert(settle.kind == nil, "the caller's table is untouched")
+                assert(springy.duration == 200)
             "#,
         )
         .unwrap();

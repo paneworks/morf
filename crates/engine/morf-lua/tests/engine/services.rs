@@ -103,7 +103,7 @@ fn a_configuration_can_ask_the_shell_to_stop() {
                 local morf = require("morf")
                 local ui = require("morf.ui")
                 local done = morf.signal("quit.done", false)
-                morf.timer(1, function()
+                morf.time.timer(1, function()
                     done:set(true)
                     morf.quit()
                 end, false)
@@ -193,7 +193,7 @@ fn a_configuration_reads_workspaces_and_asks_to_switch() {
                 local morf = require("morf")
                 local ui = require("morf.ui")
                 local shown = morf.signal("ws.shown", "none")
-                morf.timer(1, function()
+                morf.time.timer(1, function()
                     local mine = {}
                     for _, w in ipairs(morf.workspaces) do
                         if w.output == "DP-1" then
@@ -281,16 +281,16 @@ fn a_configuration_acts_on_another_window() {
                 local morf = require("morf")
                 local ui = require("morf.ui")
                 local shown = morf.signal("tl.shown", "none")
-                morf.timer(1, function()
+                morf.time.timer(1, function()
                     local lines = {}
                     for _, w in ipairs(morf.windows) do
                         lines[#lines + 1] = w.app_id ..
                             (w.activated and "*" or "") ..
                             (w.controllable and "" or "?")
                         if w.app_id == "editor" then
-                            morf.toplevel.activate(w.identifier)
-                            morf.toplevel.set_maximized(w.identifier)
-                            morf.toplevel.set_minimized(w.identifier, false)
+                            morf.toplevels.activate(w.identifier)
+                            morf.toplevels.set_maximized(w.identifier)
+                            morf.toplevels.set_minimized(w.identifier, false)
                         end
                     end
                     shown:set(table.concat(lines, ","))
@@ -369,7 +369,7 @@ fn a_configuration_asks_for_the_compositors_shortcuts_and_a_minimize_target() {
                 local answer = morf.signal("shortcuts.answer", "asked")
                 morf.shortcuts.inhibit(true)
                 morf.shortcuts.subscribe(function(active) answer:set(active and "held" or "refused") end)
-                morf.toplevel.set_minimize_target("one", 10, 20, 30, 40)
+                morf.toplevels.set_minimize_target("one", 10, 20, 30, 40)
                 ui.Text { text = function() return answer:get() end }
             "#,
         )

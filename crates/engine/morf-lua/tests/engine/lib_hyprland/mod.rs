@@ -1,6 +1,6 @@
 //! `library/lib/compositor/hyprland.lua` against a fake Hyprland.
 //!
-//! The library is pure Lua over `morf.socket`, so what needs testing is the
+//! The library is pure Lua over `morf.socket.open`, so what needs testing is the
 //! conversation: that it asks the request socket the right questions, reads
 //! the event socket's lines into typed events and fresh state, survives lines
 //! a real compositor would never send, and comes back when the stream drops.

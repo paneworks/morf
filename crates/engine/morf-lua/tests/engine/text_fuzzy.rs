@@ -59,30 +59,3 @@ fn fuzzy_matches_tables_by_weighted_keys() {
         assert(not pcall(morf.text.fuzzy, "x", {}, { limit = "many" }))
     "##);
 }
-
-#[test]
-fn fuzzy_score_and_highlight() {
-    run(r##"
-        local morf = require("morf")
-        local score, positions = morf.text.fuzzy_score("ffx", "Firefox")
-        assert(score > 0)
-        assert(#positions == 3 and positions[1] == 1 and positions[2] == 5 and positions[3] == 7)
-        assert(morf.text.fuzzy_score("xyz", "Firefox") == nil)
-
-        -- positions land on the first byte of each matched character
-        local text = "Ünïcödé"
-        local _, at = morf.text.fuzzy_score("üc", text)
-        assert(at[1] == 1 and text:sub(at[2], at[2]) == "c", table.concat(at, ","))
-
-        local spans = morf.text.highlight("Firefox", positions, { bold = true, color = "#f00" })
-        assert(#spans == 5, #spans)
-        assert(spans[1].text == "F" and spans[1].bold and spans[1].color == "#f00")
-        assert(spans[2] == "ire")
-        assert(spans[3].text == "f")
-        assert(spans[4] == "o")
-        assert(spans[5].text == "x")
-        local wide = morf.text.highlight(text, at)
-        assert(wide[1].text == "Ü" and wide[1].bold)
-        assert(wide[2] == "nï" and wide[3].text == "c" and wide[4] == "ödé")
-    "##);
-}

@@ -304,7 +304,7 @@ fn without_a_server_everything_is_empty_and_nothing_errors() {
             local handle = audio.on_changed(function() end)
             handle:stop()
             ui.Text { text = table.concat({
-                tostring(audio.available()), audio.backend(), tostring(audio.default_sink()),
+                tostring(audio.available()), tostring(audio.default_sink()),
                 tostring(audio.default_source()), audio.sinks:len(), audio.streams:len(),
                 tostring(audio.set_volume(1, 0.5)), tostring(audio.set_mute(1, true)),
                 tostring(audio.set_default(1)), tostring(audio.move_stream(1, 2)),
@@ -316,7 +316,7 @@ fn without_a_server_everything_is_empty_and_nothing_errors() {
     runtime.poll_services();
     assert_eq!(
         root_text(&runtime, 0),
-        "false silent nil nil 0 0 false false false false nil nil"
+        "false nil nil 0 0 false false false false nil nil"
     );
 }
 

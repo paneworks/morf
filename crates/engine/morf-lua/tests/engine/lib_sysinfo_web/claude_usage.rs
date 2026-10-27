@@ -74,17 +74,17 @@ fn usage_script(root: &std::path::Path, extra: &str) -> String {
             assert(u.block_start == claude_usage.hour_of("2026-01-20T10:00:00Z") * 3600, u.block_start)
             assert(u.block_end == u.block_start + 5 * 3600)
             local first = report(u)
-            morf.timer(1, function()
+            morf.time.timer(1, function()
               note(first)
               -- A new turn is appended; the next pass reads only it.
-              assert(morf.fs.append(root .. "/projects/-home-a/one.jsonl",
-                {line}))
+              assert(morf.fs.write(root .. "/projects/-home-a/one.jsonl",
+                {line}, {{ append = true }}))
               usage:refresh()
             end, false)
           elseif stage == 1 and u.block_tokens ~= 1160 then
             stage = 2
             local second = report(u)
-            morf.timer(1, function()
+            morf.time.timer(1, function()
               note(second)
               -- A reader that starts from the kept state counts nothing twice.
               local again = make()
@@ -93,7 +93,7 @@ fn usage_script(root: &std::path::Path, extra: &str) -> String {
                 local v = again:get()
                 if v.available and not v.scanning and not done_again then
                   done_again = true
-                  morf.timer(1, function() note(report(v)) note("done") end, false)
+                  morf.time.timer(1, function() note(report(v)) note("done") end, false)
                 end
                 return ""
               end }}
@@ -134,7 +134,7 @@ fn claude_usage_reads_large_files_in_chunks() {
     let extra = r#", max_read = 64, chunk = 700,
         read_range = function(path, offset, length, on_done)
           local text = morf.fs.read(path)
-          morf.timer(1, function() on_done(text:sub(offset + 1, offset + length)) end, false)
+          morf.time.timer(1, function() on_done(text:sub(offset + 1, offset + length)) end, false)
         end"#;
     let text = run(&usage_script(&root, extra), 20);
     assert!(

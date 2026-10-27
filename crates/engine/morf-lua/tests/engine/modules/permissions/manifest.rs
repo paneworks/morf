@@ -68,7 +68,7 @@ fn a_manifest_is_data_with_no_api_and_its_module_still_loads() {
         (
             "spawner",
             format!(
-                r#"morf.spawn {{ command = {{ "touch", "{}" }} }} return {{}}"#,
+                r#"morf.process.spawn {{ command = {{ "touch", "{}" }} }} return {{}}"#,
                 marker.display()
             ),
         ),

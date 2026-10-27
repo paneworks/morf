@@ -101,7 +101,7 @@ fn a_runtime_owning_the_desktop_drops_disconnected_outputs_and_moves_controls() 
     runtime.execute("desktop.lua",br#"
         local selected=morf.signal("lock.output","DP-2")
         morf.effect("lock.outputs",function()
-            morf.screens_revision()
+            morf.window.screens_revision()
             for _,output in ipairs(morf.screens) do if output.name==selected:get() then return end end
             selected:set((morf.screens[1] or {}).name or "")
         end)
@@ -165,7 +165,7 @@ fn an_effect_on_the_screens_revision_runs_when_outputs_change() {
             br#"
                 runs, seen = 0, {}
                 morf.effect("screens", function()
-                    morf.screens_revision()
+                    morf.window.screens_revision()
                     runs = runs + 1
                     seen[runs] = #morf.screens
                 end)
@@ -202,7 +202,7 @@ fn an_effect_on_the_screens_revision_runs_when_outputs_change() {
     runtime
         .execute(
             "seen.lua",
-            br#"assert(seen[2] == 2 and morf.screens_revision() == 2)"#,
+            br#"assert(seen[2] == 2 and morf.window.screens_revision() == 2)"#,
         )
         .unwrap();
 }
@@ -218,13 +218,13 @@ fn primary_is_a_tracked_read_and_its_callbacks_hear_each_change_once() {
         .execute(
             "primary.lua",
             br#"
-                assert(morf.primary() == true)
+                assert(morf.window.primary() == true)
                 heard = {}
                 runs = 0
-                morf.on_primary(function(primary) heard[#heard + 1] = tostring(primary) end)
-                morf.effect("follow primary", function() morf.primary() runs = runs + 1 end)
+                morf.window.on_primary(function(primary) heard[#heard + 1] = tostring(primary) end)
+                morf.effect("follow primary", function() morf.window.primary() runs = runs + 1 end)
                 morf.ipc.state = function()
-                    return tostring(morf.primary()) .. " " .. runs .. " " .. table.concat(heard, ",")
+                    return tostring(morf.window.primary()) .. " " .. runs .. " " .. table.concat(heard, ",")
                 end
             "#,
         )
