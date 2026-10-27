@@ -173,8 +173,9 @@
           };
           cargoLock = {
             lockFile = ./Cargo.lock;
-            # luna comes from git; Cargo.lock pins its revision.
-            allowBuiltinFetchGit = true;
+            # luna comes from git; Cargo.lock pins its revision, fetched by
+            # that revision and this hash rather than through a branch.
+            outputHashes."luna-0.5.1" = "sha256-EhvZkQ5QKMh8o/tR6y46LARN2SOsv2FF3hU49oX7Mbg=";
           };
           cargoBuildFlags = [ "--package" "morf-cli" ];
           nativeBuildInputs = with pkgs; [ pkg-config makeWrapper ];
