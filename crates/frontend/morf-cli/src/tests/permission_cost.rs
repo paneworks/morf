@@ -1,4 +1,4 @@
-//! What the permission bookkeeping costs one shell load (eva), measured:
+//! What the permission bookkeeping costs one shell load (impasto), measured:
 //! `cargo test --release -p morf-cli -- --ignored --nocapture permission_cost`.
 //!
 //! Before: every module outside the configuration's folder was hashed over
@@ -12,7 +12,7 @@ use morf_host::headless::{Headless, LoadOptions};
 use morf_lua::{Approvals, ModuleDeclaration, PermissionMode, module_fingerprint};
 
 fn shell() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../examples/shells/eva/shell/init.lua")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../examples/shells/impasto/shell/init.lua")
 }
 
 fn copy_tree(from: &Path, to: &Path) {
@@ -112,7 +112,7 @@ fn permission_cost() {
     });
     let _ = std::fs::remove_dir_all(&copy);
     println!(
-        "eva: {} modules, {} outside its folder, {imported} imported",
+        "impasto: {} modules, {} outside its folder, {imported} imported",
         records.len(),
         outside.len()
     );
