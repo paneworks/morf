@@ -117,13 +117,13 @@ end
 
 -- Library modules the guide names without requiring them.
 local KIT = {
-  app = "lib.kit.app", canvas = "lib.kit.canvas", collection = "lib.kit.collection",
-  composites = "lib.kit.composites", control = "lib.kit.control",
-  disclosure = "lib.kit.disclosure", drag = "lib.kit.drag", form = "lib.kit.form",
-  navigation = "lib.kit.navigation", overflow = "lib.kit.overflow", popup = "lib.kit.popup",
-  roving = "lib.kit.roving", scroll = "lib.kit.scroll", selection = "lib.kit.selection",
-  shell = "lib.kit.shell", skin = "lib.kit.skin", text_field = "lib.kit.text_field",
-  widgets = "lib.kit.widgets",
+  app = "lib.kit.app", canvas = "lib.kit.archetypes.canvas", collection = "lib.kit.archetypes.collection",
+  composites = "lib.kit.composites", control = "lib.kit.control", contract = "lib.kit.contract",
+  disclosure = "lib.kit.archetypes.disclosure", dock = "lib.kit.archetypes.dock", drag = "lib.kit.archetypes.drag",
+  navigation = "lib.kit.archetypes.navigation", plane = "lib.kit.archetypes.plane", popup = "lib.kit.archetypes.popup",
+  press = "lib.kit.archetypes.press", range = "lib.kit.archetypes.range", scroll = "lib.kit.archetypes.scroll",
+  selection = "lib.kit.archetypes.selection", shell = "lib.kit.archetypes.shell", skin = "lib.kit.skin",
+  text_field = "lib.kit.archetypes.text_field", tokens = "lib.kit.tokens", widgets = "lib.kit.widgets",
 }
 
 local function namespace(prefix)
@@ -182,11 +182,15 @@ local FIXTURES = {
   avatar = function() return "docs-check-missing.png" end,
   start_notification_server = function() return function() return { close = function() end } end end,
   read_load = function() return function() return 0 end end,
+  view = function()
+    local _, view = require("lib.kit.widgets").tab_view { width = 200, height = 100, tabs = { { title = "One" } } }
+    return view
+  end,
 }
 for name in ([[about apply close copy cut discard dismiss go go_back go_to_line insert
     italic launch load_more new open_file open_mail pick prev run save save_all
     set_bold set_dark set_scale set_size set_wrap share show sign_in toggle toggle_bold
-    zoom log rebuild_for]]):gmatch("%S+") do
+    zoom log rebuild_for set_level move_by retry save_as new_tab undo activate]]):gmatch("%S+") do
   FIXTURES[name] = function() return function() end end
 end
 for name, initial in pairs({
@@ -194,7 +198,7 @@ for name, initial in pairs({
   dirty = false, confirm = false, arranging = false, wide = false, tab = 1,
   wrap = false, width = 300, room = 400, day = "2026-10-16", tint = "#3366cc",
   due = "", font = "Inter", alarm = "07:30", page_title = "General", branch = "main",
-  done = 0.5, on = false, dark = false,
+  done = 0.5, on = false, dark = false, level = 0.5, muted = false, offline = true,
 }) do
   FIXTURES[name] = function() return morf.signal("docs." .. name, initial) end
 end

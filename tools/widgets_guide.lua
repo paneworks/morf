@@ -1,6 +1,6 @@
 -- Writes docs/UI.md's widgets chapter reference sections from the contract
--- (library/lib/kit/contract.lua) and the head comments of the kit's glue
--- and composites, so the guide says what the code does:
+-- (library/lib/kit/contract.lua) and the head comments of the archetype
+-- modules and composites, so the guide says what the code does:
 --
 --     lua tools/widgets_guide.lua > /tmp/widgets.md
 --
@@ -23,7 +23,12 @@ local function head(path)
   for _, line in ipairs(out) do
     local is_code = line:match("^    ") ~= nil
     if is_code and not code then md[#md + 1] = "```lua" code = true end
-    if not is_code and code and line ~= "" then md[#md + 1] = "```" code = false end
+    if not is_code and code and line ~= "" then
+      while md[#md] == "" do md[#md] = nil end
+      md[#md + 1] = "```"
+      md[#md + 1] = ""
+      code = false
+    end
     md[#md + 1] = is_code and line:sub(5) or line
   end
   if code then md[#md + 1] = "```" end
@@ -32,78 +37,91 @@ end
 
 local function list(t) return t and table.concat(t, ", ") or "" end
 
-local GLUE = { Control = "control", Press = "widgets", Range = "widgets", Plane = "widgets", Selection = "selection",
-  Popup = "popup", TextField = "text_field", Scroll = "scroll", Collection = "collection", Disclosure = "disclosure",
-  Drag = "drag", Navigation = "navigation", Shell = "shell", Canvas = "canvas", Dock = "dock",
-  Transform = "transform", Sheet = "sheet", Roving = "roving", Form = "form", Overflow = "overflow" }
+local function names(entries)
+  local out = {}
+  for _, e in ipairs(entries) do
+    out[#out + 1] = "`" .. e.name .. "`" .. (e.variants and (" (" .. list(e.variants) .. ")") or "")
+  end
+  return table.concat(out, ", ")
+end
+
+local FILE = { TextField = "text_field" }
 local ORDER = { "Press", "Range", "Plane", "Selection", "Popup", "TextField", "Scroll", "Collection", "Disclosure",
-  "Drag", "Navigation", "Shell", "Canvas", "Dock", "Transform", "Sheet", "Roving", "Form", "Overflow" }
+  "Drag", "Navigation", "Shell" }
+local ROWS = { action_row = true, switch_row = true, combo_row = true, entry_row = true, password_entry_row = true,
+  spin_row = true, expander_row = true, button_row = true, preferences_group = true, preferences_page = true }
 
 local out = {}
 local function p(s) out[#out + 1] = s or "" end
 
-p("### The archetypes")
-p()
-p("Each archetype below: its accessible roles, its state (fields of `t`), the signals")
-p("it raises, the keys it answers, the slots its skin fills and the widgets that")
-p("are it -- then how its glue is used.")
-for _, name in ipairs(ORDER) do
-  local a = contract.archetypes[name]
+local function archetype(name, a)
   p()
-  p("#### " .. name)
+  p("#### " .. name .. (a.adw and (" (" .. a.adw .. ")") or ""))
   p()
   p("| | |")
   p("|---|---|")
   p("| roles | " .. list(a.role) .. " |")
   p("| state | " .. list(a.state) .. " |")
-  if a.modes then p("| modes | " .. list(a.modes) .. " |") end
   if a.tools then p("| tools | " .. list(a.tools) .. " |") end
   p("| signals | " .. list(a.signals) .. " |")
   p("| keys | " .. list(a.keys) .. " |")
   p("| slots | background, content, " .. list(a.slots) .. " |")
-  p("| widgets | " .. list(a.widgets) .. " |")
-  p("| arrived | stage " .. a.stage .. " |")
+  if #a.widgets > 0 then p("| widgets | " .. names(a.widgets) .. " |") end
   p()
-  local glue = GLUE[name]
-  if glue ~= "widgets" or name == "Press" then
-    p(head("library/lib/kit/" .. glue .. ".lua"))
-  else
-    p("Made through `lib.kit.widgets` like a press: `widgets." .. (a.widgets[1] or "") .. " { ... }`.")
-  end
+  p(head("library/lib/kit/archetypes/" .. (FILE[name] or name:lower()) .. ".lua"))
 end
+
+p("### The archetypes")
+p()
+p("Each archetype below: its accessible roles, its state (fields of `t`), the signals")
+p("it raises, the keys it answers, the slots its skin fills and the widgets made from")
+p("it, with their variants -- then how its module is used. Every widget is made")
+p("through `lib.kit.widgets`: `widgets.<name> { ... }`.")
+for _, name in ipairs(ORDER) do archetype(name, contract.archetypes[name]) end
 
 p()
 p("### Display widgets")
 p()
-p("No input, a kit function each (`kit.<function>(spec)`), drawn by every theme;")
-p("those a theme does not draw itself come from the shared composition in")
-p("`library/lib/kit/display/` through its style (see the head of")
-p("`library/lib/kit/display/init.lua`).")
+p("No input, each drawn by the current theme's skin of its name")
+p("(`widgets.<name>(spec)`, through `lib.kit.skin.draw`):")
 p()
-p("| group | widget | function |")
+p("| widget | class | variants |")
 p("|---|---|---|")
-local groups = {}
-for g in pairs(contract.display) do groups[#groups + 1] = g end
-table.sort(groups)
-for _, g in ipairs(groups) do
-  for _, e in ipairs(contract.display[g]) do p(("| %s | %s | `kit.%s` |"):format(g, e.name:gsub("_", " "), e.fn)) end
-end
+for _, e in ipairs(contract.display) do p(("| `%s` | %s | %s |"):format(e.name, e.adw, list(e.variants))) end
 
 p()
 p("### Composites")
 p()
 p("Shared by every theme, built only from archetypes, in")
-p("`library/lib/kit/composites/` (`require(\"lib.kit.composites\").<name>(spec)`).")
-local names = {}
-for name in pairs(contract.composites) do names[#names + 1] = name end
-table.sort(names)
-for _, name in ipairs(names) do
-  local c = contract.composites[name]
+p("`library/lib/kit/composites/` (`widgets.<name>(spec)`, or")
+p("`require(\"lib.kit.composites\").<name>(spec)`).")
+for _, c in ipairs(contract.composites) do
   p()
-  p("#### " .. name:gsub("_", " "))
+  p("#### " .. c.name .. " (" .. c.adw .. ")")
   p()
   p("Built from " .. list(c.parts) .. (c.variants and ("; variants: " .. list(c.variants)) or "") .. ".")
   p()
-  p(head("library/lib/kit/composites/" .. name .. ".lua"))
+  p(head("library/lib/kit/composites/" .. (ROWS[c.name] and "rows/" or "") .. c.name .. ".lua"))
 end
+
+p()
+p("### Shell widgets")
+p()
+p("What a desktop shell needs that libadwaita lacks, each for the surface that")
+p("needs it.")
+for _, s in ipairs(contract.shell) do
+  p()
+  p("#### " .. s.name)
+  p()
+  p("For " .. s.surface .. "; built from " .. list(s.parts) .. ".")
+  p()
+  p(head("library/lib/kit/composites/" .. s.name .. ".lua"))
+end
+
+p()
+p("### The editor group")
+p()
+p("The Canvas and Dock archetypes, for editor-like applications; a theme may")
+p("skip the group (`morf check --kit` warns of what it lacks).")
+for _, name in ipairs { "Canvas", "Dock" } do archetype(name, contract.editor[name]) end
 print(table.concat(out, "\n"))

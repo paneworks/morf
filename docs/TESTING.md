@@ -90,9 +90,10 @@ followed by a settle), advances `--after` milliseconds of virtual time
 
 `--kit` checks the configuration's `kit` module -- what `require("kit")`
 answers once it has loaded -- against the widget contract
-(`library/lib/kit/contract.lua`): every function, display widget and
-archetype skin due at the contract's stage.
-It prints `kit stage N: D due, M missing` and each problem as an error.
+(`library/lib/kit/contract.lua`): every token, archetype skin, display
+widget skin and composite. It prints `contract: D due, M missing; editor:
+D due, M missing`, each contract problem as an error and each gap in the
+editor group (Canvas, Dock) as a warning.
 
 `--frames` prints the host's frame accounting over the `--after` run (as
 `test.frames()` returns it): how many frames, how many late and over 2.4x
