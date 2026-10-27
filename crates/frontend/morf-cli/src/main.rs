@@ -28,9 +28,9 @@ fn main() -> ExitCode {
     morf_io::restore_ignored_signals();
     // The direction a layout with none of its own takes: the locale's, or
     // MORF_DIRECTION (ltr, rtl) for a run.
-    morf_scene::set_default_rtl(match std::env::var("MORF_DIRECTION").as_deref() {
-        Ok("rtl") => true,
-        Ok("ltr") => false,
+    morf_scene::set_default_rtl(match morf_value::env::var("MORF_DIRECTION").as_deref() {
+        Some("rtl") => true,
+        Some("ltr") => false,
         _ => morf_scene::locale_rtl_from_env(),
     });
     // The widget archetypes, for every runtime this process makes.

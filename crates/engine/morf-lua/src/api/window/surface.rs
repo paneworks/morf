@@ -220,7 +220,7 @@ pub(crate) fn install_shell_api<'gc>(
     morf.set_field(
         ctx,
         "app_id",
-        std::env::var("MORF_APP_ID").unwrap_or_else(|_| "morf".to_owned()),
+        morf_value::env::var("MORF_APP_ID").unwrap_or_else(|| "morf".to_owned()),
     );
     let shell_id_state = Rc::clone(&state);
     let shell_id = Callback::from_fn(&ctx, move |ctx, _, mut stack| {

@@ -10,7 +10,7 @@
 //! sat still for a minute does not count the minute. The refresh interval
 //! is the median of the last frames' callback intervals, which the one
 //! long interval after a stall does not move. Always on; read and reset by
-//! the motion report (`MORF_WAKE_LOG`), the `@frames` test hook and
+//! the motion report (`MORF_LOG=wake`), the `@frames` test hook and
 //! `morf test`.
 
 use std::fmt;
@@ -232,7 +232,7 @@ impl Host {
     pub(super) fn answer_frames_hook(&mut self, command: WorkerCommand) -> Option<WorkerCommand> {
         match command {
             WorkerCommand::Call { target, reply, .. }
-                if target == FRAMES_HOOK && std::env::var_os("MORF_TEST_HOOKS").is_some() =>
+                if target == FRAMES_HOOK && morf_value::env::var("MORF_TEST_HOOKS").is_some() =>
             {
                 let report = self.frame_accounting.take();
                 let line = format!("{}: {report}", self.name);

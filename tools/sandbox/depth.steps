@@ -1,5 +1,5 @@
 # depth.steps: the shell with deep output asked for (MORF_DEPTH=10 in
-# MORF_ENV; MORF_GPU_LOG=1 too, for what the compositor advertised).
+# MORF_ENV; MORF_LOG=gpu too, for what the compositor advertised).
 # OUT/shell.log says what each surface presents as; the shots must look as
 # they do at eight bits.
 wait 6

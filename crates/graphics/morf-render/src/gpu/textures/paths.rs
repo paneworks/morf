@@ -120,12 +120,12 @@ pub(crate) fn push_path_textures(
     }
 }
 
-/// `MORF_FRAME_LOG=2`: a path that took 20 ms or more to rasterize, with what
+/// `MORF_PROFILE=render_split`: a path that took 20 ms or more to rasterize, with what
 /// identifies it -- the start of its data -- and whatever makes it change
 /// every frame (a morph, a trim).
 fn slow_path(paint: &morf_paint::path::PathPaint, pixels: (u32, u32), started: std::time::Instant) {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if !*ON.get_or_init(|| std::env::var("MORF_FRAME_LOG").is_ok_and(|value| value == "2")) {
+    if !*ON.get_or_init(|| morf_value::env::flags("MORF_PROFILE").has("render_split")) {
         return;
     }
     let took = started.elapsed().as_secs_f64() * 1000.0;

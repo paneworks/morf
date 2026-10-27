@@ -126,7 +126,7 @@ fn wait_for_layer(client: &mut LayerClient) -> Result<(), Box<dyn std::error::Er
 }
 
 fn popup_anchor(client: &mut LayerClient) -> Result<(f64, f64), Box<dyn std::error::Error>> {
-    if std::env::var_os("MORF_POPUP_AUTO").is_some() {
+    if morf_value::env::debug("popup_auto") {
         return Ok((16.0, client.primary_logical_size().1 as f64));
     }
     loop {

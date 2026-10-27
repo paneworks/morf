@@ -50,7 +50,7 @@ fn morf(exe: &Path, root: &Path) -> Command {
         .env("XDG_RUNTIME_DIR", &runtime)
         .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")
         .env("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/nonexistent")
-        .env("MORF_DISABLE_CRASH_HANDLER", "1")
+        .env("MORF_DEBUG", "no_crash_handler")
         .env_remove("WAYLAND_DISPLAY")
         .env_remove("DISPLAY");
     command

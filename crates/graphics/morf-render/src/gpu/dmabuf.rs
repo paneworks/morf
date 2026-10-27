@@ -58,13 +58,13 @@ pub(crate) fn modifier_names(modifiers: &[u64]) -> String {
     format!("[{}]", names.join(", "))
 }
 
-/// `MORF_PRESENT_MODIFIER=linear|x|y`: present only through buffers of that
+/// `MORF_PRESENT=modifier=linear|x|y`: present only through buffers of that
 /// layout, for telling a layout the compositor misreads from anything else.
 pub(crate) fn modifier_wanted(modifier: u64) -> bool {
-    match std::env::var("MORF_PRESENT_MODIFIER").as_deref() {
-        Ok("linear") => modifier == MODIFIER_LINEAR,
-        Ok("x") => modifier == INTEL_X_TILED,
-        Ok("y") => modifier == INTEL_Y_TILED,
+    match morf_value::env::flags("MORF_PRESENT").value("modifier") {
+        Some("linear") => modifier == MODIFIER_LINEAR,
+        Some("x") => modifier == INTEL_X_TILED,
+        Some("y") => modifier == INTEL_Y_TILED,
         _ => true,
     }
 }

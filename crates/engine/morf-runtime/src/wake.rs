@@ -36,7 +36,7 @@ impl ClockPrecision {
     }
 }
 
-/// Why the loop wakes on its own, for `MORF_WAKE_LOG`.
+/// Why the loop wakes on its own, for `MORF_LOG=wake`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DeadlineCause {
     /// A `morf.time.timer` or a running `ui.Timer`.

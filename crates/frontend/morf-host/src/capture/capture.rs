@@ -94,7 +94,7 @@ pub fn dispatch_screencopy(
             match published {
                 Ok(()) => {
                     source = format!("gpu:{name}");
-                    if std::env::var_os("MORF_CAPTURE_READBACK").is_some()
+                    if morf_value::env::debug("capture_readback")
                         && let Some(pixels) = backend.texture_pixels(&name)
                     {
                         // The one copy this path exists to avoid, made on

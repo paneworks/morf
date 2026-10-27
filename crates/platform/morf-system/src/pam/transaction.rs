@@ -168,9 +168,8 @@ pub(super) unsafe fn run(
 
 fn load_pam() -> Result<Library, PamError> {
     let architecture = std::env::consts::ARCH;
-    let mut candidates = std::env::var_os("MORF_PAM_LIBRARY")
+    let mut candidates = morf_value::env::path("MORF_PAM_LIBRARY")
         .into_iter()
-        .map(std::path::PathBuf::from)
         .collect::<Vec<_>>();
     candidates.extend([
         // The loader's own search path first, then the two layouts distributions

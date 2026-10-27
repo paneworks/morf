@@ -74,7 +74,7 @@ fn a_panic_leaves_a_report_behind() {
     // read by the hook rather than by anything running concurrently.
     unsafe {
         std::env::set_var("XDG_STATE_HOME", &directory);
-        std::env::remove_var("MORF_DISABLE_CRASH_HANDLER");
+        std::env::remove_var("MORF_DEBUG");
     }
     morf_host::process::crash::install();
 

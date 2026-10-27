@@ -77,7 +77,7 @@ impl PaletteListeners {
                 continue;
             }
             apply(&mut listener.colors, &changes);
-            if std::env::var_os("MORF_PALETTE_LOG").is_some() {
+            if morf_value::env::log("palette") {
                 eprintln!(
                     "morf: {} heard {} colour(s)",
                     listener.tty.path().display(),

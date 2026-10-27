@@ -21,7 +21,7 @@ pub fn handle_ipc(
             // (`morf.screens[1]` names the one each instance draws). The
             // reply is the first output's that answered with something, so
             // an instance that stayed quiet does not hide the one that spoke.
-            if target == TEST_WAKES && std::env::var_os("MORF_TEST_HOOKS").is_some() {
+            if target == TEST_WAKES && morf_value::env::var("MORF_TEST_HOOKS").is_some() {
                 return IpcReply::success(
                     morf_io::wake_counts()
                         .into_iter()
@@ -152,7 +152,7 @@ const TEST_DEVICE_LOST: &str = "@device-lost";
 const TEST_WAKES: &str = "@wakes";
 
 fn test_panic_here(screen: Option<&Screen>, args: &[morf_lua::IpcValue]) -> bool {
-    if std::env::var_os("MORF_TEST_HOOKS").is_none() {
+    if morf_value::env::var("MORF_TEST_HOOKS").is_none() {
         return false;
     }
     match args.first() {

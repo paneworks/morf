@@ -21,5 +21,5 @@ pub fn enter() {
 
 /// Whether this process runs an application.
 pub fn is_app() -> bool {
-    APP.load(Ordering::SeqCst) || std::env::var_os("MORF_APP").is_some()
+    APP.load(Ordering::SeqCst) || morf_value::env::var("MORF_APP").is_some()
 }

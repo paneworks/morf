@@ -100,9 +100,7 @@ pub(super) fn carry_fonts(config: &Path) {
         return;
     }
     let mut paths = vec![fonts];
-    if let Some(existing) = env::var_os("MORF_FONT_PATH") {
-        paths.extend(env::split_paths(&existing));
-    }
+    paths.extend(morf_value::env::paths("MORF_FONT_PATH"));
     if let Ok(joined) = env::join_paths(paths) {
         // SAFETY: called from `run` before the supervisor starts its threads.
         unsafe { env::set_var("MORF_FONT_PATH", joined) };

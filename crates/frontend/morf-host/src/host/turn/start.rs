@@ -32,7 +32,7 @@ pub struct StartOptions {
     /// A shell drawn over the whole desktop rather than on one output.
     pub desktop_canvas: bool,
     /// Say on stderr when a stage holds the output longer than a person
-    /// notices (`MORF_SLOW_MS`).
+    /// notices (`MORF_PROFILE=slow`).
     pub report_slow: bool,
 }
 

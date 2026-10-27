@@ -193,7 +193,7 @@ pub fn primary_frame(
         // paint that shows where it landed.
         repaint = true;
     }
-    // `MORF_FRAME_LOG=2`: every callback, and what the pacer made of it --
+    // `MORF_PROFILE=frame_split`: every callback, and what the pacer made of it --
     // whether a slow cadence is the compositor's or this surface's choice.
     if advanced && crate::paint::frame_split_wanted() {
         eprintln!(

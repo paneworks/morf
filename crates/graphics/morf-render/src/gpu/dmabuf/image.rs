@@ -121,7 +121,7 @@ pub(crate) fn export_for(
         modifier_device.get_image_drm_format_modifier_properties(image, &mut chosen)
     } {
         Ok(()) => {
-            if std::env::var_os("MORF_GPU_LOG").is_some() {
+            if morf_value::env::log("gpu") {
                 eprintln!(
                     "morf: gpu: {} buffer {width}x{height}: modifier {}",
                     purpose.label,

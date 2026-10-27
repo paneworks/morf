@@ -23,13 +23,11 @@ use cosmic_text::fontdb;
 pub fn family_files(family: &str) -> Vec<PathBuf> {
     let mut database = fontdb::Database::new();
     database.load_system_fonts();
-    if let Some(paths) = std::env::var_os("MORF_FONT_PATH") {
-        for path in std::env::split_paths(&paths) {
-            if path.is_dir() {
-                database.load_fonts_dir(&path);
-            } else {
-                let _ = database.load_font_file(&path);
-            }
+    for path in morf_value::env::paths("MORF_FONT_PATH") {
+        if path.is_dir() {
+            database.load_fonts_dir(&path);
+        } else {
+            let _ = database.load_font_file(&path);
         }
     }
     let family = family.trim();
@@ -82,13 +80,11 @@ pub fn installed_families() -> &'static [String] {
     FAMILIES.get_or_init(|| {
         let mut database = fontdb::Database::new();
         database.load_system_fonts();
-        if let Some(paths) = std::env::var_os("MORF_FONT_PATH") {
-            for path in std::env::split_paths(&paths) {
-                if path.is_dir() {
-                    database.load_fonts_dir(&path);
-                } else {
-                    let _ = database.load_font_file(&path);
-                }
+        for path in morf_value::env::paths("MORF_FONT_PATH") {
+            if path.is_dir() {
+                database.load_fonts_dir(&path);
+            } else {
+                let _ = database.load_font_file(&path);
             }
         }
         let mut names: Vec<String> = database

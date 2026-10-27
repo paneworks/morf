@@ -237,10 +237,8 @@ impl TextSystem {
             varied_field_keys: HashSet::new(),
             varied_fields: 0,
         };
-        if let Some(paths) = std::env::var_os("MORF_FONT_PATH") {
-            for path in std::env::split_paths(&paths) {
-                let _ = system.load_font_path(path);
-            }
+        for path in morf_value::env::paths("MORF_FONT_PATH") {
+            let _ = system.load_font_path(path);
         }
         system
     }

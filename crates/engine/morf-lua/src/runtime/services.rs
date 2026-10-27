@@ -198,11 +198,9 @@ fn timer_still_due(
     settled
 }
 
-/// Whether `MORF_WAKE_LOG` asks for wakes -- and so the timers behind them --
+/// Whether `MORF_LOG=wake` asks for wakes -- and so the timers behind them --
 /// to be named.
 fn wake_log_wanted() -> bool {
     static WANTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *WANTED.get_or_init(|| {
-        std::env::var_os("MORF_WAKE_LOG").is_some_and(|value| !value.is_empty() && value != "0")
-    })
+    *WANTED.get_or_init(|| morf_value::env::log("wake"))
 }

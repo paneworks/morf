@@ -8,7 +8,7 @@
 //! compositor sends no frame callbacks. With none of those, the loop sleeps
 //! until something happens -- an idle shell costs nothing.
 //!
-//! `MORF_WAKE_LOG=1` prints every wake and its cause, which is how an idle
+//! `MORF_LOG=wake` prints every wake and its cause, which is how an idle
 //! cost in the field is traced to the thing that causes it.
 
 use morf_app::Woke;
@@ -99,12 +99,10 @@ impl Sleep {
     }
 }
 
-/// Whether `MORF_WAKE_LOG` asks for every wake to be printed.
+/// Whether `MORF_LOG=wake` asks for every wake to be printed.
 pub fn wake_log_wanted() -> bool {
     static WANTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *WANTED.get_or_init(|| {
-        std::env::var_os("MORF_WAKE_LOG").is_some_and(|value| !value.is_empty() && value != "0")
-    })
+    *WANTED.get_or_init(|| morf_value::env::log("wake"))
 }
 
 /// What ended one sleep, in words.
@@ -120,7 +118,7 @@ pub fn wake_cause(woke: Woke, sleep: &Sleep) -> String {
     }
 }
 
-/// Prints one wake, when `MORF_WAKE_LOG` asks: what ended the sleep, how
+/// Prints one wake, when `MORF_LOG=wake` asks: what ended the sleep, how
 /// long it lasted, and what the loop had planned to wake for.
 pub fn log_wake(output: &str, woke: Woke, sleep: &Sleep, slept: Instant) {
     if !wake_log_wanted() {

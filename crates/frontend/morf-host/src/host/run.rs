@@ -213,16 +213,15 @@ fn native_shell_provider(
 
 /// Says, on stderr, when one stage of the loop held the output longer than a
 /// person notices: a configuration that blocks in a handler, a layout that
-/// takes a quarter second. Silent for anything quicker; `MORF_SLOW_MS` sets
+/// takes a quarter second. Silent for anything quicker; `MORF_PROFILE=slow` sets
 /// the threshold (default 150). Under `MORF_PROFILE`, a slow stage also says
 /// whose work filled it, the costliest first; either way what the profiler
 /// gathered is dropped here, so the next stage starts clean.
 pub fn slow(name: &str, what: &str, since: Instant) {
     static THRESHOLD: std::sync::OnceLock<u128> = std::sync::OnceLock::new();
     let threshold = *THRESHOLD.get_or_init(|| {
-        std::env::var("MORF_SLOW_MS")
-            .ok()
-            .and_then(|value| value.parse().ok())
+        morf_value::env::flags("MORF_PROFILE")
+            .parsed("slow")
             .unwrap_or(150)
     });
     let took = since.elapsed().as_millis();

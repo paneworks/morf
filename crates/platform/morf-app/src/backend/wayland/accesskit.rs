@@ -52,9 +52,9 @@ struct Activation {
     wake: Arc<dyn Fn() + Send + Sync>,
 }
 
-/// `MORF_A11Y_LOG`: says on stderr when a screen reader comes and goes.
+/// `MORF_LOG=a11y`: says on stderr when a screen reader comes and goes.
 fn trace(what: &str) {
-    if std::env::var_os("MORF_A11Y_LOG").is_some() {
+    if morf_value::env::log("a11y") {
         eprintln!("morf: a11y: {what}");
     }
 }

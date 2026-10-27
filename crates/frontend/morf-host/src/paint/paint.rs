@@ -28,7 +28,7 @@ pub fn paint(
     cache: Option<&mut CachedLayout>,
     cover: Option<&crate::paint::cover::Shown>,
 ) -> Result<CachedLayout, String> {
-    // `MORF_FRAME_LOG=1` prints how long each frame of the primary surface
+    // `MORF_LOG=frame` prints how long each frame of the primary surface
     // took on the CPU side, submission included, so a configuration that
     // feels slow can be read rather than guessed at.
     let started = frame_log_wanted().then(std::time::Instant::now);

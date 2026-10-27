@@ -12,5 +12,6 @@ cosmic-text.workspace = true
 swash.workspace = true
 morf-layout.workspace = true
 morf-scene.workspace = true
+morf-value.workspace = true
 signed-distance-field.workspace = true
 unicode-segmentation.workspace = true

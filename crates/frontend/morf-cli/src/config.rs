@@ -215,8 +215,7 @@ pub(crate) fn parse_command(args: &[std::ffi::OsString]) -> Result<Command, Stri
         }
         [part @ ("shell" | "lock" | "greet"), rest @ ..] => Ok(Command::Run(
             if *part == "shell" {
-                env::var_os("MORF_CONFIG")
-                    .map(PathBuf::from)
+                morf_value::env::path("MORF_CONFIG")
                     .map(Ok)
                     .unwrap_or_else(default_config_path)?
             } else {
@@ -282,8 +281,8 @@ pub(crate) fn parse_command(args: &[std::ffi::OsString]) -> Result<Command, Stri
         // configuration without a command line to put it on. What follows the
         // `--` is still that configuration's.
         [] | ["--", ..] => Ok(Command::Run(
-            match env::var_os("MORF_CONFIG") {
-                Some(path) => PathBuf::from(path),
+            match morf_value::env::path("MORF_CONFIG") {
+                Some(path) => path,
                 None => default_config_path()?,
             },
             policy,

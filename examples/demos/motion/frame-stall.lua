@@ -8,7 +8,7 @@
 -- (`MORF_LIMITS` handler), so the budget is split over as many timers as
 -- it needs, all due together: one firing is one stall of the whole budget.
 -- What each frame's time went on is the frame accounting's to say
--- (`MORF_WAKE_LOG=1`, `morf check --frames`, the `@frames` hook,
+-- (`MORF_LOG=wake`, `morf check --frames`, the `@frames` hook,
 -- `test.frames()`).
 --
 --     morf examples/demos/motion/frame-stall.lua -- --budget 4000000 --interval 100

@@ -276,7 +276,7 @@ pub struct WgpuBackend {
     /// The last frame went to no buffer: the compositor held them all. A
     /// paint is owed; see [`WgpuBackend::take_skipped`].
     pub(crate) skipped: bool,
-    /// `MORF_GPU_PROFILE`: timestamps between a frame's stages.
+    /// `MORF_PROFILE=gpu`: timestamps between a frame's stages.
     pub(crate) profile: Option<super::profile::GpuProfile>,
     pub(crate) width: u32,
     pub(crate) height: u32,

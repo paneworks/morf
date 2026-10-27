@@ -39,12 +39,12 @@ pub struct Dense<B: Backend + ?Sized = dyn Backend> {
     pending: VecDeque<Event>,
 }
 
-/// `MORF_DENSITY_LOG=1`: what density each window is seen at, and when it
+/// `MORF_LOG=density`: what density each window is seen at, and when it
 /// changes.
 fn log(line: impl FnOnce() -> String) {
     use std::sync::OnceLock;
     static ON: OnceLock<bool> = OnceLock::new();
-    if *ON.get_or_init(|| std::env::var_os("MORF_DENSITY_LOG").is_some_and(|v| v != "0")) {
+    if *ON.get_or_init(|| morf_value::env::log("density")) {
         eprintln!("morf: {}", line());
     }
 }

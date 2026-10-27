@@ -1,4 +1,4 @@
-//! `MORF_DAMAGE_LOG=1`: what made the frame's large damage areas, for a
+//! `MORF_LOG=damage`: what made the frame's large damage areas, for a
 //! frame log whose rectangles say where but not why.
 
 use morf_layout::Geometry;
@@ -6,14 +6,12 @@ use morf_scene::NodeHandle;
 
 use crate::commands::*;
 
-/// `MORF_DAMAGE_LOG=1`: says on stderr which command or layer made a damage
+/// `MORF_LOG=damage`: says on stderr which command or layer made a damage
 /// area of a megapixel or more, and what about it changed -- the one thing a
 /// frame log's rectangle cannot say.
 pub(super) fn damage_log_wanted() -> bool {
     static WANTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *WANTED.get_or_init(|| {
-        std::env::var_os("MORF_DAMAGE_LOG").is_some_and(|value| !value.is_empty() && value != "0")
-    })
+    *WANTED.get_or_init(|| morf_value::env::log("damage"))
 }
 
 pub(super) fn explain(

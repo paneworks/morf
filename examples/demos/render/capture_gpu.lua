@@ -9,7 +9,7 @@
 -- `frame.gpu` is true. Where the compositor or the GPU cannot do that, the
 -- request is answered through shared memory and `frame.gpu` says so.
 --
--- Started with `MORF_CAPTURE_READBACK=1` the engine reads the GPU capture
+-- Started with `MORF_DEBUG=capture_readback` the engine reads the GPU capture
 -- back once -- the one copy the path otherwise avoids -- so the two can be
 -- compared here, pixel for pixel. `morf ipc call status` says how that went;
 -- `morf ipc call again` takes both pictures again -- under the same names,
@@ -57,7 +57,7 @@ local function compare()
     return
   end
   if #a.pixels == 0 then
-    status:set("gpu capture is a texture; run with MORF_CAPTURE_READBACK=1 to compare pixels")
+    status:set("gpu capture is a texture; run with MORF_DEBUG=capture_readback to compare pixels")
     return
   end
   if a.width ~= b.width or a.height ~= b.height then

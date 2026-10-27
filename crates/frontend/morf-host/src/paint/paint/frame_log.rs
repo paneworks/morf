@@ -1,20 +1,19 @@
-//! `MORF_FRAME_LOG`: how long frames take on the CPU side, and where a slow
+//! `MORF_LOG=frame`: how long frames take on the CPU side, and where a slow
 //! one's time went.
 
 pub fn frame_log_wanted() -> bool {
     static WANTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *WANTED
-        .get_or_init(|| std::env::var_os("MORF_FRAME_LOG").is_some_and(|value| !value.is_empty()))
+    *WANTED.get_or_init(|| morf_value::env::log("frame"))
 }
 
-/// Whether `MORF_FRAME_LOG=2` asks for each frame's detail.
+/// Whether `MORF_PROFILE=frame_split` asks for each frame's detail.
 pub fn frame_split_wanted() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("MORF_FRAME_LOG").is_ok_and(|value| value == "2"))
+    *ON.get_or_init(|| morf_value::env::flags("MORF_PROFILE").has("frame_split"))
 }
 
-/// `MORF_FRAME_LOG=2`: where one frame's time went, stage by stage, for any
-/// frame over 16 ms, or over `MORF_FRAME_SPLIT_MS` when that is set.
+/// `MORF_PROFILE=frame_split`: where one frame's time went, stage by stage, for
+/// any frame over 16 ms, or over N with `MORF_PROFILE=frame_split=N`.
 pub(super) struct FrameSplit {
     pub(super) on: bool,
     started: std::time::Instant,
@@ -47,9 +46,8 @@ impl FrameSplit {
     pub(super) fn finish(self) {
         static THRESHOLD: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
         let threshold = *THRESHOLD.get_or_init(|| {
-            std::env::var("MORF_FRAME_SPLIT_MS")
-                .ok()
-                .and_then(|value| value.parse().ok())
+            morf_value::env::flags("MORF_PROFILE")
+                .parsed("frame_split")
                 .unwrap_or(16.0)
         });
         let total = self.started.elapsed().as_secs_f64() * 1000.0;

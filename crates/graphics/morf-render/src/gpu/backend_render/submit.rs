@@ -137,10 +137,10 @@ impl WgpuBackend {
                 buffers.before_submit(queue);
             }
         });
-        // `MORF_GPU_WAIT=1` waits for the GPU here and prints what it took:
+        // `MORF_LOG=gpu_wait` waits for the GPU here and prints what it took:
         // the one way to see a frame's cost on the GPU rather than the CPU.
         static GPU_WAIT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        if *GPU_WAIT.get_or_init(|| std::env::var_os("MORF_GPU_WAIT").is_some()) {
+        if *GPU_WAIT.get_or_init(|| morf_value::env::log("gpu_wait")) {
             let started = std::time::Instant::now();
             let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
             eprintln!(

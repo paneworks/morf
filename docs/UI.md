@@ -1124,7 +1124,7 @@ colour beneath them to mix with:
   has no outline;
 - the surface is drawn at a whole-number scale on an output that is not
   rotated or flipped, and the GPU can blend two colours per pixel
-  (dual-source blending; `MORF_NO_DUAL_SOURCE=1` pretends it cannot).
+  (dual-source blending; `MORF_DEBUG=no_dual_source` pretends it cannot).
 
 A translucent card, a panel fading in, text over a picture: greyscale. The
 same label on a solid background or a solid rounded panel: sharper, in
@@ -1978,7 +1978,7 @@ On Linux the tree goes to AT-SPI through AccessKit, one window per surface
 screen reader asks: an adapter waits on the accessibility bus, and only
 once it is wanted does each turn of the loop rebuild the tree -- when the
 scene has changed, or at most four times a second for layout alone -- and
-send the nodes that changed. `MORF_NO_A11Y=1` turns it off for a run.
+send the nodes that changed. `MORF_DEBUG=no_a11y` turns it off for a run.
 
 `except = { node, ... }` names more nodes a press on which is not outside
 -- the other controls that open it. `morf.overlay.track(node, options)`
@@ -2287,7 +2287,7 @@ instructions: a thousand bindings re-running is about a third of a 60 Hz
 frame.
 
 caelestia (Tsugumori) at 3840x2160 in the sealed sandbox, CPU time per
-painted frame under `MORF_FRAME_LOG`:
+painted frame under `MORF_LOG=frame`:
 
 | phase | interpreter, median / p90 | native tier, median / p90 |
 |---|---|---|
@@ -2297,7 +2297,7 @@ painted frame under `MORF_FRAME_LOG`:
 
 About a tenth of the shell's Lua instructions ran native. A frame there
 is layout and painting, not Lua: the native tier changes it by a few per
-cent. `MORF_JIT_LOG=1` prints the native tier's counters every ten
+cent. `MORF_LOG=jit` prints the native tier's counters every ten
 seconds.
 
 ### Compiled bindings: measured, not built
@@ -2312,7 +2312,7 @@ for when binding evaluation shows up next to rendering. It does not:
   the property and marking what it dirties. A compiled expression still
   needs all of that but the middle step;
 - caelestia (Tsugumori) at 3840x2160 in the sealed sandbox, opening and
-  closing the dashboard under `MORF_FRAME_LOG=2 MORF_PROFILE=1`: of the
+  closing the dashboard under `MORF_PROFILE=frame_split,lua`: of the
   frames over 16 ms (148 of them, median 18.6 ms), rendering took 74 % of
   the time and layout 4 %; every binding and effect that ran in the whole
   run took about 0.2 s of its 4.5 s of frame time -- under 5 %, so at best
@@ -2343,21 +2343,23 @@ the next frame. Any other turn runs them before it paints. A handler that
 takes longer than a refresh still holds the frame after it: Lua runs on the
 output's own thread.
 
-Three environment variables look inside a running output's loop, each
+Two variables, `MORF_LOG` and `MORF_PROFILE` (each a comma list), look
+inside a running output's loop, each
 printed on stderr:
 
 | Variable | Prints |
 |---|---|
-| `MORF_WAKE_LOG=1` | every wake and its cause: `compositor`, `wake fd` (a service thread), or `deadline: timer`, `caret`, `image`, `dbus-timeout`, `terminal`, `tray-retry`, `clock-seconds`, `clock-minutes`, `clock-hours`, `fallback`, `pending` (the last turn left work), with how long it slept; each timer as it fires, named by the `file:line` that made it (`ui.Timer at …` for a node); and, every two seconds while anything animates, what is moving (`path.property`, marked `(loops)` when it never ends) and the frame accounting since the last report: how many frames, how many ran late or past 2.4x the refresh interval, which stage held each of those (`services`, `handlers`, `flush`, `motion`, `layout`, `paint`, or `waiting` when none did), and the time each stage was charged |
-| `MORF_FRAME_LOG=1` | every painted frame and what it cost; `=2` also splits any frame over 16 ms into layout, render and the rest |
-| `MORF_SLOW_MS=N` | any stage of a turn that held the output longer than N ms (default 150) |
-| `MORF_PROFILE=1` | with each slow stage, whose work filled it (below) |
+| `MORF_LOG=wake` | every wake and its cause: `compositor`, `wake fd` (a service thread), or `deadline: timer`, `caret`, `image`, `dbus-timeout`, `terminal`, `tray-retry`, `clock-seconds`, `clock-minutes`, `clock-hours`, `fallback`, `pending` (the last turn left work), with how long it slept; each timer as it fires, named by the `file:line` that made it (`ui.Timer at …` for a node); and, every two seconds while anything animates, what is moving (`path.property`, marked `(loops)` when it never ends) and the frame accounting since the last report: how many frames, how many ran late or past 2.4x the refresh interval, which stage held each of those (`services`, `handlers`, `flush`, `motion`, `layout`, `paint`, or `waiting` when none did), and the time each stage was charged |
+| `MORF_LOG=frame` | every painted frame and what it cost |
+| `MORF_PROFILE=frame_split[=N]` | splits any frame over N ms (16) into layout, render and the rest; `render_split[=N]` the render over N ms (50) into its steps |
+| `MORF_PROFILE=slow=N` | any stage of a turn that held the output longer than N ms (default 150) |
+| `MORF_PROFILE=lua` | with each slow stage, whose work filled it (below) |
 
 Loop, wake and frame-summary lines start with `[12345.678]`: milliseconds
 on the monotonic clock (`CLOCK_MONOTONIC`, Python's `time.monotonic()`), so
 a log can be lined up with a screen recording or another process's log.
 
-`MORF_PROFILE=1` names what a slow stage spent its time on, the costliest
+`MORF_PROFILE=lua` names what a slow stage spent its time on, the costliest
 first, each with its own time (what it ran itself), its total (with what
 it called), and how often it ran:
 
@@ -2377,14 +2379,14 @@ D-Bus call`, `get` and `set` are the synchronous `morf.dbus` calls -- a
 turn that waits on the bus says so. `engine: …` is the engine's own
 bookkeeping between them. Off, it costs nothing.
 
-`MORF_FRAME_LOG=2` also reports individual slow image preparations: source
+`MORF_PROFILE=render_split` also reports individual slow image preparations: source
 probing, decoding, GPU upload, animation work and texture-cache maintenance.
-These use the `MORF_RENDER_SPLIT_MS` threshold (50 ms by default). Image source
+These use its threshold (50 ms by default). Image source
 labels are bounded to 96 characters and escaped; inline SVG/data payloads are
 represented only by their byte length. These detail lines accompany the
 timestamped frame summaries. They measure CPU stages, not GPU completion.
 
-A shell that wakes more than it should says why under `MORF_WAKE_LOG`:
+A shell that wakes more than it should says why under `MORF_LOG=wake`:
 a `clock-seconds` every second is a binding reading `morf.time.clock` where
 the minute clock would do, a `timer` is a timer still running.
 
@@ -2403,12 +2405,12 @@ swapchain as before.
 
 | Variable | Does |
 |---|---|
-| `MORF_GPU_PROFILE=1` | writes GPU timestamps between a frame's stages and prints them: offscreen layers, the surface pass, the copy onto what is presented; with the pixels the damage made the commands shade and the heaviest of them. Each frame waits for its timestamps, so only for measuring. The stages are wall time on the GPU, so a GPU the compositor keeps busy inflates them; the smallest of many frames is the frame's own cost |
-| `MORF_GPU_WAIT=1` | waits for each frame on the GPU and prints how long it took from submission: mostly time queued behind other clients' work on a busy GPU |
-| `MORF_PRESENT_LOG=1` | each frame's buffer, how many the compositor held, how long getting one took, what was copied into it, and every commit and release |
-| `MORF_PRESENT=swapchain` | presents through the swapchain instead (`MORF_PRESENT_MODE=fifo\|mailbox\|immediate` picks its mode) |
-| `MORF_PRESENT_BUFFERS=N` | how many buffers of its own a surface uses at most (default 4) |
-| `MORF_PRESENT_WAIT_MS=N` | how long a frame waits for the compositor to give a buffer back before it is skipped (default 250); a skipped frame's changes go with the next one |
+| `MORF_PROFILE=gpu` | writes GPU timestamps between a frame's stages and prints them: offscreen layers, the surface pass, the copy onto what is presented; with the pixels the damage made the commands shade and the heaviest of them. Each frame waits for its timestamps, so only for measuring. The stages are wall time on the GPU, so a GPU the compositor keeps busy inflates them; the smallest of many frames is the frame's own cost |
+| `MORF_LOG=gpu_wait` | waits for each frame on the GPU and prints how long it took from submission: mostly time queued behind other clients' work on a busy GPU |
+| `MORF_LOG=present` | each frame's buffer, how many the compositor held, how long getting one took, what was copied into it, and every commit and release |
+| `MORF_PRESENT=swapchain` | presents through the swapchain instead (`MORF_PRESENT=mode=fifo\|mailbox\|immediate` picks its mode) |
+| `MORF_PRESENT=buffers=N` | how many buffers of its own a surface uses at most (default 4) |
+| `MORF_PRESENT=wait_ms=N` | how long a frame waits for the compositor to give a buffer back before it is skipped (default 250); a skipped frame's changes go with the next one |
 | `MORF_DEPTH=10` | presents deeper than eight bits a channel where the compositor and the GPU both can (see below) |
 | `MORF_HDR=1` | presents HDR (scRGB, or PQ; `MORF_HDR=pq` prefers PQ for opaque surfaces) where the compositor can; implies `MORF_DEPTH=10`; `MORF_HDR_WHITE=N` sets SDR white in cd/m² (see below) |
 
@@ -2421,7 +2423,7 @@ surface declared opaque (`morf.surface.opaque = true`), `ABGR16161616F`
 for any surface, since ten-bit formats keep only two bits of alpha and a
 translucent surface's edges and shadows would come out in four steps.
 Where neither is taken it falls back to eight bits, `ARGB8888`, as without
-the setting; the log says which was chosen (and `MORF_GPU_LOG=1` what
+the setting; the log says which was chosen (and `MORF_LOG=gpu` what
 the compositor advertised). Gradients stop
 banding; nothing else changes. Alone this is precision only: colours are
 still sRGB, presented as sRGB. HDR, below, builds on it.

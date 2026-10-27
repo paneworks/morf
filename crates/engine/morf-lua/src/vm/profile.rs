@@ -1,4 +1,4 @@
-//! `MORF_PROFILE=1`: where the time of a slow turn went.
+//! `MORF_PROFILE=lua`: where the time of a slow turn went.
 //!
 //! A turn of the loop that holds the output -- "services, timers and
 //! callbacks took 120 ms" -- says nothing about *whose* work that was. With
@@ -52,9 +52,7 @@ thread_local! {
 pub fn enabled() -> bool {
     static FROM_ENV: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     FORCED.with(Cell::get).unwrap_or_else(|| {
-        *FROM_ENV.get_or_init(|| {
-            std::env::var_os("MORF_PROFILE").is_some_and(|value| !value.is_empty() && value != "0")
-        })
+        *FROM_ENV.get_or_init(|| morf_value::env::flags("MORF_PROFILE").has("lua"))
     })
 }
 

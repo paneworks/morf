@@ -1960,6 +1960,7 @@ dependencies = [
  "cosmic-text",
  "morf-layout",
  "morf-scene",
+ "morf-value",
  "morf-vector",
  "signed-distance-field",
  "swash",

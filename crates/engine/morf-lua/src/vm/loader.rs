@@ -18,10 +18,7 @@ pub(crate) use json::{json_to_lua, lua_to_json};
 pub(crate) use require::{Require, install_require};
 
 pub(crate) fn default_module_roots() -> Vec<PathBuf> {
-    std::env::var_os("MORF_RUNTIME_PATH")
-        .into_iter()
-        .flat_map(|value| std::env::split_paths(&value).collect::<Vec<_>>())
-        .collect()
+    morf_value::env::paths("MORF_RUNTIME_PATH")
 }
 
 /// The nearest `library/` holding a `lib/`, beside the folder `file` is in
