@@ -1,23 +1,20 @@
--- The default kit's looks for each Navigation widget, in the Adwaita
--- manner. Every widget moves its pages its own way: a navigation view's
--- new page slides over the old one, which drifts back and dims; a view
--- stack cross-fades; tab pages and a carousel slide side by side; an
--- onboarding page rises in; a wizard's steps nudge along; a detail pane
--- settles in from a touch smaller. With `chrome = true` in its spec the
--- widget also draws its furniture over its pages (which leave it room): a
--- header with a back button and the page's title, a tab strip, carousel
--- dots, an onboarding progress, a wizard's step count, a detail card.
--- A composite that draws its own leaves `chrome` out. The page's name is
+-- The default kit's Navigation skin, in the Adwaita manner. Every widget
+-- moves its pages its own way: a navigation view's new page slides over
+-- the old one, which drifts back and dims; a view stack cross-fades; a
+-- stack cuts or cross-fades as it is told (`transition_type`); a carousel
+-- and a tab view slide their pages side by side. With `chrome = true` in
+-- its spec a navigation view also draws a header with a back button and
+-- the page's title, and a carousel its dots and arrows; a composite that
+-- draws its own leaves `chrome` out. The page's name is
 -- `spec.titles[name]`, or the name itself.
 local morf = require("morf")
 local ui = require("morf.ui")
 
-return function(S, theme, M)
+return function(S, theme, draw)
   local P = theme.P
   local R = theme.radius
-  local function quick() return { duration = theme.duration.small, easing = theme.ease.standard } end
-  local function slide() return M.spring(380, 40) end
-  -- The page names in order (the glue hands the skin the list).
+  local quick = draw.quick
+  local function slide() return draw.spring(380, 40) end
   local function names_of(spec)
     local out = {}
     for _, name in ipairs(type(spec.pages) == "table" and spec.pages or {}) do
@@ -43,7 +40,7 @@ return function(S, theme, M)
   --- the one behind drifts `under` widths and fades to `dim`.
   local function mover(t, spec, o)
     local latest
-    local function width(node) return spec.width or (node and node.layout_width) or t.width or 400 end
+    local function width(node) return tonumber(draw.get(spec.width)) or (node and node.layout_width) or t.width or 400 end
     return function(from, to, direction)
       latest = to
       direction = direction or 1
@@ -110,8 +107,8 @@ return function(S, theme, M)
       opacity = function() return t.can_go_back and 1 or 0 end,
       on_clicked = function() send("pop") end,
       behavior = { opacity = quick() },
-      ui.Rect { anchors = { fill = true }, radius = 17, color = function() return P().ink:alpha(P().wash.hover) end },
-      M.icon("arrow_back", 20, function() return P().ink end, { anchors = { center_in = true } }) }
+      ui.Rect { anchors = { fill = true }, radius = 17, color = function() return P().window_fg:alpha(P().wash.hover) end },
+      draw.icon("arrow_back", 20, function() return P().window_fg end, { anchors = { center_in = true } }) }
   end
 
   --- A header bar: the back button, the current page's title centred
@@ -119,11 +116,11 @@ return function(S, theme, M)
   local function header(t, spec, send, opts)
     opts = opts or {}
     local H = opts.height or 44
-    local text = M.text { text = function() return title_of(spec, t.current) end, font_weight = 700,
-      font_size = opts.size or theme.size.normal, color = function() return P().ink end }
+    local text = draw.text { text = function() return title_of(spec, t.current) end, font_weight = 700,
+      font_size = opts.size or theme.size.normal, color = function() return P().window_fg end }
     local holder = ui.Item { y = 0, width = function() return t.width end, height = H,
       ui.Rect { anchors = { fill = true }, top_left_radius = R.large, top_right_radius = R.large,
-        color = function() return P().header end },
+        color = function() return P().headerbar_bg end },
       hairline(H - 1),
       ui.Item { y = (H - (opts.size or theme.size.normal) * 1.4) / 2, height = H,
         x = function()
@@ -137,13 +134,15 @@ return function(S, theme, M)
   end
 
   local function ground()
-    return ui.Rect { anchors = { fill = true }, radius = R.large, color = function() return P().view end,
+    return ui.Rect { anchors = { fill = true }, radius = R.large, color = function() return P().view_bg end,
       border_width = function() local p = P() return (p.strong and 2) or (p.dark and 0) or 1 end,
       border_color = function() return P().border end }
   end
 
   -- ------------------------------------------------------------ widgets --
+  -- ------------------------------------------------------------ widgets --
 
+  --- AdwNavigationView: the new page slides over the old.
   function S.navigation_view(t, spec, _, send)
     return {
       transition = mover(t, spec, { over = true, under = 0.3, dim = 0.4 }),
@@ -152,14 +151,7 @@ return function(S, theme, M)
     }
   end
 
-  function S.settings_subpages(t, spec, _, send)
-    return {
-      transition = mover(t, spec, { over = true, under = 0.15, dim = 0.2, duration = 280 }),
-      background = spec.chrome and ground() or nil,
-      page = spec.chrome and header(t, spec, send, { left = true, size = theme.size.larger, height = 48 }) or nil,
-    }
-  end
-
+  --- AdwViewStack: a cross-fade.
   function S.view_stack(t, spec)
     return {
       transition = mover(t, spec, { in_opacity = 0, out_opacity = 0, fade_in = 200, fade_out = 140, duration = 200 }),
@@ -167,34 +159,21 @@ return function(S, theme, M)
     }
   end
 
-  --- Tab pages: a strip of the pages' names over them, an accent bar
-  --- sliding to the chosen one; the pages slide side by side.
-  function S.tab_pages(t, spec, _, send)
-    local slots = { transition = mover(t, spec, { in_x = 1, out_x = 1, duration = 300 }) }
-    if not spec.chrome then return slots end
-    local names = names_of(spec)
-    local function slot() return (t.width or 0) / math.max(1, #names) end
-    local strip = ui.Item { width = function() return t.width end, height = 44,
-      ui.Rect { anchors = { fill = true }, top_left_radius = R.large, top_right_radius = R.large,
-        color = function() return P().header end }, hairline(43) }
-    for i, name in ipairs(names) do
-      ui.reparent(ui.MouseArea { x = function() return (i - 1) * slot() end, width = slot, height = 42, cursor = "pointer",
-        accessible_role = "tab", accessible_name = title_of(spec, name),
-        on_clicked = function() send("go", name) end,
-        M.text { anchors = { center_in = true }, text = title_of(spec, name),
-          font_weight = function() return t.current == name and 700 or 400 end,
-          color = function() local p = P() return t.current == name and p.ink or p.ink_dim end } }, strip)
-    end
-    ui.reparent(ui.Rect { y = 40, height = 3, radius = 1.5, color = function() return P().accent end,
-      width = function() return math.min(72, slot() - 24) end,
-      x = function() return (math.max(1, index_of(t, spec)) - 0.5) * slot() - math.min(72, slot() - 24) / 2 end,
-      behavior = { x = slide() } }, strip)
-    slots.background = ground()
-    slots.indicator = strip
-    return slots
+  --- GtkStack: `transition_type` "crossfade" (the default), "slide_left_right"
+  --- or "none".
+  function S.stack(t, spec)
+    local kind = spec.transition_type or "crossfade"
+    if kind == "none" then return { transition = mover(t, spec, { duration = 0 }) } end
+    if kind == "slide_left_right" then return { transition = mover(t, spec, { in_x = 1, out_x = 1, duration = 300 }) } end
+    return S.view_stack(t, spec)
   end
 
-  --- A carousel: slides side by side, the old one shrinking back as it
+  --- AdwTabView: the pages slide side by side (a tab bar draws the tabs).
+  function S.tab_view(t, spec)
+    return { transition = mover(t, spec, { in_x = 1, out_x = 1, duration = 300 }) }
+  end
+
+  --- AdwCarousel: slides side by side, the old one shrinking back as it
   --- goes; dots under them, an accent pill running to the current one,
   --- and round arrow buttons at the sides.
   function S.carousel(t, spec, _, send)
@@ -209,18 +188,18 @@ return function(S, theme, M)
       ui.reparent(ui.MouseArea { x = function() return row_x() + (i - 1) * (DOT + GAP) - 4 end, y = 8, width = DOT + 8,
         height = 16, cursor = "pointer", accessible_name = title_of(spec, name), on_clicked = function() send("go", name) end,
         ui.Rect { x = 4, y = 4, width = DOT, height = DOT, radius = DOT / 2,
-          color = function() local p = P() return p.ink:alpha(p.strong and 0.6 or 0.25) end } }, dots)
+          color = function() local p = P() return p.window_fg:alpha(p.strong and 0.6 or 0.25) end } }, dots)
     end
     ui.reparent(ui.Rect { y = 12, height = DOT, radius = DOT / 2, width = 20,
       x = function() return row_x() + (math.max(1, index_of(t, spec)) - 1) * (DOT + GAP) - 6 end,
-      color = function() return P().accent end, behavior = { x = slide() }, stretch = M.STRETCH }, dots)
+      color = function() return P().accent_bg end, behavior = { x = slide() }, stretch = (not theme.reduced) and { stiffness = 320, damping = 30, scale = 0.05, max = 0.1 } or nil }, dots)
     local function arrow(icon, x, event, show)
       return ui.MouseArea { x = x, y = function() return (t.height or 0) - 30 end, width = 28, height = 28,
         cursor = "pointer", accessible_role = "button", accessible_name = event,
         opacity = function() return show() and 1 or 0 end, visible = show, behavior = { opacity = quick() },
         on_clicked = function() send(event) end,
-        ui.Rect { anchors = { fill = true }, radius = 14, color = function() return P().ink:alpha(P().wash.hover) end },
-        M.icon(icon, 18, function() return P().ink end, { anchors = { center_in = true } }) }
+        ui.Rect { anchors = { fill = true }, radius = 14, color = function() return P().window_fg:alpha(P().wash.hover) end },
+        draw.icon(icon, 18, function() return P().window_fg end, { anchors = { center_in = true } }) }
     end
     slots.background = ground()
     slots.indicator = dots
@@ -231,57 +210,11 @@ return function(S, theme, M)
     return slots
   end
 
-  --- Onboarding: each page rises in as the last fades; a row of short
-  --- bars at the top fills with the accent up to the current page.
-  function S.onboarding(t, spec)
-    local slots = { transition = mover(t, spec, { in_y = 28, in_opacity = 0, in_scale = 0.97, out_y = -12, out_opacity = 0,
-      fade_in = 260, fade_out = 140, duration = 380, easing = theme.ease.decelerate }) }
-    if not spec.chrome then return slots end
-    local names = names_of(spec)
-    local GAP = 6
-    local function seg() return ((t.width or 0) - 32 - GAP * (#names - 1)) / math.max(1, #names) end
-    local bars = ui.Item { x = 16, y = 10, width = function() return (t.width or 0) - 32 end, height = 4 }
-    for i in ipairs(names) do
-      ui.reparent(ui.Item { x = function() return (i - 1) * (seg() + GAP) end, width = seg, height = 4,
-        ui.Rect { anchors = { fill = true }, radius = 2, color = function() return P().track end },
-        ui.Rect { height = 4, radius = 2, color = function() return P().accent end,
-          width = function() return i <= index_of(t, spec) and seg() or 0 end, behavior = { width = slide() } } }, bars)
-    end
-    slots.background = ground()
-    slots.indicator = bars
-    return slots
-  end
-
-  --- A wizard: steps nudge along as they fade; a header with the step's
-  --- count and name, and a thin accent progress under it.
-  function S.wizard(t, spec)
-    local slots = { transition = mover(t, spec, { in_x = 0.08, out_x = 0.08, in_opacity = 0, out_opacity = 0, fade_in = 220,
-      fade_out = 140, duration = 280 }) }
-    if not spec.chrome then return slots end
-    local names = names_of(spec)
-    local H = 44
-    slots.background = ground()
-    slots.page = ui.Item { width = function() return t.width end, height = H,
-      ui.Rect { anchors = { fill = true }, top_left_radius = R.large, top_right_radius = R.large,
-        color = function() return P().header end },
-      ui.Rect { anchors = { left = true, right = true }, y = H - 2, height = 2, color = function() return P().track end },
-      ui.Rect { y = H - 2, height = 2, color = function() return P().accent end,
-        width = function() return (t.width or 0) * index_of(t, spec) / math.max(1, #names) end, behavior = { width = slide() } },
-      M.text { x = 16, anchors = { vertical_center = true }, font_weight = 700,
-        text = function() return title_of(spec, t.current) end, color = function() return P().ink end },
-      M.text { anchors = { right = true, right_margin = 16, vertical_center = true }, font_size = theme.size.small,
-        text = function() return ("Step %d of %d"):format(index_of(t, spec), #names) end,
-        color = function() return P().ink_dim end } }
-    return slots
-  end
-
-  --- Master and detail: the detail settles in from a touch smaller as the
-  --- old fades, on a card.
-  function S.master_detail(t, spec)
-    return {
-      transition = mover(t, spec, { in_scale = 0.97, in_opacity = 0, out_opacity = 0, fade_in = 220, fade_out = 120,
-        duration = 260 }),
-      background = spec.chrome and ground() or nil,
-    }
+  --- A page change anywhere else: the new page slides a little in from
+  --- its side as it fades up over the old one, which fades away. Instant
+  --- with motion off.
+  function S.Navigation(t, spec)
+    return { transition = mover(t, spec, { in_x = 0.06, in_opacity = 0, out_opacity = 0, fade_in = 200,
+      fade_out = 120 }) }
   end
 end
