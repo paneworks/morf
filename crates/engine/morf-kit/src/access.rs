@@ -14,84 +14,62 @@ pub fn role_of(archetype: &str, widget: &str, checkable: bool) -> &'static str {
     match archetype {
         "Press" => match widget {
             "switch" => "switch",
-            "checkbox" => "check_box",
-            "radio" | "rating_star" => "radio_button",
-            "link" => "link",
+            "check_button" => "check_box",
+            "link_button" => "link",
             "menu_item" => "menu_item",
-            "check_menu_item" => "menu_item_check",
-            "radio_menu_item" => "menu_item_radio",
-            "toggle" | "toggle_group_member" | "chip_filter" => "toggle_button",
-            "segment" => "radio_button",
+            "toggle_button" => "toggle_button",
             _ if checkable => "toggle_button",
             _ => "button",
         },
         "Range" => match widget {
-            "spin_button" | "numeric_entry" => "spin_button",
-            "scroll_bar" => "scroll_bar",
+            "spin_button" => "spin_button",
+            "scrollbar" => "scroll_bar",
             _ => "slider",
         },
         "Plane" => "slider",
         "Selection" => match widget {
-            "tabs"
-            | "view_switcher"
-            | "inline_view_switcher"
-            | "carousel_dots"
-            | "pagination"
-            | "stepper_header" => "tab_list",
-            "segmented" | "radio_group" | "toggle_group" | "rating_items" => "radio_group",
-            "grid_selection" | "day_grid" | "swatch_grid" | "emoji_grid" | "icon_chooser" => "grid",
-            "breadcrumbs" => "navigation",
-            _ => "list_box",
+            "toggle_group" => "radio_group",
+            "day_grid" | "swatch_grid" | "emoji_grid" => "grid",
+            "sidebar_list" => "list_box",
+            _ => "tab_list",
         },
         "Popup" => match widget {
-            "menu" | "context_menu" | "menu_bar_menu" | "submenu" => "menu",
-            "tooltip" | "rich_tooltip" | "hover_card" => "tooltip",
-            "dropdown_list" | "autocomplete_list" => "list_box",
-            "alert_dialog" | "message_dialog" => "alert_dialog",
-            "toast" | "snackbar" | "notification_popup" => "status",
+            "popover_menu" | "popover_menu_bar" => "menu",
+            "tooltip" => "tooltip",
+            "dropdown" => "list_box",
+            "alert_dialog" => "alert_dialog",
+            "toast" | "notification" => "status",
             "banner" => "alert",
             _ => "dialog",
         },
         "TextField" => match widget {
-            "password" | "otp" => "password_text",
-            "search" | "filter_field" => "search_field",
-            "text_area" | "mentions" | "code_input" => "text_area",
+            "password_entry" => "password_text",
+            "search_entry" => "search_field",
+            "text_view" => "text_area",
             _ => "text_field",
         },
         "Scroll" => "scroll_pane",
         "Collection" => match widget {
             "grid_view" | "flow_box" => "grid",
-            "data_table" => "table",
-            "tree_view" => "tree",
-            "tree_table" => "tree_grid",
+            "column_view" => "table",
+            "tree_expander" => "tree",
             _ => "list",
         },
         "Disclosure" => match widget {
-            "tree_node" => "tree_item",
+            "revealer" => "group",
             _ => "button",
         },
         "Drag" => match widget {
-            "split_pane" | "resizable_panel" => "splitter",
-            "resize_grip" | "sheet_handle" | "window_move" => "grip",
+            "paned" => "splitter",
+            "window_handle" => "grip",
             _ => "group",
         },
         "Navigation" => match widget {
-            "tab_pages" => "tab_panel",
+            "tab_view" => "tab_panel",
             _ => "group",
         },
         "Shell" => "application",
         "Dock" => "group",
-        "Transform" => match widget {
-            "floating_panel" | "pip_window" => "dialog",
-            _ => "group",
-        },
-        "Sheet" => "grid",
-        "Roving" => match widget {
-            "menubar" => "menu_bar",
-            _ => "toolbar",
-        },
-        "Form" => "form",
-        "Overflow" => "toolbar",
         "Canvas" => match widget {
             "image_viewer" => "image",
             _ => "group",
@@ -219,14 +197,17 @@ mod tests {
 
     #[test]
     fn roles_follow_the_widget() {
-        assert_eq!(role_of("Press", "pill", false), "button");
-        assert_eq!(role_of("Press", "pill", true), "toggle_button");
+        assert_eq!(role_of("Press", "button", false), "button");
+        assert_eq!(role_of("Press", "button", true), "toggle_button");
         assert_eq!(role_of("Press", "switch", false), "switch");
-        assert_eq!(role_of("Selection", "tabs", false), "tab_list");
-        assert_eq!(item_role("Selection", "tabs"), Some("tab"));
-        assert_eq!(item_role("Collection", "data_table"), Some("row"));
-        assert_eq!(item_role("Press", "pill"), None);
-        assert_eq!(role_of("TextField", "password", false), "password_text");
+        assert_eq!(role_of("Selection", "view_switcher", false), "tab_list");
+        assert_eq!(item_role("Selection", "view_switcher"), Some("tab"));
+        assert_eq!(item_role("Collection", "column_view"), Some("row"));
+        assert_eq!(item_role("Press", "button"), None);
+        assert_eq!(
+            role_of("TextField", "password_entry", false),
+            "password_text"
+        );
     }
 
     #[test]
