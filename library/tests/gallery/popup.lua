@@ -1,4 +1,4 @@
--- Gallery samples for the Popup archetype's widgets (lib.kit.samples): each
+-- Gallery samples for the Popup archetype's widgets (library/tests/gallery): each
 -- gives the button that opens its popup, built with what a real one holds.
 -- While the gallery draws the Popup archetype (KIT_WIDGETS names it) each
 -- also opens a preview of its popup under the button -- the same spec, but

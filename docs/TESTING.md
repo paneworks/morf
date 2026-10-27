@@ -91,8 +91,7 @@ followed by a settle), advances `--after` milliseconds of virtual time
 `--kit` checks the configuration's `kit` module -- what `require("kit")`
 answers once it has loaded -- against the widget contract
 (`library/lib/kit/contract.lua`): every function, display widget and
-archetype skin due at the contract's stage, and an owner in the contract
-for every row of the element catalogue (`library/lib/kit/catalogue.lua`).
+archetype skin due at the contract's stage.
 It prints `kit stage N: D due, M missing` and each problem as an error.
 
 `--frames` prints the host's frame accounting over the `--after` run (as

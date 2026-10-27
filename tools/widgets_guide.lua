@@ -90,19 +90,6 @@ for _, g in ipairs(groups) do
 end
 
 p()
-p("### Domain instruments")
-p()
-p("Over the display widgets and the archetypes, in `library/lib/kit/domain/`:")
-p()
-local areas = {}
-for area in pairs(contract.domain) do areas[#areas + 1] = area end
-table.sort(areas)
-for _, area in ipairs(areas) do
-  local d = contract.domain[area]
-  p(("- **%s** (stage %d): %s"):format(area, d.stage, list(d.widgets)))
-end
-
-p()
 p("### Composites")
 p()
 p("Shared by every theme, built only from archetypes, in")

@@ -20,7 +20,6 @@
 local M = {}
 
 M.GROUPS = { "text", "media", "status", "readings", "charts", "structure" }
-M.DOMAINS = { "aviation", "hud_game", "hud_fui", "audio", "editor" }
 
 --- Adds the shared display functions `kit` lacks, each drawn in `style`.
 function M.install(kit, style)
@@ -33,22 +32,6 @@ function M.install(kit, style)
     end
   end
   for _, group in ipairs(M.GROUPS) do add("lib.kit.display." .. group) end
-  -- The domain instruments over them (lib/kit/domain): aviation, HUD. Named
-  -- by the contract, each module loads when one of its own is first drawn.
-  for _, domain in pairs(require("lib.kit.contract").domain) do
-    local modules = domain.modules or { domain.module }
-    for _, name in ipairs(domain.widgets) do
-      if kit[name] == nil then
-        kit[name] = function(spec)
-          for _, module in ipairs(modules) do
-            local draw = require("lib.kit.domain." .. module)[name]
-            if draw then return draw(spec or {}, style) end
-          end
-          error(("kit.%s: no domain module draws it"):format(name), 2)
-        end
-      end
-    end
-  end
   return kit
 end
 

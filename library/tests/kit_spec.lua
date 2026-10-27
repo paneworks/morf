@@ -1,4 +1,4 @@
--- `library/lib/kit/`: the widget contract, the catalogue and the check.
+-- `library/lib/kit/`: the widget contract and the check.
 --
 --     morf test library/tests/kit_spec.lua
 
@@ -6,12 +6,10 @@ local test = morf.test
 
 local HOST = [[
   local contract = require("lib.kit.contract")
-  local catalogue = require("lib.kit.catalogue")
   local check = require("lib.kit.check")
   local function join(list) return table.concat(list, "\n") end
   morf.ipc.empty_kit = function() return join(check.kit({})) end
   morf.ipc.not_a_kit = function() return join(check.kit(42)) end
-  morf.ipc.catalogue = function() return #catalogue, join(check.catalogue()) end
   morf.ipc.stage = function() return contract.stage end
   -- A kit that has every function due at the current stage.
   morf.ipc.full_kit = function()
@@ -22,11 +20,6 @@ local HOST = [[
     for _, list in pairs(contract.display) do
       for _, entry in ipairs(list) do
         if entry.stage <= contract.stage then kit[entry.fn] = function() end end
-      end
-    end
-    for _, domain in pairs(contract.domain) do
-      if domain.stage <= contract.stage then
-        for _, fn in ipairs(domain.widgets or {}) do kit[fn] = function() end end
       end
     end
     kit.skins = {}
@@ -76,13 +69,6 @@ end)
 test.it("passes a kit that has everything due", function()
   load()
   test.eq(test.ipc("full_kit"), "")
-end)
-
-test.it("gives every catalogue row an owner the contract defines", function()
-  load()
-  local rows, problems = test.ipc("catalogue")
-  test.eq(rows, 960)
-  test.eq(problems, "")
 end)
 
 test.it("describes all nineteen archetypes and builds composites from them", function()

@@ -2,7 +2,7 @@
 -- application window -- a header, a sidebar, a page, an inspector, bars --
 -- arranged by lib.kit.shell for the size its cell gives it. The parts are
 -- kit widgets and text; the window's grounds and edges are the theme's
--- Shell skin. (Format: library/lib/kit/samples/init.lua.)
+-- Shell skin. (Format: library/tests/gallery/init.lua.)
 local ui = require("morf.ui")
 
 local M = {}

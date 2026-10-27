@@ -1,4 +1,4 @@
--- Gallery samples for the Collection widgets (lib.kit.samples): each a
+-- Gallery samples for the Collection widgets (library/tests/gallery): each a
 -- working collection over a small model -- a table that sorts itself and
 -- resizes its columns, a tree whose last folder loads its children, a chat
 -- that keeps talking, two transfer lists that move rows between them.

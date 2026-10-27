@@ -20,7 +20,7 @@ local app = require("lib.kit.app")
 local kit = app.kit()
 local composites = require("lib.kit.composites")
 local widgets = require("lib.kit.widgets")
-local samples = require("lib.kit.samples.canvas")
+local models = require("canvas")
 
 local HEADER, TOOLS = 46, 44
 
@@ -92,7 +92,7 @@ end
 
 -- ----------------------------------------------------------- documents --
 
-local graph = samples.graph({
+local graph = models.graph({
   { id = "image", title = "Image", tone = "info", x = 40, y = 60, outputs = { "Color", "Alpha" } },
   { id = "noise", title = "Noise", tone = "extra", x = 40, y = 280, inputs = { "Scale" }, outputs = { "Value" } },
   { id = "blur", title = "Blur", tone = "accent", x = 280, y = 80, inputs = { "Image", "Radius" }, outputs = { "Result" } },
@@ -250,7 +250,7 @@ app.application {
         return node
       end) },
       map = { title = "Map", icon = "map", content = fill(function()
-        local node, view = widgets.map_view { id = "editor-map", anchors = { fill = true }, items = samples.district(),
+        local node, view = widgets.map_view { id = "editor-map", anchors = { fill = true }, items = models.district(),
           zoom = 0.45, view_x = 40, view_y = 40, attribution = "© Sample Atlas" }
         views.map = view
         return node

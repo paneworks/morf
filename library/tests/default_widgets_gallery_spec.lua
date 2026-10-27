@@ -1,6 +1,6 @@
 -- The default kit's widget gallery: every widget of every archetype the
 -- contract requires, drawn by the default kit (library/lib/kit/skins/
--- default) from its sample (library/lib/kit/samples/<archetype>.lua), in
+-- default) from its sample (library/tests/gallery/<archetype>.lua), in
 -- each of its three variants. KIT_WIDGETS="Range Plane" draws only those.
 --
 --     morf test --no-dbus library/tests/default_widgets_gallery_spec.lua
@@ -14,7 +14,7 @@ local SOURCE = [[
   morf.surface.width, morf.surface.height = 1920, 1080
   local kit = require("lib.kit.skins.default").make { variant = env("MORF_KIT_VARIANT") or "light" }
   package.loaded.kit = kit
-]] .. require("lib.kit.samples").SOURCE
+]] .. require("gallery").SOURCE
 
 --- Visible nodes inside a gallery cell that reach outside it.
 local function spills()

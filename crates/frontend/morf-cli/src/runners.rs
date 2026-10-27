@@ -210,7 +210,6 @@ fn check_kit(headless: &mut Headless) -> usize {
           local summary = check.summary(kit)
           local out = { ("stage %d: %d due, %d missing"):format(summary.stage, summary.due, summary.missing) }
           for _, problem in ipairs(check.kit(kit)) do out[#out + 1] = problem end
-          for _, problem in ipairs(check.catalogue()) do out[#out + 1] = problem end
           return table.unpack(out)
         end
     "#;

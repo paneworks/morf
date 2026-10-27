@@ -10,10 +10,6 @@
 -- loading each the first time it is asked for.
 local M = {}
 
--- The gallery samples' groups (samples_<group>.lua: name -> function(kit,
--- composites) returning a node for a 560x380 cell).
-local GROUPS = { "inputs", "pickers", "surfaces", "layouts" }
-
 setmetatable(M, { __index = function(t, name)
   local ok, made = pcall(require, "lib.kit.composites." .. name)
   if not ok then
@@ -24,9 +20,6 @@ setmetatable(M, { __index = function(t, name)
   rawset(t, name, make)
   return make
 end })
-
---- The sample groups, for the gallery.
-function M.groups() return GROUPS end
 
 --- Whether a composite named `name` exists.
 function M.has(name)

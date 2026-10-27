@@ -2548,8 +2548,7 @@ reader the same things.
 On top of the archetypes: **display widgets** take no input at all (text,
 status, readings, charts, structure -- a kit function each); **composites**
 combine archetypes into bigger controls (a combo box, a date picker, a file
-chooser) shared by every theme; **domain instruments** (aviation, HUD,
-audio, editors) are display widgets and composites for a field.
+chooser) shared by every theme.
 
 ### Making a control
 
@@ -2615,7 +2614,7 @@ per archetype, each `function(S, theme, M) S.<widget> = ... end`. Every
 widget of every archetype is drawn by the widget galleries
 (`library/tests/default_widgets_gallery_spec.lua`,
 eva's `tests/kit_widgets_gallery_spec.lua`) from its
-sample in `library/lib/kit/samples/<archetype>.lua`; `KIT_WIDGETS="Canvas
+sample in `library/tests/gallery/<archetype>.lua`; `KIT_WIDGETS="Canvas
 Dock"` draws only those archetypes.
 
 ### The contract
@@ -2623,9 +2622,8 @@ Dock"` draws only those archetypes.
 `library/lib/kit/contract.lua` is the contract every theme's kit is held
 to: the base functions (`kit.text`, `kit.icon`, `kit.card`, ...), every
 archetype (roles, state, signals, keys, slots, widgets), every display
-widget, every composite and domain instrument, each with the stage it
-arrived at, and the owner of every row of the element catalogue
-(`library/lib/kit/catalogue.lua`). `morf check --kit` checks a
+widget and every composite, each with the stage it arrived at.
+`morf check --kit` checks a
 configuration's `require("kit")` against what is due (`morf check --kit
 default` checks the default look); the galleries
 (eva's `tests/kit_gallery_spec.lua`,
@@ -3508,15 +3506,6 @@ those a theme does not draw itself come from the shared composition in
 | text | quote | `kit.quote` |
 | text | mono | `kit.mono` |
 | text | link text | `kit.link_text` |
-
-### Domain instruments
-
-Over the display widgets and the archetypes, in `library/lib/kit/domain/`:
-
-- **audio** (stage 15): automation_lane, audio_visualiser, compressor_curve, eq_bars, lissajous, mixer_strip, piano_keyboard, parametric_eq, tuner
-- **aviation** (stage 14): airspeed_tape, altimeter_tape, attitude_indicator, heading_indicator, course_deviation, eicas_strip, flight_path_marker, heading_tape, hsi, nav_display, pitch_ladder, radar_altimeter, range_rings, bank_scale, rolling_digits, turn_coordinator, vertical_speed, weather_radar
-- **editor** (stage 15): envelope_editor, node_editor, piano_roll, step_sequencer
-- **hud** (stage 14): health_bar, charge_ring, pie_menu, cooldown_sweep, damage_trail_bar, minimap, compass_strip, hotbar, kill_feed, objective_tracker, resource_orb, stamina_ring, xp_bar, achievement_banner, crosshair, shield_bar, ammo_counter, damage_direction, damage_numbers, pip_container, nameplate, buff_row, combo_counter, offscreen_arrow, waypoint_marker, hit_marker, lap_tracker, racing_hud, boss_bar, interaction_prompt, inventory_grid, scoreboard, subtitle_box, tick_ruler, radar_sweep, segmented_arc_ring, target_lock, scan_sweep, waveform_rings, concentric_rings, decode_text, glitch_text, hex_grid, countdown_ring, dot_matrix_progress, biometric_scan, data_stream, striped_loading, signal_noise, crt_scanlines, crosshair_grid, callout, wireframe, telemetry_block, motion_tracker, proximity_ring, bracket_tag, orbit_diagram, starfield, assistant_orb
 
 ### Composites
 

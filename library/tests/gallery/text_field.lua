@@ -1,4 +1,4 @@
--- Gallery samples for the TextField archetype's widgets (lib.kit.samples):
+-- Gallery samples for the TextField archetype's widgets (library/tests/gallery):
 -- each field as an application would make it -- its size, its insets, a
 -- label, some text -- so the theme's skin has something real to draw.
 local ui = require("morf.ui")

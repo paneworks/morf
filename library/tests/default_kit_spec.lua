@@ -1,5 +1,5 @@
 -- The default kit's gallery (library/lib/kit/skins/default): every display
--- widget and domain instrument the contract requires, and every composite,
+-- widget the contract requires, and every composite,
 -- drawn by the default kit in a cell of its own, in each of its three
 -- variants. A cell passes when everything visible it draws stays inside it
 -- -- nothing overlaps a neighbour or spills -- and nothing logs an error.
@@ -33,8 +33,8 @@ local SOURCE = [[
 
   local SAMPLES, names = {}, {}
   if group == "composites" then
-    for _, g in ipairs(composites.groups()) do
-      for name, make in pairs(require("lib.kit.composites.samples_" .. g)) do
+    for _, g in ipairs { "inputs", "pickers", "surfaces", "layouts" } do
+      for name, make in pairs(require("gallery.composites_" .. g)) do
         SAMPLES[name] = function() return make(kit, composites) end
       end
     end
@@ -92,19 +92,11 @@ local SOURCE = [[
         if not SAMPLES[name] then SAMPLES[name] = function() return make(kit) end end
       end
     end
-    for _, g in ipairs(display.GROUPS) do samples("lib.kit.display.samples_" .. g) end
-    for _, g in ipairs(display.DOMAINS) do samples("lib.kit.domain.samples_" .. g) end
+    for _, g in ipairs(display.GROUPS) do samples("gallery.display_" .. g) end
     local seen = {}
     for _, list in pairs(contract.display) do
       for _, entry in ipairs(list) do
         if entry.stage <= contract.stage and not seen[entry.fn] then seen[entry.fn] = true names[#names + 1] = entry.fn end
-      end
-    end
-    for _, domain in pairs(contract.domain) do
-      if (domain.stage or 1) <= contract.stage then
-        for _, fn in ipairs(domain.widgets or {}) do
-          if not seen[fn] then seen[fn] = true names[#names + 1] = fn end
-        end
       end
     end
   end

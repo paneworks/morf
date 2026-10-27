@@ -2,10 +2,9 @@
 --
 -- `check.kit(kit)` lists what the kit lacks of everything the contract
 -- requires at its current stage: the kit's functions, the display widgets'
--- functions, and a skin for each archetype that has arrived.
--- `check.catalogue()` lists catalogue rows whose owner the contract does
--- not define. Both return a list of problems, empty when all is well.
--- `morf check --kit` runs both inside a loaded configuration.
+-- functions, and a skin for each archetype that has arrived. It returns a
+-- list of problems, empty when all is well. `morf check --kit` runs it
+-- inside a loaded configuration.
 
 local contract = require("lib.kit.contract")
 local M = {}
@@ -37,16 +36,6 @@ function M.kit(kit)
       problems[#problems + 1] = ("composite %s: lib.kit.composites.%s is missing"):format(name, name)
     end
   end
-  -- Domain instruments drawn over the display widgets.
-  for area, domain in pairs(contract.domain) do
-    if due(domain) then
-      for _, fn in ipairs(domain.widgets or {}) do
-        if type(kit[fn]) ~= "function" then
-          problems[#problems + 1] = ("domain %s: kit.%s is missing"):format(area, fn)
-        end
-      end
-    end
-  end
   for name, archetype in pairs(contract.archetypes) do
     if due(archetype) then
       local skins = kit.skins
@@ -61,31 +50,6 @@ function M.kit(kit)
   return problems
 end
 
---- Whether `owner` (a catalogue row's) names something the contract has.
-local function defined(owner)
-  if contract.archetypes[owner] then return true end
-  local kind, what = owner:match("^(%a+):(.+)$")
-  if kind == "display" then return contract.display[what] ~= nil end
-  if kind == "composite" then return contract.composites[what] ~= nil end
-  if kind == "domain" then return contract.domain[what] ~= nil end
-  if kind == "engine" then
-    for _, name in ipairs(contract.engine) do if name == what then return true end end
-    return false
-  end
-  return owner == "platform"
-end
-
---- Catalogue rows whose owner the contract does not define.
-function M.catalogue()
-  local problems = {}
-  for _, row in ipairs(require("lib.kit.catalogue")) do
-    if not defined(row[4]) then
-      problems[#problems + 1] = ("catalogue #%d %s: owner %s is not in the contract"):format(row[1], row[2], row[4])
-    end
-  end
-  return problems
-end
-
 --- How many contract entries are due, and how many the kit has.
 function M.summary(kit)
   local due_count, missing = 0, #M.kit(kit)
@@ -94,9 +58,6 @@ function M.summary(kit)
     for _, entry in ipairs(list) do if due(entry) then due_count = due_count + 1 end end
   end
   for _, archetype in pairs(contract.archetypes) do if due(archetype) then due_count = due_count + 1 end end
-  for _, domain in pairs(contract.domain) do
-    if due(domain) then due_count = due_count + #(domain.widgets or {}) end
-  end
   for _, composite in pairs(contract.composites) do if due(composite) then due_count = due_count + 1 end end
   return { stage = contract.stage, due = due_count, missing = missing }
 end

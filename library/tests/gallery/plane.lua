@@ -1,4 +1,4 @@
--- Gallery samples for the Plane widgets (lib.kit.samples): each one as a
+-- Gallery samples for the Plane widgets (library/tests/gallery): each one as a
 -- configuration would make it, at a value that shows its look.
 local S = {}
 

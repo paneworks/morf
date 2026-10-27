@@ -18,7 +18,7 @@ local function later(name)
   return function() if known:get() then return box end end, function(b) box = b known:set(true) end
 end
 
-local function picture(w, h) return require("lib.kit.samples.canvas").picture(w, h) end
+local function picture(w, h) return require("gallery.canvas").picture(w, h) end
 
 -- A row of a property and its value, the value read live.
 local function prop(kit, name, value)
