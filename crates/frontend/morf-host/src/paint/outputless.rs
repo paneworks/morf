@@ -7,7 +7,7 @@
 //! `morf.surface.outputless = true` is run here instead, once, in a runtime
 //! with no surface: `morf.screens` is empty, nothing it declares is mapped,
 //! and timers, IPC, D-Bus, file watches, processes and the compositor's
-//! non-surface services (idle, clipboard, output power, gamma, toplevels)
+//! non-surface services (idle, clipboard, output power, toplevels)
 //! work as ever. It holds a Wayland connection of its own and hears an output
 //! arrive on it; the supervisor then stops it and starts the per-output
 //! runtimes afresh, handing them what it kept with `morf.reloadable`.
@@ -194,9 +194,6 @@ fn drive_outputless(
                 })?;
                 if let Some(desktop) = desktop.as_deref_mut() {
                     refresh_idle_timeouts(runtime, desktop);
-                    if desktop.capabilities().gamma_control {
-                        let _ = desktop.reset_gamma(None);
-                    }
                 }
             }
         }

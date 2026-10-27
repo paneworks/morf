@@ -5,7 +5,6 @@
 ---@field animation Morf.Animation
 ---@field app_id string
 ---@field apps Morf.Apps
----@field archive Morf.Archive
 ---@field args Morf.Args
 ---@field audio Morf.Audio
 ---@field broadcast fun(...): any
@@ -22,7 +21,6 @@
 ---@field executable string
 ---@field focus Morf.Focus
 ---@field fs Morf.Fs
----@field gamma Morf.Gamma
 ---@field geometry Morf.Geometry
 ---@field greetd Morf.Greetd
 ---@field http Morf.Http
@@ -76,8 +74,6 @@
 ---@field virtual_keyboard Morf.Virtual_keyboard
 ---@field window Morf.Window
 ---@field windows Morf.Windows
----@field workspace Morf.Workspace
----@field workspaces Morf.Workspaces
 ---@field xkb Morf.Xkb
 
 ---@class Morf.Animation
@@ -98,10 +94,6 @@
 
 ---@class Morf.Apps
 ---@field entries fun(...): any
-
----@class Morf.Archive
----@field tar fun(...): any
----@field tar_read fun(...): any
 
 ---@class Morf.Args
 
@@ -202,11 +194,6 @@
 ---@field view fun(...): any
 ---@field watch fun(...): any
 ---@field write fun(...): any
-
----@class Morf.Gamma
----@field reset fun(...): any
----@field set fun(...): any
----@field supported fun(...): any
 
 ---@class Morf.Geometry
 ---@field arc fun(...): any
@@ -523,13 +510,6 @@
 ---@field toplevel fun(...): any
 
 ---@class Morf.Windows
-
----@class Morf.Workspace
----@field activate fun(...): any
----@field assign fun(...): any
----@field remove fun(...): any
-
----@class Morf.Workspaces
 
 ---@class Morf.Xkb
 ---@field include_paths fun(...): any

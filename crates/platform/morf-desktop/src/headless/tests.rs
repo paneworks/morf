@@ -2,19 +2,6 @@ use std::sync::Arc;
 
 use super::*;
 
-fn workspace(key: &str, output: &str, active: bool) -> WorkspaceInfo {
-    WorkspaceInfo {
-        key: key.to_owned(),
-        name: key.to_owned(),
-        output: output.to_owned(),
-        active,
-        activatable: true,
-        removable: true,
-        assignable: true,
-        ..WorkspaceInfo::default()
-    }
-}
-
 fn window(identifier: &str) -> ToplevelInfo {
     ToplevelInfo {
         identifier: identifier.to_owned(),
@@ -27,62 +14,29 @@ fn window(identifier: &str) -> ToplevelInfo {
 fn reports_nothing_and_refuses_everything_by_default() {
     let mut desktop = HeadlessDesktop::new();
     assert_eq!(desktop.capabilities(), DesktopCapabilities::default());
-    assert!(desktop.workspaces().is_empty() && desktop.toplevels().is_empty());
-    assert!(!desktop.take_workspaces_changed() && !desktop.take_toplevels_changed());
-    assert!(!desktop.activate_workspace("1"));
+    assert!(desktop.toplevels().is_empty());
+    assert!(!desktop.take_toplevels_changed());
     assert!(!desktop.set_selection(vec![("text/plain".into(), Arc::new(b"x".to_vec()))], false));
     assert!(!desktop.capture_output_image(1, false, None));
-    assert!(desktop.set_gamma(None, GammaSettings::default()).is_err());
     assert!(!desktop.set_output_power(OutputPowerMode::Off));
     assert!(!desktop.set_idle_timeouts(&[(1000, false)]));
     assert!(desktop.next_event().is_none());
-    assert_eq!(desktop.requests().len(), 6);
+    assert_eq!(desktop.requests().len(), 4);
     assert_eq!(desktop.idle_timeouts(), &[(1000, false)]);
 }
 
 #[test]
 fn records_requests_in_order() {
     let mut desktop = HeadlessDesktop::new();
-    desktop.activate_workspace("2");
     desktop.control_toplevel("a", ToplevelAction::Close);
     assert_eq!(
         desktop.take_requests(),
-        vec![
-            DesktopRequest::ActivateWorkspace("2".into()),
-            DesktopRequest::ControlToplevel {
-                identifier: "a".into(),
-                action: ToplevelAction::Close,
-            },
-        ]
+        vec![DesktopRequest::ControlToplevel {
+            identifier: "a".into(),
+            action: ToplevelAction::Close,
+        },]
     );
     assert!(desktop.requests().is_empty());
-}
-
-#[test]
-fn activating_a_workspace_moves_the_active_one_on_its_output() {
-    let mut desktop = HeadlessDesktop::new()
-        .with_capabilities(DesktopCapabilities::ALL)
-        .with_outputs(["A", "B"])
-        .with_workspaces(vec![
-            workspace("2", "A", false),
-            workspace("1", "A", true),
-            workspace("3", "B", true),
-        ]);
-    assert!(desktop.take_workspaces_changed());
-    assert!(desktop.activate_workspace("2"));
-    assert!(desktop.take_workspaces_changed());
-    let listed = desktop.workspaces();
-    let active: Vec<_> = listed
-        .iter()
-        .filter(|w| w.active)
-        .map(|w| w.key.as_str())
-        .collect();
-    assert_eq!(active, ["2", "3"]);
-    assert!(!desktop.activate_workspace("missing"));
-    assert!(desktop.assign_workspace("1", "B"));
-    assert!(!desktop.assign_workspace("1", "C"));
-    assert!(desktop.remove_workspace("3"));
-    assert_eq!(desktop.workspaces().len(), 2);
 }
 
 #[test]

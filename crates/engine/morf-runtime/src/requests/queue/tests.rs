@@ -18,29 +18,6 @@ fn handler(id: u64) -> Handler {
 }
 
 #[test]
-fn only_the_last_gamma_for_an_output_waits() {
-    let mut requests = Requests::default();
-    for temperature in [3000.0, 4000.0, 5000.0] {
-        requests
-            .queue_gamma(GammaRequest {
-                output: Some("DP-1".into()),
-                set: Some((temperature, 1.0, 1.0)),
-            })
-            .unwrap();
-    }
-    requests
-        .queue_gamma(GammaRequest {
-            output: None,
-            set: None,
-        })
-        .unwrap();
-    let taken = requests.take_gamma_requests();
-    assert_eq!(taken.len(), 2);
-    assert_eq!(taken[0].set, Some((5000.0, 1.0, 1.0)));
-    assert!(requests.take_gamma_requests().is_empty());
-}
-
-#[test]
 fn a_full_queue_refuses_with_the_limit_named() {
     let mut requests = Requests::default();
     for _ in 0..64 {

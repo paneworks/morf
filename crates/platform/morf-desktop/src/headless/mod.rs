@@ -3,7 +3,7 @@
 //!
 //! Deterministic by construction. Every request is recorded; one for a
 //! protocol not switched on is refused, as a compositor without it would.
-//! Switched on, each acts on the stand-in's own lists (workspaces, windows,
+//! Switched on, each acts on the stand-in's own lists (windows and
 //! the selection) the way a compositor would, and a capture answers at once
 //! with a blank frame.
 
@@ -18,8 +18,8 @@ use morf_app::OfferInfo;
 use crate::data_control::OFFER_ID_BASE;
 use crate::desktop::IdleTimeout;
 use crate::{
-    CaptureBuffer, Desktop, DesktopCapabilities, DesktopEvent, GammaSettings, OutputPowerMode,
-    ScreencopyFormat, ScreencopyFrame, ToplevelAction, ToplevelInfo, WorkspaceInfo,
+    CaptureBuffer, Desktop, DesktopCapabilities, DesktopEvent, OutputPowerMode, ScreencopyFormat,
+    ScreencopyFrame, ToplevelAction, ToplevelInfo,
 };
 
 /// One request a [`HeadlessDesktop`] was handed, in the order it came.
@@ -58,21 +58,8 @@ pub enum DesktopRequest {
     AttachCaptureShm {
         request_id: u64,
     },
-    SetGamma {
-        output: Option<String>,
-        settings: GammaSettings,
-    },
-    ResetGamma {
-        output: Option<String>,
-    },
     IdleTimeouts(Vec<IdleTimeout>),
     OutputPower(OutputPowerMode),
-    ActivateWorkspace(String),
-    RemoveWorkspace(String),
-    AssignWorkspace {
-        key: String,
-        output: String,
-    },
     ControlToplevel {
         identifier: String,
         action: ToplevelAction,
@@ -91,8 +78,6 @@ struct Selection {
 pub struct HeadlessDesktop {
     capabilities: DesktopCapabilities,
     outputs: Vec<String>,
-    workspaces: Vec<WorkspaceInfo>,
-    workspaces_changed: bool,
     toplevels: Vec<ToplevelInfo>,
     toplevels_changed: bool,
     selections: [Option<Selection>; 2],
@@ -117,13 +102,6 @@ impl HeadlessDesktop {
     /// The outputs a request may name.
     pub fn with_outputs<I: IntoIterator<Item = S>, S: Into<String>>(mut self, names: I) -> Self {
         self.outputs = names.into_iter().map(Into::into).collect();
-        self
-    }
-
-    /// Workspaces to list, reported as a change on the next look.
-    pub fn with_workspaces(mut self, workspaces: Vec<WorkspaceInfo>) -> Self {
-        self.workspaces = workspaces;
-        self.workspaces_changed = true;
         self
     }
 
@@ -174,12 +152,6 @@ impl HeadlessDesktop {
             }),
         });
         true
-    }
-
-    fn workspace_mut(&mut self, key: &str) -> Option<&mut WorkspaceInfo> {
-        self.workspaces
-            .iter_mut()
-            .find(|workspace| workspace.key == key)
     }
 }
 
@@ -316,38 +288,6 @@ impl Desktop for HeadlessDesktop {
         false
     }
 
-    fn set_gamma(&mut self, output: Option<&str>, settings: GammaSettings) -> Result<(), String> {
-        self.requests.push(DesktopRequest::SetGamma {
-            output: output.map(str::to_owned),
-            settings,
-        });
-        if !self.capabilities.gamma_control {
-            return Err("this compositor has no gamma control".to_owned());
-        }
-        match output {
-            Some(name) if !self.knows_output(Some(name)) => {
-                Err(format!("no output named `{name}`"))
-            }
-            _ => Ok(()),
-        }
-    }
-
-    fn reset_gamma(&mut self, output: Option<&str>) -> Result<(), String> {
-        self.requests.push(DesktopRequest::ResetGamma {
-            output: output.map(str::to_owned),
-        });
-        match output {
-            Some(name) if !self.knows_output(Some(name)) => {
-                Err(format!("no output named `{name}`"))
-            }
-            _ => Ok(()),
-        }
-    }
-
-    fn take_gamma_failures(&mut self) -> Vec<String> {
-        Vec::new()
-    }
-
     fn set_idle_timeouts(&mut self, timeouts: &[IdleTimeout]) -> bool {
         self.update_idle_timeouts(timeouts)
     }
@@ -362,66 +302,6 @@ impl Desktop for HeadlessDesktop {
     fn set_output_power(&mut self, mode: OutputPowerMode) -> bool {
         self.requests.push(DesktopRequest::OutputPower(mode));
         self.capabilities.output_power
-    }
-
-    fn workspaces(&self) -> Vec<WorkspaceInfo> {
-        let mut workspaces = self.workspaces.clone();
-        workspaces.sort_by(|a, b| a.coordinates.cmp(&b.coordinates).then(a.key.cmp(&b.key)));
-        workspaces
-    }
-
-    fn take_workspaces_changed(&mut self) -> bool {
-        std::mem::take(&mut self.workspaces_changed)
-    }
-
-    fn activate_workspace(&mut self, key: &str) -> bool {
-        self.requests
-            .push(DesktopRequest::ActivateWorkspace(key.to_owned()));
-        if !self.capabilities.workspaces {
-            return false;
-        }
-        let Some(output) = self
-            .workspace_mut(key)
-            .filter(|workspace| workspace.activatable)
-            .map(|workspace| workspace.output.clone())
-        else {
-            return false;
-        };
-        for workspace in &mut self.workspaces {
-            if workspace.output == output {
-                workspace.active = workspace.key == key;
-            }
-        }
-        self.workspaces_changed = true;
-        true
-    }
-
-    fn remove_workspace(&mut self, key: &str) -> bool {
-        self.requests
-            .push(DesktopRequest::RemoveWorkspace(key.to_owned()));
-        let before = self.workspaces.len();
-        if self.capabilities.workspaces {
-            self.workspaces
-                .retain(|workspace| workspace.key != key || !workspace.removable);
-        }
-        self.workspaces_changed |= self.workspaces.len() != before;
-        self.workspaces.len() != before
-    }
-
-    fn assign_workspace(&mut self, key: &str, output: &str) -> bool {
-        self.requests.push(DesktopRequest::AssignWorkspace {
-            key: key.to_owned(),
-            output: output.to_owned(),
-        });
-        if !self.capabilities.workspaces || !self.has_output(output) {
-            return false;
-        }
-        let Some(workspace) = self.workspace_mut(key).filter(|w| w.assignable) else {
-            return false;
-        };
-        workspace.output = output.to_owned();
-        self.workspaces_changed = true;
-        true
     }
 
     fn toplevels(&self) -> Vec<ToplevelInfo> {

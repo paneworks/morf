@@ -5,8 +5,8 @@ use std::sync::Arc;
 use morf_app::DesktopLink;
 
 use crate::{
-    CaptureBuffer, Desktop, DesktopCapabilities, DesktopEvent, GammaSettings, IdleTimeout,
-    OutputPowerMode, ToplevelAction, ToplevelInfo, WaylandDesktop, WorkspaceInfo,
+    CaptureBuffer, Desktop, DesktopCapabilities, DesktopEvent, IdleTimeout, OutputPowerMode,
+    ToplevelAction, ToplevelInfo, WaylandDesktop,
 };
 
 /// Binds the desktop protocols the compositor behind `link` offers; a
@@ -27,10 +27,8 @@ impl Desktop for WaylandDesktop {
             image_capture: self.supports_image_capture(),
             window_capture: self.supports_window_capture(),
             dmabuf_capture: self.supports_dmabuf_capture(),
-            gamma_control: self.supports_gamma_control(),
             idle_notify: self.supports_idle_notify(),
             output_power: self.supports_output_power(),
-            workspaces: self.supports_workspaces(),
             toplevels: self.supports_toplevels(),
             toplevel_control: self.supports_toplevel_control(),
         }
@@ -97,18 +95,6 @@ impl Desktop for WaylandDesktop {
         WaylandDesktop::attach_capture_shm(self, request_id)
     }
 
-    fn set_gamma(&mut self, output: Option<&str>, settings: GammaSettings) -> Result<(), String> {
-        WaylandDesktop::set_gamma(self, output, settings)
-    }
-
-    fn reset_gamma(&mut self, output: Option<&str>) -> Result<(), String> {
-        WaylandDesktop::reset_gamma(self, output)
-    }
-
-    fn take_gamma_failures(&mut self) -> Vec<String> {
-        WaylandDesktop::take_gamma_failures(self)
-    }
-
     fn set_idle_timeouts(&mut self, timeouts: &[IdleTimeout]) -> bool {
         WaylandDesktop::set_idle_timeouts(self, timeouts)
     }
@@ -119,26 +105,6 @@ impl Desktop for WaylandDesktop {
 
     fn set_output_power(&mut self, mode: OutputPowerMode) -> bool {
         WaylandDesktop::set_output_power(self, mode)
-    }
-
-    fn workspaces(&self) -> Vec<WorkspaceInfo> {
-        WaylandDesktop::workspaces(self)
-    }
-
-    fn take_workspaces_changed(&mut self) -> bool {
-        WaylandDesktop::take_workspaces_changed(self)
-    }
-
-    fn activate_workspace(&mut self, key: &str) -> bool {
-        WaylandDesktop::activate_workspace(self, key)
-    }
-
-    fn remove_workspace(&mut self, key: &str) -> bool {
-        WaylandDesktop::remove_workspace(self, key)
-    }
-
-    fn assign_workspace(&mut self, key: &str, output: &str) -> bool {
-        WaylandDesktop::assign_workspace(self, key, output)
     }
 
     fn toplevels(&self) -> Vec<ToplevelInfo> {

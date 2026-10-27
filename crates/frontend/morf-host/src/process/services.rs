@@ -76,38 +76,6 @@ pub fn apply_output_power_requests(runtime: &mut Runtime, desktop: &mut dyn Desk
     }
 }
 
-pub fn apply_gamma_requests(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
-    let requests = runtime.take_gamma_requests();
-    if !desktop.capabilities().gamma_control {
-        if !requests.is_empty() {
-            runtime.warn("morf.gamma: this compositor has no gamma control".to_owned());
-        }
-        return;
-    }
-    for request in requests {
-        let output = request.output.as_deref();
-        let result = match request.set {
-            Some((temperature, brightness, gamma)) => desktop.set_gamma(
-                output,
-                morf_desktop::GammaSettings {
-                    temperature,
-                    brightness,
-                    gamma,
-                },
-            ),
-            None => desktop.reset_gamma(output),
-        };
-        if let Err(error) = result {
-            runtime.warn(format!("morf.gamma: {error}"));
-        }
-    }
-    for output in desktop.take_gamma_failures() {
-        runtime.warn(format!(
-            "morf.gamma: the compositor refused gamma control of `{output}` (another client may hold it)"
-        ));
-    }
-}
-
 pub fn apply_clipboard_requests(
     runtime: &mut Runtime,
     client: &mut dyn Backend,

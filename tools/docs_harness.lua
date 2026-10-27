@@ -25,11 +25,11 @@ local BLOCKED = {
   network = { "socket.connect", "socket.open", "socket.server", "socket.request", "broadcast",
               "http.get", "http.post", "http.query", "http.request", "dbus", "greetd",
               "pam", "status_notifier", "idle.inhibit" },
-  session = { "quit", "reload", "audio", "clipboard.set", "gamma", "output_power",
+  session = { "quit", "reload", "audio", "clipboard.set", "output_power",
               "virtual_keyboard", "screencopy", "lock.surface", "toplevels.activate",
               "toplevels.close", "toplevels.set_fullscreen", "toplevels.set_maximized",
               "toplevels.set_minimized", "toplevels.set_minimize_target",
-              "workspace", "input_method", "shortcuts.inhibit", "drag.start" },
+              "input_method", "shortcuts.inhibit", "drag.start" },
 }
 
 local function record(path, kind)

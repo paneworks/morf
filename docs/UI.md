@@ -319,7 +319,7 @@ While the compositor offers no output, the shell runs the file once more, in
 one runtime of its own: `morf.screens` is empty, `morf.capabilities.outputless`
 is `true`, and every surface, window and layer it declares stays unmapped
 (no root is needed). Timers, `morf ipc`, D-Bus, file watches, processes, the
-idle notifications, clipboard, output power and gamma all work, and
+idle notifications, clipboard and output power all work, and
 `morf.window.screens_revision()` moves as ever. When an output appears that
 runtime is stopped and the per-output ones start from scratch, as on any
 hotplug; values kept with `morf.reloadable(name, default)` go across in

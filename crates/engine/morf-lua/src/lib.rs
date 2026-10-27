@@ -16,7 +16,6 @@ pub use self::vm::config::reload_band::{BandLayout, ReloadFailure};
 pub use self::vm::profile;
 pub use self::vm::state_cell::{StateRef, StateRefMut};
 
-pub use self::api::desktop::gamma::GammaRequest;
 pub use self::api::input::focus::FocusReason;
 pub use self::api::io::broadcast::set_shell_socket;
 #[cfg(feature = "kit")]

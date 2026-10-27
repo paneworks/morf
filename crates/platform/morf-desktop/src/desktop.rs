@@ -3,10 +3,7 @@
 
 use std::sync::Arc;
 
-use crate::{
-    CaptureBuffer, DesktopEvent, GammaSettings, OutputPowerMode, ToplevelAction, ToplevelInfo,
-    WorkspaceInfo,
-};
+use crate::{CaptureBuffer, DesktopEvent, OutputPowerMode, ToplevelAction, ToplevelInfo};
 
 /// An idle threshold: milliseconds, and whether it counts input only
 /// (ignoring whatever inhibits idleness).
@@ -28,10 +25,8 @@ pub struct DesktopCapabilities {
     pub window_capture: bool,
     /// Captures drawn straight into a dmabuf (the protocol side only).
     pub dmabuf_capture: bool,
-    pub gamma_control: bool,
     pub idle_notify: bool,
     pub output_power: bool,
-    pub workspaces: bool,
     /// Other windows listed.
     pub toplevels: bool,
     /// Other windows acted on.
@@ -47,10 +42,8 @@ impl DesktopCapabilities {
         image_capture: true,
         window_capture: true,
         dmabuf_capture: true,
-        gamma_control: true,
         idle_notify: true,
         output_power: true,
-        workspaces: true,
         toplevels: true,
         toplevel_control: true,
     };
@@ -61,7 +54,7 @@ impl DesktopCapabilities {
     }
 
     /// The capabilities as `morf.capabilities` names them.
-    pub fn named(&self) -> [(&'static str, bool); 12] {
+    pub fn named(&self) -> [(&'static str, bool); 10] {
         [
             ("data_control", self.data_control),
             ("primary_selection", self.primary_selection),
@@ -69,10 +62,8 @@ impl DesktopCapabilities {
             ("image_capture", self.image_capture),
             ("window_capture", self.window_capture),
             ("dmabuf_capture", self.dmabuf_capture),
-            ("gamma_control", self.gamma_control),
             ("idle_notify", self.idle_notify),
             ("output_power", self.output_power),
-            ("workspaces", self.workspaces),
             ("toplevels", self.toplevels),
             ("toplevel_control", self.toplevel_control),
         ]
@@ -132,15 +123,6 @@ pub trait Desktop {
     /// Answers a [`DesktopEvent::CaptureOffer`] with shared memory.
     fn attach_capture_shm(&mut self, request_id: u64) -> bool;
 
-    // Gamma.
-
-    /// Sets the ramps of the named output, or the shell's own, or all.
-    fn set_gamma(&mut self, output: Option<&str>, settings: GammaSettings) -> Result<(), String>;
-    /// Gives the named output (or every one changed) its own ramps back.
-    fn reset_gamma(&mut self, output: Option<&str>) -> Result<(), String>;
-    /// Outputs whose gamma control was refused since the last call.
-    fn take_gamma_failures(&mut self) -> Vec<String>;
-
     // Idle and output power.
 
     /// Replaces the idle thresholds, every clock started again.
@@ -149,17 +131,6 @@ pub trait Desktop {
     fn update_idle_timeouts(&mut self, timeouts: &[IdleTimeout]) -> bool;
     /// Powers the shell's own output, or every one, on or off.
     fn set_output_power(&mut self, mode: OutputPowerMode) -> bool;
-
-    // Workspaces.
-
-    /// Every workspace, in a stable order.
-    fn workspaces(&self) -> Vec<WorkspaceInfo>;
-    /// Whether the list changed since this was last asked.
-    fn take_workspaces_changed(&mut self) -> bool;
-    fn activate_workspace(&mut self, key: &str) -> bool;
-    fn remove_workspace(&mut self, key: &str) -> bool;
-    /// Moves a workspace to the group on `output`.
-    fn assign_workspace(&mut self, key: &str, output: &str) -> bool;
 
     // Other windows.
 

@@ -188,11 +188,6 @@ morf.virtual_keyboard	undocumented: virtual-keyboard protocol for on-screen keyb
 morf.virtual_keyboard.key	undocumented: virtual-keyboard protocol for on-screen keyboards
 morf.virtual_keyboard.modifiers	undocumented: virtual-keyboard protocol for on-screen keyboards
 morf.window.region	undocumented: window kinds beyond toplevel and popup; no guide section yet
-morf.workspace	undocumented: workspace actions and snapshot; no guide section yet
-morf.workspace.activate	undocumented: workspace actions and snapshot; no guide section yet
-morf.workspace.assign	undocumented: workspace actions and snapshot; no guide section yet
-morf.workspace.remove	undocumented: workspace actions and snapshot; no guide section yet
-morf.workspaces	undocumented: workspace actions and snapshot; no guide section yet
 morf.xkb	undocumented: keymap compilation for keyboard layouts
 morf.xkb.include_paths	undocumented: keymap compilation for keyboard layouts
 ui.Icon	undocumented: constructor with no guide section yet
@@ -200,7 +195,6 @@ ui.Inset	undocumented: constructor with no guide section yet
 +morf.audio.sinks	dynamic: device list models served through __index in api/media/audio.rs
 +morf.lua	dynamic: the file a shell names the engine it needs in (docs/IO.md), not an API name
 +morf.capabilities.backdrop_blur	dynamic: compositor capability filled by the host (turn/start.rs), not a types field
-+morf.capabilities.gamma_control	dynamic: compositor capability filled by the host, not a types field
 +morf.capabilities.hdr	dynamic: compositor capability filled by the host, not a types field
 +morf.capabilities.hdr_transfer	dynamic: compositor capability filled by the host, not a types field
 +morf.capabilities.idle_inhibit	dynamic: compositor capability filled by the host, not a types field

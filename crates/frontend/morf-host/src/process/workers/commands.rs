@@ -167,8 +167,7 @@ pub struct WorkerUpdate {
     pub reset_input: bool,
     pub refresh_idle: bool,
     pub recreate_surface: bool,
-    /// A new configuration replaced the old one: what the old one set on
-    /// the outputs (their gamma) goes with it.
+    /// A new configuration replaced the old one.
     pub reloaded: bool,
     /// The runtime a reload replaced. Tearing a large one down takes tens
     /// of milliseconds, which a host spends after the new one's first

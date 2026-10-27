@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use crate::handler::Handler;
 
 use super::{
-    ClipboardRequest, DragRequest, GammaRequest, InputMethodRequest, OfferReadRequest,
-    ScreencopyRequest, TextInputRequest, ToplevelRequest, VirtualKeyboardRequest, WorkspaceRequest,
+    ClipboardRequest, DragRequest, InputMethodRequest, OfferReadRequest, ScreencopyRequest,
+    TextInputRequest, ToplevelRequest, VirtualKeyboardRequest,
 };
 
 /// How many of most requests may wait for the host at once: more in one turn
@@ -42,7 +42,6 @@ pub struct Requests {
     pub screencopy_names: HashMap<u64, String>,
     pub screencopy_releases: Vec<String>,
     pub next_screencopy: u64,
-    pub gamma_requests: Vec<GammaRequest>,
     pub output_power_requests: Vec<bool>,
     /// Idle subscriptions by `(timeout ms, ignore inhibitors)`.
     pub idle_callbacks: HashMap<(u32, bool), Vec<(u64, Handler)>>,
@@ -53,7 +52,6 @@ pub struct Requests {
     pub shortcuts_inhibited: bool,
     pub shortcuts_inhibit_changed: bool,
     pub shortcuts_callbacks: Vec<Handler>,
-    pub workspace_requests: Vec<WorkspaceRequest>,
     pub toplevel_requests: Vec<ToplevelRequest>,
     pub virtual_keyboard_requests: Vec<VirtualKeyboardRequest>,
     pub input_method_enable_requested: bool,
@@ -75,19 +73,6 @@ fn bounded<T>(queue: &mut Vec<T>, limit: usize, item: T, what: &str) -> Result<(
 }
 
 impl Requests {
-    /// Queues a gamma change. Only the last word for an output matters: a
-    /// slider dragged through a hundred temperatures in one turn sends one
-    /// ramp.
-    pub fn queue_gamma(&mut self, request: GammaRequest) -> Result<(), String> {
-        if self.gamma_requests.len() >= MAX_QUEUED {
-            return Err("gamma request limit reached".to_owned());
-        }
-        self.gamma_requests
-            .retain(|queued| queued.output != request.output);
-        self.gamma_requests.push(request);
-        Ok(())
-    }
-
     pub fn queue_clipboard(&mut self, request: ClipboardRequest) -> Result<(), String> {
         bounded(
             &mut self.clipboard_requests,
@@ -114,15 +99,6 @@ impl Requests {
             MAX_QUEUED,
             on,
             "output power",
-        )
-    }
-
-    pub fn queue_workspace(&mut self, request: WorkspaceRequest) -> Result<(), String> {
-        bounded(
-            &mut self.workspace_requests,
-            MAX_QUEUED,
-            request,
-            "workspace",
         )
     }
 
@@ -229,10 +205,6 @@ impl Requests {
         std::mem::take(&mut self.shortcuts_inhibit_changed).then_some(self.shortcuts_inhibited)
     }
 
-    pub fn take_gamma_requests(&mut self) -> Vec<GammaRequest> {
-        std::mem::take(&mut self.gamma_requests)
-    }
-
     pub fn take_output_power_requests(&mut self) -> Vec<bool> {
         std::mem::take(&mut self.output_power_requests)
     }
@@ -259,10 +231,6 @@ impl Requests {
 
     pub fn take_screencopy_releases(&mut self) -> Vec<String> {
         std::mem::take(&mut self.screencopy_releases)
-    }
-
-    pub fn take_workspace_requests(&mut self) -> Vec<WorkspaceRequest> {
-        std::mem::take(&mut self.workspace_requests)
     }
 
     pub fn take_toplevel_requests(&mut self) -> Vec<ToplevelRequest> {

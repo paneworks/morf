@@ -307,9 +307,6 @@ impl Host {
         for surface in self.state.windows.values_mut() {
             surface.layout = None;
         }
-        if self.desktop.capabilities().gamma_control {
-            let _ = self.desktop.reset_gamma(None);
-        }
         Ok(())
     }
 

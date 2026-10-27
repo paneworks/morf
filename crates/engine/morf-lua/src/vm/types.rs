@@ -187,7 +187,7 @@ pub struct Runtime {
     pub(crate) cover: RefCell<Option<crate::vm::config::cover::Cover>>,
 }
 
-pub use morf_runtime::requests::{ReloadRequest, ToplevelRequest, WorkspaceRequest};
+pub use morf_runtime::requests::{ReloadRequest, ToplevelRequest};
 
 #[derive(Clone, Copy)]
 pub(crate) enum StorageKind {
