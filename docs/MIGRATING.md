@@ -15,16 +15,13 @@ repository. "—" means deleted.
 | `lib.integrations.hyprland` | `lib.compositor.hyprland` |
 | `lib.integrations.hyprland_config` | `lib.compositor.hyprland_config` |
 | `lib.integrations.claude_usage`, `lib.integrations.github` | — (impasto's own `services/`) |
-| `lib.util.auth`, `lib.util.authsteps`, `lib.util.pattern` | `lib.shell.auth`, `lib.shell.auth.steps`, `lib.shell.auth.pattern` |
-| `lib.util.capture`, `lib.util.annotation` | `lib.shell.capture`, `lib.shell.capture.annotation` |
 | `lib.util.osk`, `lib.util.board` | `lib.shell.osk` |
-| `lib.util.settings`, `lib.util.settings_pages` | `lib.shell.settings`, `lib.shell.settings.pages` |
-| `lib.util.emoji`, `lib.util.emoji_data` | `lib.shell.emoji`, `lib.shell.emoji.data` |
-| `lib.util.frecency`, `lib.util.units` | `lib.shell.launcher.frecency`, `lib.shell.launcher.units` |
-| `lib.util.equalizer`, `lib.util.spectrum`, `lib.util.ringer` | `lib.shell.audio.equalizer`, `.spectrum`, `.ringer` |
 | `lib.util.material`, `lib.util.m3shapes` | `lib.theme.material`, `lib.theme.shapes` |
 | `lib.util.palette` | — (impasto's own `services/palette.lua`) |
 | `lib.util.align`, `lib.util.component` | — (inlined where they were used) |
+| `lib.util.auth`, `authsteps`, `pattern`, `capture`, `annotation`, `settings`, `settings_pages`, `emoji`, `emoji_data`, `frecency`, `units`, `equalizer`, `spectrum`, `ringer`, `remote`, `channel` | — (no caller here; a shell that used them keeps its own copy) |
+| `lib.services.accounts`, `keyboards`, `keyring_agent`, `modem`, `sessions`, `vpns` | — (likewise) |
+| `lib.integrations.clipse`, `lule`, `lyrics`, `taskwarrior`, `tor` | — (likewise) |
 | `lib.testing.fake_hyprland` | `lib.testing.hyprland` |
 | `lib.kit.domain.*`, `lib.kit.catalogue`, `lib.kit.samples.*` | — |
 | — | `lib.util.clock` (`clock.format(pattern)` at the pattern's grain) |

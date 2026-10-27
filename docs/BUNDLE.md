@@ -38,7 +38,7 @@ In this order:
      greet` lands at `greet/…`);
    - a path from anywhere else goes in by its own name (`--with
      library/lib` lands at `lib/…`), which is exactly where
-     `require("lib.shell.auth")` looks.
+     `require("lib.<part>.<name>")` looks.
 4. **Every font the configuration names.** morf runs the configuration once,
    headless, reads the `font_family` of every node it built, and carries
    every file of each family into `fonts/`. Generic names (`sans-serif`,

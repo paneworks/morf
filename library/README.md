@@ -48,9 +48,9 @@ lib/
   theme/          colour schemes and shape policy a theme builds on
   services/       system services over D-Bus and the OS, and the binder that runs them
   compositor/     compositor IPC (Hyprland today)
-  integrations/   third-party tools (weather, lyrics, taskwarrior, lule, tor, clipse, packages)
-  shell/          shell features that are not widgets: auth, capture, osk, settings, emoji, launcher, audio
-  util/           generic helpers: poll, remote, channel, clock
+  integrations/   third-party tools (weather, packages)
+  shell/          shell features that are not widgets: the on-screen keyboard
+  util/           generic helpers: poll, clock
   testing/        fakes a shell's own specs can use
 ```
 
@@ -459,63 +459,6 @@ end, function(ok, replies) end)
 
 ## integrations
 
-### integrations.taskwarrior
-
-`taskwarrior.new()` connects to the installed `task` CLI using its normal
-configuration and data location. `tasks`, `busy`, `error`, `loaded` and
-`revision` are signals. `refresh()` exports pending and waiting tasks;
-`watch(true)` refreshes every ten seconds, and `watch(false)` stops it.
-
-`save(uuid_or_nil, fields, callback)` adds or edits a task. Fields include
-description, project, priority, scheduled, due, wait, tags (comma-separated),
-recur, until and depends. Omitted fields are preserved; an empty string clears
-a field. `action(uuid, "start"|"stop"|"done"|"delete", callback)` acts on one
-task. Callbacks receive success as a boolean; successful writes refresh the
-list. Mutations require a complete UUID, and recurrence changes apply only
-to the selected occurrence. Callers handle confirmation before deletion.
-
-Commands use argv, asynchronous `morf.process.run`, and a timeout. Errors remain in
-the `error` signal; no optimistic database edits are made. Optional `command`
-and `env` arguments to `new` allow testing against an isolated installation.
-`timestamp`, `date`, and `day` convert exported timestamps to local dates.
-
-### integrations.lyrics
-
-`lib/integrations/lyrics.lua` reads LRC (several times a line, `[offset:]`, word
-timings dropped), finds the line for a moment, and finds lyrics for a
-track: an `.lrc` beside the playing file, then lrclib.net (keyless), cached
-on disk for a week (a miss too).
-
-```lua
-local lyrics = require("lib.integrations.lyrics")
-local follow = lyrics.follow(require("lib.services.mpris").connect())
-ui.Text { text = function() return follow.line:get() end }
-```
-
-| call | what |
-|------|------|
-| `lyrics.parse(text)` | `{ lines = { { time, text } }, tags, synced }` |
-| `lyrics.index_at(parsed, seconds)` | the line being sung (0 before the first) |
-| `lyrics.find(track, on_done, opts)` | `on_done(parsed, source)` (`file`, `cache`, `lrclib`) or `on_done(nil, why)`; `opts`: `cache_dir`, `ttl`, `base`, `offline` |
-| `lyrics.follow(media, opts)` | signals `lines`, `index`, `line`, `next_line`, `status` (`none`, `searching`, `synced`, `plain`, `missing`), `source`; `stop()` |
-
-### integrations.lule
-
-`lib/integrations/lule.lua` reads the scheme lule (a colour generator) writes to
-`$LULE_A/colors.json` (`~/.cache/lule`): `{ accent, background,
-foreground, cursor, theme, wallpaper, colors }`. `lule.watch()` is a signal
-kept current as lule rewrites it. For the colours themselves as the tool
-sets them on terminals, whatever the tool, see `morf.terminal.listen`
-(docs/IO.md); eva uses both, the file as the backup.
-
-`lule.generate({ image = "/path/to/wallpaper.png", theme = "dark",
-palette = "pigment" }, callback)` runs generation asynchronously, with a
-60-second timeout and bounded output. It uses Lule's own configuration and
-post-generation hooks. `directory` can replace `image` for random selection;
-`configs`, `cache`, `env` and `command` can isolate a run. The returned process
-handle can be cancelled, and the callback receives the normal `morf.process.run`
-result. Invalid options return `nil, reason` before starting a process.
-
 ### integrations.weather
 
 The weather from keyless APIs: Open-Meteo (geocoding and forecast), with
@@ -583,127 +526,11 @@ b)` is pacman's version comparison.
 
 ## shell
 
-### shell.capture and shell.capture.annotation
+### shell.osk
 
-`lib.shell.capture.annotation` owns a document in image-pixel coordinates, independent
-of themes, files or compositors. `new(width, height, options)` returns a document
-with `choose`, `style`, `begin`, `update`, `finish`, `abort`, `set_crop`,
-`resize`, `remove`, `undo` and `redo`. It holds vector annotations and regional
-blur/pixelation/zoom, sharing immutable annotations through a bounded undo
-history. `tools` lists shortcuts/icons;
-`ops(document, crop, include_draft)` creates ordered `morf.image.process` ops.
-Bounds, hit testing, picking and rasterization run in Rust through `morf.image`.
-Live drafts use native `ui.Path` geometry; Lua does not generate SVG artwork.
-Cropping happens last; effects apply to preceding artwork.
-`viewport_ops(document, {x,y,w,h}, include_draft, omit_moving)` builds
-operations for an already cropped monitor preview, preserving the original
-document and its export coordinates. Native operations share the original
-point arrays and apply their viewport offset in Rust.
-
-`lib.shell.capture.session(options)` owns temporary snapshots and render outputs.
-`snapshot(output, callback)` captures a monitor, `desktop(screens, callback)`
-stitches scaled outputs (including negative origins), and
-`render(source, ops, callback)` runs image operations on workers.
-`compose(width, height, ops, callback)` starts with a native black RGBA canvas,
-used for desktop stitching without a placeholder SVG. Snapshot
-callbacks receive `(ok, {source, width, height, output|desktop})`; render
-callbacks receive `(ok, path|error)`. `preview(source, ops, callback)` retains
-one decoded immutable source in a native session and returns an in-memory
-image, replacing its previous frame without generating temporary PNGs.
-Older engines fall back to file rendering. Call `remove(path)` for obsolete previews
-and `close()` when done; late callbacks cannot resurrect a closed session.
-Each output owns a private scratch namespace; abandoned scratch data is cleaned
-on the next capture. `windows(callback)`/`window_at` provide compositor geometry.
-KDE acquisition falls back to Spectacle; other supported compositors use native
-screencopy. `directory(path)` supplies the filesystem model for a shell-owned
-picker without requiring an external GUI.
-
-`copy`, `save` and `upload` take asynchronous `(ok, result|error)` callbacks.
-Copy uses wl-copy; upload uses HTTPS curl form upload and copies the returned
-URL. Callers own upload confirmation, notifications, picker UI and preferences.
-`binding_plan` and `rebind` support Hyprland Lua/conf and an optional dedicated
-include file; they do not rewrite the main compositor configuration.
-
-### shell.settings and shell.settings.pages
-
-`lib/shell/settings/init.lua` keeps a shell's preferences: nested defaults in the
-configuration, a JSON file holding only what differs, every leaf a signal,
-the file watched so another screen's runtime or an editor changes it live
-(only the keys that moved re-run). A value must have its default's type;
-keys the defaults lack are kept in the file untouched.
-
-```lua
-local config = require("lib.shell.settings").open {
-  path = morf.paths.shell("shell.json"),
-  defaults = { appearance = { rounding = { scale = 1 } }, bar = { persistent = true } },
-}
-config.get("appearance.rounding.scale")   config.set("bar.persistent", false)
-config.values.bar.persistent = true       -- the same, through nested tables
-```
-
-`set` returns `true` or `false, why`; `reset(key)`, `flush()`, `keys()`,
-`accepts(key, value)`; `opts.legacy(decoded)` migrates an older file.
-
-`lib.shell.settings.pages.new(pages, selected_signal, aliases?)` validates a tree
-of `{key, name, parent?}` descriptors. `request(key)` validates routes,
-`back()` returns to the parent, `path(key)` returns its ancestors and
-`breadcrumb()` labels the selected page's ancestry. Root's key is `""`.
-
-### shell.launcher.frecency
-
-`lib/shell/launcher/frecency.lua` remembers launches, each halving in weight every
-`half_life` days (14), in a small JSON file, and ranks a launcher's
-`morf.text.fuzzy` results with it: by use alone for an empty query, and a
-bounded lift among comparable matches otherwise.
-
-```lua
-local used = require("lib.shell.launcher.frecency").open { path = morf.paths.state("launches.json") }
-used.record(app.id)
-used.rank(query, apps, { key = "name", id = "id", limit = 30 })   -- fuzzy hits, reordered
-```
-
-### shell.audio.equalizer
-
-`lib.shell.audio.equalizer` owns a standalone PipeWire stereo smart filter, with explicit
-left/right channel chains. `new {name, path?}` returns `start(curve)`,
-`update(curve)`, `stop()`, and `status`/`error` signals. Only the shell's primary
-runtime should start it. It requires WirePlumber 0.5+, never restarts services,
-and never changes the default output. Runtime controls are coalesced into a
-single Props update; discovery retries are bounded and there is no idle poll.
-`graph(curve, owner)`, `controls(curve)` and `classify(sink)` are reusable helpers.
-
-`morf.audio.equalizer_curve {left?, right?, bands?, strength?, per_ear?,
-compensation?, enabled?, trim?}` computes the eight-band response in Rust.
-Threshold lists contain eight dB HL values (−10..120), bands eight dB gains
-(−12..12), strength is 0..100, trim −24..0 dB. Returns gains, frequencies,
-preamp attenuation and 160 log-spaced response samples per ear (20 Hz–20 kHz).
-Headroom is estimated from the combined 48 kHz filter response with a 0.5 dB
-margin; it is not a limiter. Compensation uses the MIT-licensed
-[omarchy-audiogram-eq](https://github.com/Fail-Safe/omarchy-audiogram-eq)
-mapping: half the threshold excess over 20 dB HL, capped at 12 dB, then
-scaled by strength. Audio DSP runs in PipeWire's builtin filters.
-
-### shell.audio.spectrum
-
-`lib/shell/audio/spectrum.lua` turns the bands `morf.audio.monitor` measures into
-visualiser bars: a noise floor, a sensitivity that follows the music's
-loudness, a little memory on the way up, a fall under gravity, and peaks
-that lean on their neighbours.
-
-```lua
-local spectrum = require("lib.shell.audio.spectrum")
-local vis = spectrum.new { bars = 24 }      -- vis.bars: a signal of 24 levels, 0 to 1
-ui.Rect { height = function() return 4 + 60 * (vis.bars:get()[3] or 0) end }
-vis:stop()
-```
-
-`spectrum.filter(opts)` is the same shaping, pure: `f.step(bands, dt)`
-gives bars. Options (`spectrum.DEFAULTS`): `bars`, `rate_hz`, `noise`,
-`smoothing`, `gravity`, `spread`, `attack`, `release`, `auto`,
-`sensitivity`. Options are captured when the filter is constructed.
-The numeric filter lives in `morf.audio.spectrum_filter`, with reusable native
-scratch buffers. Neighbour spread uses two linear passes instead of comparing
-every pair of bars. Lua retains monitor subscriptions, signals and lifecycle.
+An on-screen keyboard, whole: for a shell on a desk, a phone and a lock
+screen alike. The host places it and says which keyboard it wants; the
+keyboard says what was struck (see the head of `lib/shell/osk.lua`).
 
 ## util
 
