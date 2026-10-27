@@ -958,7 +958,7 @@ is everything a theme or shell outside this repo needs to follow.
 - [x] 4. Lua API
 - [x] 5. Engine edges
 - [x] 6. Examples
-- [ ] 7. Docs and changelog
+- [x] 7. Docs and changelog
 
 Where the branch differs from the plan above:
 - **Step 1:** the editor keeps only the two canvas models it uses
@@ -1065,3 +1065,15 @@ Where the branch differs from the plan above:
     the owner's call.
   - `make apply`, `make run` and the permission-cost bench default to
     impasto; the sandbox scripts keep naming an eva checkout of their own.
+- **Step 7:**
+  - `docs/UI.md` keeps its order (nodes, sizes, placement, lists, state,
+    appearance, frames, widgets): it teaches, and a cut by namespace would
+    scatter each idea. Every namespace and its members are listed instead
+    in `docs/IO.md`'s "The API by namespace", which `docs-check` holds to
+    the engine, and IO.md's sections are grouped by namespace.
+  - `library/README.md` already followed §2 from step 2; it gains
+    `util.clock`. `docs/SYSTEM.md`'s morf-kit row names no archetypes, so
+    it needed nothing.
+  - The migration table is `docs/MIGRATING.md`, ready for the 0.6.0
+    changelog entry: `CHANGELOG.md` is written by git-cliff at the release,
+    which waits for a go-ahead.
