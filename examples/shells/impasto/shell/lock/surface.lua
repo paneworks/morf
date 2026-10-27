@@ -74,7 +74,7 @@ local function battery_signal()
     battery_level:set(capacity and ((status == "Charging" and "󰂄 " or "󰁹 ") .. capacity .. "%") or "")
   end
   read()
-  morf.timer(60000, read, true)
+  morf.time.timer(60000, read, true)
   return battery_level
 end
 

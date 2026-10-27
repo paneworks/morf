@@ -75,7 +75,7 @@ local function present(entry)
   local mine = current_timer
   local timeout = timeout_for(entry)
   if timeout > 0 then
-    morf.timer(timeout, function()
+    morf.time.timer(timeout, function()
       if mine == current_timer and M.current:get() == entry.id then M.dismiss() end
     end, false)
   end
@@ -87,7 +87,7 @@ local function expire_later(entry)
   clocks[entry.id] = (clocks[entry.id] or 0) + 1
   if timeout <= 0 then return end
   local mine = clocks[entry.id]
-  morf.timer(timeout, function()
+  morf.time.timer(timeout, function()
     if clocks[entry.id] ~= mine then return end
     clocks[entry.id] = nil
     if server and server.open(entry.id) then server.expire(entry.id) end

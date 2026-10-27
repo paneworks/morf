@@ -8,7 +8,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
 local config = require("config")
 local theme = require("theme")
 local system = require("system")
@@ -188,13 +187,13 @@ local function vpn_module()
   }
 end
 
-local clock = core.system_clock { precision = "seconds" }
+local clock = require("lib.util.clock")
 bar.clock = clock
 
 local function clock_module()
   local format = config.clockFormat == "12h" and "%I:%M" or "%H:%M"
   return module {
-    label = function() return clock:format(format) end,
+    label = function() return clock.format(format) end,
     on_click = function() bar.open.dashboard() end,
   }
 end

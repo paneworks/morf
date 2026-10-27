@@ -81,7 +81,7 @@ local function poll()
   end)
 end
 poll()
-morf.timer(30000, poll, true)
+morf.time.timer(30000, poll, true)
 
 page.subtitle = function()
   if not state.battery.present then return "No battery" end

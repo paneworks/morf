@@ -20,7 +20,7 @@
 --   local palette = require("services.palette")
 --   palette.from_image("~/Pictures/sea.jpg", { mode = "dark" }, function(ok, p)
 --     if not ok then return morf.log.warn(p) end
---     palette.write.kitty(p, morf.cache_path("colors/kitty.conf"))
+--     palette.write.kitty(p, morf.paths.cache("colors/kitty.conf"))
 --     theme.accent = p.accent
 --   end)
 --
@@ -800,8 +800,8 @@ end
 local function cache_dir(opts)
   if opts.cache == false then return nil end
   if opts.cache_dir then return opts.cache_dir end
-  if morf.cache_path then
-    local ok, dir = pcall(morf.cache_path, "palette")
+  if morf.paths.cache then
+    local ok, dir = pcall(morf.paths.cache, "palette")
     if ok then return dir end
   end
   return nil
@@ -813,7 +813,7 @@ end
 ---
 --- A palette is cached by the file's path, modification time, size and the
 --- options, as JSON under `opts.cache_dir` (default
---- `morf.cache_path("palette")`; `cache = false` turns it off). A cached
+--- `morf.paths.cache("palette")`; `cache = false` turns it off). A cached
 --- palette is answered at once, before this returns, so re-applying a
 --- wallpaper costs a file read. `opts.count` is how many colours the
 --- picture is quantised to (16). The other options are `palette.derive`'s.
@@ -853,7 +853,7 @@ function palette.from_image(path, opts, on_done)
     -- The tokens, the terminal set and the cache, and the caller each get a
     -- turn of their own: a handler has a fuel budget, and whoever asked for
     -- a palette usually wants to write a few files with it.
-    morf.timer(1, function()
+    morf.time.timer(1, function()
       local finished, p = pcall(derive_rest, half, opts)
       if not finished then return on_done(false, tostring(p)) end
       p.source = path
@@ -864,7 +864,7 @@ function palette.from_image(path, opts, on_done)
         if not written and morf.log then morf.log.warn("palette cache:", failure) end
       end
       p.cached = false
-      morf.timer(1, function() on_done(true, p) end, false)
+      morf.time.timer(1, function() on_done(true, p) end, false)
     end, false)
   end)
   if not queued then

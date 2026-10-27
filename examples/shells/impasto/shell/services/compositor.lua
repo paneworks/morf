@@ -355,7 +355,7 @@ function M.start()
       if seen[name] == value then return end
       seen[name] = value
       if timers[name] then timers[name]:cancel() end
-      timers[name] = morf.timer(delay or 120, function() timers[name] = nil apply() end, false)
+      timers[name] = morf.time.timer(delay or 120, function() timers[name] = nil apply() end, false)
     end)
   end
   follow("animations", function() return settings.animationPreset end, M.apply_animations)
@@ -389,7 +389,7 @@ function M.start()
   end)
   -- The config only enables animations and leaves the rest off; the
   -- settings are put on it once the shell is up.
-  morf.timer(1500, all, false)
+  morf.time.timer(1500, all, false)
 end
 
 return M

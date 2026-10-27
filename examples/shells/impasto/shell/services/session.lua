@@ -60,7 +60,7 @@ local function suspend_when_locked()
   local mine = suspend_generation
   local waited = 0
   local timer
-  timer = morf.timer(100, function()
+  timer = morf.time.timer(100, function()
     if mine ~= suspend_generation then timer:cancel() return end
     waited = waited + 100
     if lock and lock.secure() then

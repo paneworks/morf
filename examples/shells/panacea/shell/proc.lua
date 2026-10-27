@@ -1,6 +1,6 @@
 -- Child processes, as their output arrives.
 --
--- `morf.run` and `morf.spawn` start a child whenever they are called and
+-- `morf.process.run` and `morf.process.spawn` start a child whenever they are called and
 -- call back from the main loop when it prints or exits, so there is no pool
 -- to size and nothing to drain on a timer. A command that finishes calls
 -- back with its stdout and whether it succeeded. Long-lived commands that
@@ -20,7 +20,7 @@ local proc = {}
 function proc.exec(command, on_done)
   -- A program that is not there answers through the callback too; only a
   -- refusal (too many children at once) raises.
-  local ok = pcall(morf.run, command, function(result)
+  local ok = pcall(morf.process.run, command, function(result)
     if on_done then on_done(result.stdout, result.ok) end
   end)
   if not ok and on_done then on_done("", false) end
@@ -38,15 +38,15 @@ function proc.stream(command, on_line, options)
   options = options or {}
   local stream = { command = command, retry_ms = options.retry_ms or 5000 }
   local function start()
-    stream.child = morf.spawn {
+    stream.child = morf.process.spawn {
       command = command,
       on_stdout = on_line,
       on_exit = function()
         stream.child = nil
-        morf.timer(stream.retry_ms, start, false)
+        morf.time.timer(stream.retry_ms, start, false)
       end,
     }
-    if not stream.child then morf.timer(stream.retry_ms, start, false) end
+    if not stream.child then morf.time.timer(stream.retry_ms, start, false) end
   end
   start()
   return stream

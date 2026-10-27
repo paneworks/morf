@@ -469,7 +469,7 @@ function Usage:_pass(done)
     self._running = false
     if value and value.scanning then
       -- More to read: the next pass soon, not a minute from now.
-      morf.timer(1000, function() self.source:refresh() end, false)
+      morf.time.timer(1000, function() self.source:refresh() end, false)
     end
     done(value, err)
   end)
@@ -500,7 +500,7 @@ function claude_usage.limits(options, on_done)
   if text then ok, data = pcall(morf.json.decode, text) end
   local token = ok and type(data) == "table" and type(data.claudeAiOauth) == "table" and data.claudeAiOauth.accessToken
   if type(token) ~= "string" then
-    morf.timer(1, function() on_done({ available = false, error = "no Claude Code credentials at " .. credentials }) end, false)
+    morf.time.timer(1, function() on_done({ available = false, error = "no Claude Code credentials at " .. credentials }) end, false)
     return
   end
   morf.http.post(options.url or "https://api.anthropic.com/v1/messages", {

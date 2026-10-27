@@ -238,7 +238,7 @@ function common.region()
     local mine = serial
     -- Leaving one area and entering the next are two events of the same
     -- motion; only a leave that nothing followed is the pointer going.
-    morf.timer(40, function()
+    morf.time.timer(40, function()
       if serial ~= mine or r.inside then return end
       for _, fn in ipairs(r.listeners) do pcall(fn) end
     end, false)

@@ -118,7 +118,7 @@ end
 
 local function tend()
   if s.recording:get() and not ticker then
-    ticker = morf.timer(1000, tick, true)
+    ticker = morf.time.timer(1000, tick, true)
   elseif not s.recording:get() and ticker then
     ticker:cancel()
     ticker = nil
@@ -238,7 +238,7 @@ function M.start(shape, box)
     end
     local confirmed, gone = false, false
     local handle
-    handle = morf.spawn {
+    handle = morf.process.spawn {
       command = command_for(encoder, box, path, audio, output),
       detached = true,
       on_exit = function()
@@ -255,7 +255,7 @@ function M.start(shape, box)
       end,
     }
     if not handle then return try() end
-    morf.timer(GRACE, function()
+    morf.time.timer(GRACE, function()
       if gone then return end
       confirmed = true
       child = handle
@@ -293,7 +293,7 @@ function M.stop()
   local ok, kept = pcall(morf.json.decode, fs.read(state_path()) or "")
   if not ok or type(kept) ~= "table" then kept = {} end
   if kept.dry then
-    morf.timer(1, function() finish(false) end, false)
+    morf.time.timer(1, function() finish(false) end, false)
     return
   end
   -- Marked first, so whichever screen started it hears a stop, not a death.
@@ -304,7 +304,7 @@ function M.stop()
     -- seconds is as long as it is waited for (record.py).
     local asked = child
     asked:kill("INT")
-    morf.timer(5000, function()
+    morf.time.timer(5000, function()
       if child == asked and stopping then
         child = nil
         finish(false)
@@ -319,10 +319,10 @@ function M.stop()
   end
   -- Another screen's take, or an earlier shell's: no handle, only its pid.
   -- Up to five seconds for the encoder to close the file (record.py).
-  morf.kill(math.floor(pid), "INT")
+  morf.process.kill(math.floor(pid), "INT")
   local waited = 0
   local timer
-  timer = morf.timer(100, function()
+  timer = morf.time.timer(100, function()
     waited = waited + 100
     if alive(pid) and waited < 5000 then return end
     timer:cancel()

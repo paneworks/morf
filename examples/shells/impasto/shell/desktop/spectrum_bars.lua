@@ -9,7 +9,7 @@
 -- WGSL once, when this file loads. Its parameters are fixed at
 -- construction in morf, so everything that can change -- the look, the
 -- colours, the box -- travels in a data block (`cfg`) beside the bands and
--- the peaks, and is pushed with `morf.shader_data`.
+-- the peaks, and is pushed with `morf.shader.data`.
 --
 -- The bands come from `morf.audio.monitor` on the default output (the
 -- original ran cava). It runs only while something listens: while any
@@ -186,7 +186,7 @@ local SOURCE = [[
 -- Registered while the configuration loads: a shader registered later is
 -- never handed to the renderer, and its nodes draw nothing.
 local SHADER = "impasto_spectrum"
-morf.shader(SHADER, {
+morf.shader.define(SHADER, {
   kind = "surface",
   data = { cfg = CFG, bands = M.BANDS, peaks = M.BANDS },
   fragment = SOURCE,
@@ -222,8 +222,8 @@ local live = {}
 -- A shader data write asks for the frame that draws it.
 local function push_bands()
   for node in pairs(live) do
-    local ok = pcall(morf.shader_data, node, "bands", levels)
-    if ok then ok = pcall(morf.shader_data, node, "peaks", peaks) end
+    local ok = pcall(morf.shader.data, node, "bands", levels)
+    if ok then ok = pcall(morf.shader.data, node, "peaks", peaks) end
     if not ok then live[node] = nil end
   end
   if signals_read then
@@ -258,7 +258,7 @@ local function start()
   if monitor or demo then return end
   if demo_on then
     local phase = 0
-    demo = morf.timer(math.floor(1000 / M.RATE), function()
+    demo = morf.time.timer(math.floor(1000 / M.RATE), function()
       phase = phase + 1
       local out = {}
       for i = 1, M.BANDS do
@@ -305,7 +305,7 @@ function M.want(fn)
     local want = fn()
     -- Starting a monitor is not node building, but keep it off the
     -- effect's own turn all the same.
-    morf.timer(1, function()
+    morf.time.timer(1, function()
       if want then start() else stop() end
       if held > 0 then start() end
     end, false)
@@ -376,22 +376,22 @@ function M.build(values)
   local pusher = ui.Item {
     width = 0, height = 0, visible = false,
     implicit_width = function()
-      pcall(morf.shader_data, node, "cfg", cfg_of(values, looks()))
+      pcall(morf.shader.data, node, "cfg", cfg_of(values, looks()))
       if sample then
-        pcall(morf.shader_data, node, "bands", still)
-        pcall(morf.shader_data, node, "peaks", still_peaks)
+        pcall(morf.shader.data, node, "bands", still)
+        pcall(morf.shader.data, node, "peaks", still_peaks)
       else
-        pcall(morf.shader_data, node, "bands", levels)
-        pcall(morf.shader_data, node, "peaks", peaks)
+        pcall(morf.shader.data, node, "bands", levels)
+        pcall(morf.shader.data, node, "peaks", peaks)
       end
       return 0
     end,
   }
   -- Pushed once more on the next tick, when the node is sure to be drawn.
-  morf.timer(1, function()
-    pcall(morf.shader_data, node, "cfg", cfg_of(values, looks()))
-    pcall(morf.shader_data, node, "bands", sample and still or levels)
-    pcall(morf.shader_data, node, "peaks", sample and still_peaks or peaks)
+  morf.time.timer(1, function()
+    pcall(morf.shader.data, node, "cfg", cfg_of(values, looks()))
+    pcall(morf.shader.data, node, "bands", sample and still or levels)
+    pcall(morf.shader.data, node, "peaks", sample and still_peaks or peaks)
   end, false)
   return ui.Item {
     x = values.x, y = values.y, width = values.width, height = values.height,

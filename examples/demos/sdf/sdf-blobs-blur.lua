@@ -20,7 +20,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
 
 local screen = morf.screens[1]
 local W = (screen and screen.width) or 1920
@@ -30,7 +29,7 @@ local SHORT = math.min(W, H)
 morf.surface.width = W
 morf.surface.height = H
 morf.surface.anchors = { top = true, left = true, right = true, bottom = true }
-morf.surface.layer = core.env("MORF_BLOB_LAYER") or "overlay"
+morf.surface.layer = morf.env("MORF_BLOB_LAYER") or "overlay"
 morf.surface.keyboard_focus = "none"
 morf.surface.exclusive_zone = -1
 
@@ -52,7 +51,7 @@ local BLOBS = {
 
 local BLEND = s(0.038)
 
-local elapsed = core.elapsed_timer()
+local elapsed = morf.time.elapsed()
 local blobs = {}
 
 local function advance()

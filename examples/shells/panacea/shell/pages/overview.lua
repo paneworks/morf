@@ -4,7 +4,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local io = require("morf.io")
 local config = require("config")
 local theme = require("theme")
 local hypr = require("hypr")
@@ -32,7 +31,7 @@ function page.refresh()
   local monitor = hypr.state.monitor
   local reply = hypr.ask("j/clients", 120)
   if not reply then return end
-  local ok, clients = pcall(io.json.decode, reply)
+  local ok, clients = pcall(morf.json.decode, reply)
   if not ok or type(clients) ~= "table" then return end
   local by_workspace = {}
   for _, client in ipairs(clients) do
@@ -57,7 +56,7 @@ end
 
 function page.on_open()
   hypr.refresh()
-  morf.timer(80, page.refresh, false)
+  morf.time.timer(80, page.refresh, false)
 end
 
 local function glyph_for(class)

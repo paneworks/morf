@@ -160,7 +160,7 @@ local function build(_, options)
     local want = most()
     if want == count then return end
     count = want
-    morf.timer(1, function() model:replace(rows(), "id") end, false)
+    morf.time.timer(1, function() model:replace(rows(), "id") end, false)
   end, { owner = node })
   return node
 end

@@ -56,15 +56,14 @@ local function poll()
     end)
 end
 poll()
-morf.timer(5000, poll, true)
+morf.time.timer(5000, poll, true)
 
 -- Coffee mode: a `systemd-inhibit` child that lives while the switch is on.
 local coffee_process = nil
 function tiles.set_caffeine(on)
   own.caffeine = on
   if on and not coffee_process then
-    local io = require("morf.io")
-    local ok, process = pcall(io.process_view, {
+    local ok, process = pcall(morf.process.view, {
       command = { "systemd-inhibit", "--what=idle", "--who=panacea", "--why=Coffee mode", "sleep", "infinity" },
       environment = { LD_LIBRARY_PATH = "" },
     })
@@ -86,7 +85,7 @@ end
 function tiles.set_wifi_radio(on)
   own.wifi_radio = on
   after(on and "rfkill unblock wifi; nmcli radio wifi on" or "nmcli radio wifi off")
-  morf.timer(2500, function() system.poll_network() end, false)
+  morf.time.timer(2500, function() system.poll_network() end, false)
 end
 
 --- Every tile there is. `on` says whether it is lit, `toggle` is the tap,
@@ -236,7 +235,7 @@ tiles.all = {
     on = function() return false end,
     toggle = function()
       require("island").close()
-      morf.timer(300, function()
+      morf.time.timer(300, function()
         if system.slurp("/usr/bin/hyprshot") then
           proc.sh("hyprshot -m region --clipboard-only", function() end)
         else

@@ -17,7 +17,7 @@ local mediapopup = {}
 mediapopup.shown = morf.signal("chillpill.mediapopup.shown", false)
 mediapopup.quiet = morf.signal("chillpill.mediapopup.quiet", false)
 
-local clock = morf.elapsed_timer()
+local clock = morf.time.elapsed()
 local last_revision = m.revision
 
 --- Called on the shell's tick: shows on a new track, hides after a while.
@@ -80,14 +80,14 @@ function mediapopup.build(top)
           theme.text {
             size = 13, color = C.dim,
             text = function()
-              local _ = morf.clock and morf.clock:get()
+              local _ = morf.time.clock and morf.time.clock:get()
               return media.clock(media.position())
             end,
           },
           theme.meter {
             width = bar_width, height = S(5),
             fraction = function()
-              local _ = morf.clock and morf.clock:get()
+              local _ = morf.time.clock and morf.time.clock:get()
               return media.progress()
             end,
           },

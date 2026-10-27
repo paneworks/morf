@@ -307,7 +307,7 @@ function Calendar:_fetch(done)
     end)
     return
   end
-  local url = self.base_url .. "/users/" .. morf.http.url_encode(self.user) .. "/contributions"
+  local url = self.base_url .. "/users/" .. morf.encoding.url_encode(self.user) .. "/contributions"
   morf.http.get(url, { timeout_ms = 20000, max_bytes = 4 * 1024 * 1024 }, function(response)
     if not response.ok then
       self:_failed(done, response.error or ("github answered " .. response.status))

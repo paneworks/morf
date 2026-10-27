@@ -88,7 +88,7 @@ local function stall(new_budget, new_interval)
   while iterations > 0 do
     local chunk = math.min(CHUNK, iterations)
     iterations = iterations - chunk
-    timers[#timers + 1] = morf.timer(interval, function() burn(chunk) end, true)
+    timers[#timers + 1] = morf.time.timer(interval, function() burn(chunk) end, true)
   end
   return budget, interval, #timers
 end
@@ -103,4 +103,4 @@ morf.ipc.target = function() return target end
 morf.ipc.fired = function() return fired end
 
 stall(budget, interval)
-if swing_every > 0 then morf.timer(swing_every, swing, true) end
+if swing_every > 0 then morf.time.timer(swing_every, swing, true) end

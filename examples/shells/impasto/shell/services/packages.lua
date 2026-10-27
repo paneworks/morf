@@ -168,7 +168,7 @@ function M.load()
     listed = rows or {}
     all_in()
   end)
-  morf.run({ pacman, "-Qqm" }, { timeout_ms = 30000 }, function(result)
+  morf.process.run({ pacman, "-Qqm" }, { timeout_ms = 30000 }, function(result)
     foreign = set_of(result.stdout)
     all_in()
   end)
@@ -225,7 +225,7 @@ end
 
 local function aur_search(term, generation, callback)
   if not morf.http then return callback(nil, "offline") end
-  local quoted = morf.http.url_encode(term)
+  local quoted = morf.encoding.url_encode(term)
   local headers = { ["User-Agent"] = "impasto" }
   morf.http.get(AUR_RPC .. "/search/" .. quoted .. "?by=name", { timeout_ms = 8000, headers = headers },
     function(response)
@@ -241,7 +241,7 @@ local function aur_search(term, generation, callback)
         if type(names) ~= "table" then return callback(nil, "offline") end
         if #names == 0 then return callback({}, "prefix") end
         local parts = {}
-        for _, name in ipairs(names) do parts[#parts + 1] = "arg[]=" .. morf.http.url_encode(tostring(name)) end
+        for _, name in ipairs(names) do parts[#parts + 1] = "arg[]=" .. morf.encoding.url_encode(tostring(name)) end
         morf.http.get(AUR_RPC .. "/info?" .. table.concat(parts, "&"), { timeout_ms = 8000, headers = headers },
           function(info)
             if generation ~= search_generation then return end
@@ -290,7 +290,7 @@ function M.search()
     s.found_rev:set(s.found_rev:get() + 1)
   end
   if pacman then
-    morf.run({ pacman, "-Ss", "--", M.regex_escape(term) },
+    morf.process.run({ pacman, "-Ss", "--", M.regex_escape(term) },
       { timeout_ms = 20000, env = { LANG = "C", LC_ALL = "C" } }, function(result)
         if generation ~= search_generation then return end
         local current
@@ -326,7 +326,7 @@ morf.effect("impasto.packages.debounce", function()
   debounce_generation = debounce_generation + 1
   local mine = debounce_generation
   if view ~= "find" then return end
-  morf.timer(250, function()
+  morf.time.timer(250, function()
     if mine ~= debounce_generation then return end
     if M.term() ~= found.term then M.search() end
   end, false)

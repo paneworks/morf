@@ -73,7 +73,7 @@ function M.build(key, arranging)
         local want = shape_id()
         if want ~= current then
           current = want
-          morf.timer(1, function() shape:replace({ { id = current } }, "id") end, false)
+          morf.time.timer(1, function() shape:replace({ { id = current } }, "id") end, false)
         end
         return 0
       end,

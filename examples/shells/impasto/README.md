@@ -209,7 +209,7 @@ local palette = require("services.palette")
 
 palette.from_image("~/Pictures/sea.jpg", { mode = "dark" }, function(ok, p)
   if not ok then return morf.log.warn(p) end
-  local dir = morf.cache_path("colors")
+  local dir = morf.paths.cache("colors")
   palette.write.kitty(p, dir .. "/kitty.conf")
   palette.write.pywal(p, dir .. "/colors.json")
   theme.accent = p.accent
@@ -278,7 +278,7 @@ palette.
 ### Caching
 
 `from_image` caches by path, modification time, size and options, as JSON
-in `opts.cache_dir` (default `morf.cache_path("palette")`). A cached
+in `opts.cache_dir` (default `morf.paths.cache("palette")`). A cached
 palette is answered before `from_image` returns. A fresh one is answered a
 few loop turns later: the derivation, the cache write and the caller each
 run in a turn of their own, because each handler has a fuel budget.

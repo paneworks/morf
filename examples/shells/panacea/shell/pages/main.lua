@@ -18,7 +18,7 @@ local page = {}
 
 -- The clock stays a clock here, large; the day becomes the date.
 page.big = true
-page.subtitle = function() return theme.clock:format("%A, " .. config.clockDateFmt) end
+page.subtitle = function() return theme.clock.format("%A, " .. config.clockDateFmt) end
 
 local W = theme.page_w()
 local GAP = S(8)
@@ -93,7 +93,7 @@ function page.build(island)
         width = W - kit.PAD * 2, height = S(16),
         playing = function() return m.status == "Playing" end,
         progress = function()
-          local _ = morf.clock and morf.clock:get()
+          local _ = morf.time.clock and morf.time.clock:get()
           return media.progress()
         end,
         seek = media.seek,

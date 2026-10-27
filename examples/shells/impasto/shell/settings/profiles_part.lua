@@ -144,7 +144,7 @@ function M.build(W)
   end
   local watcher = setting.watch(function()
     local next = refresh()
-    morf.timer(1, function() rows:replace(next, "key") end, false)
+    morf.time.timer(1, function() rows:replace(next, "key") end, false)
   end)
   rows:replace(refresh(), "key")
 

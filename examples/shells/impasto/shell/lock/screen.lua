@@ -7,7 +7,7 @@
 -- which is what `lock.lock()` in the shell runs, after it has photographed
 -- the desk. `morf.surface.session_lock = true` makes morf take this file as
 -- an ext-session-lock client rather than a layer: every output gets a lock
--- surface with a tree of its own (`morf.lock_surface`), over that output's
+-- surface with a tree of its own (`morf.lock.surface`), over that output's
 -- own desk and at its own size; the compositor hides everything else, and
 -- keeps it hidden if this process dies -- a crash leaves the session locked
 -- rather than open. The lock falls when the file clears the flag, which the
@@ -56,7 +56,7 @@ function M.build(options)
   if hold then
     -- One tree per output, each over its own desk. Called again for an
     -- output plugged in while locked.
-    morf.lock_surface(function(output)
+    morf.lock.surface(function(output)
       return surface {
         width = function() return tonumber(output.width) or W end,
         height = function() return tonumber(output.height) or H end,

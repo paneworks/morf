@@ -75,7 +75,7 @@ morf.effect("impasto.keyboard", function()
   morf.surface.keyboard_focus = (open and island.state.live() and not capturing) and "exclusive" or "none"
   morf.surface.backdrop = open
 end)
-morf.on_backdrop_click(function() island.close() end)
+morf.window.on_backdrop_click(function() island.close() end)
 
 -- ------------------------------------------------------------------ layers --
 
@@ -129,7 +129,7 @@ bar.register("battery", button_piece("󰁹", "battery"))
 -- fails to load is reported by `morf ipc call failed` instead of taking the
 -- shell down with it.
 local failed = {}
-local root = morf.shell_dir()
+local root = morf.paths.shell()
 for _, folder in ipairs { "services/auto", "bar/modules", "bar/pieces", "bar/layers", "bar/panels" } do
   local entries = morf.fs.list(morf.fs.join(root, folder)) or {}
   for _, entry in ipairs(entries) do
@@ -226,7 +226,7 @@ end
 -- landed): the configuration read again, on every screen.
 morf.ipc.shell = function(verb)
   if verb ~= "reload" then return "usage: morf ipc call shell reload" end
-  morf.timer(1, function() morf.reload() end, false)
+  morf.time.timer(1, function() morf.reload() end, false)
   return "reloading"
 end
 morf.ipc.theme = function(id)
@@ -254,7 +254,7 @@ do
     local asked = modules.settings_requests:get()
     if asked == seen then return end
     seen = asked
-    morf.timer(1, function()
+    morf.time.timer(1, function()
       island.close()
       settings_window.open()
     end, false)

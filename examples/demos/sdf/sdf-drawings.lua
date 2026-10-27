@@ -24,7 +24,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
 
 local W, H = 1180, 620
 morf.surface.width = W
@@ -37,11 +36,11 @@ local theme = morf.theme {
   muted = "#78849a",
 }
 
--- Beside the configuration. `core.shell_path` is rooted at the directory the
+-- Beside the configuration. `morf.paths.shell` is rooted at the directory the
 -- configuration itself was loaded from, so this holds wherever it is run from
 -- and whatever the working directory happens to be.
 local function asset(name)
-  return core.shell_path("../assets/" .. name .. ".svg")
+  return morf.paths.shell("../assets/" .. name .. ".svg")
 end
 
 local HEART, GEAR = asset("sdf-heart"), asset("sdf-gear")

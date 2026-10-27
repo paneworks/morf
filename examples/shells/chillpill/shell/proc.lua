@@ -11,7 +11,6 @@
 -- nixGL-style wrapper that points it at store paths, and a system binary
 -- that inherits those fails to load its own libraries.
 
-local io = require("morf.io")
 
 local proc = {}
 
@@ -26,7 +25,7 @@ local streams = {}
 
 for index = 1, POOL_SIZE do
   pool[index] = {
-    process = io.process_view { command = { "true" }, environment = CHILD_ENVIRONMENT },
+    process = morf.process.view { command = { "true" }, environment = CHILD_ENVIRONMENT },
     busy = false,
     buffer = "",
     on_done = nil,
@@ -67,14 +66,14 @@ end
 function proc.stream(command, on_line, options)
   options = options or {}
   local stream = {
-    process = io.process_view { command = command, environment = CHILD_ENVIRONMENT },
+    process = morf.process.view { command = command, environment = CHILD_ENVIRONMENT },
     command = command,
     on_line = on_line,
     buffer = "",
     running = false,
     retry_ms = options.retry_ms or 5000,
     down_since = nil,
-    clock = require("morf").elapsed_timer(),
+    clock = morf.time.elapsed(),
   }
   streams[#streams + 1] = stream
   local ok = pcall(function()

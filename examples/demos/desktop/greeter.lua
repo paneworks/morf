@@ -58,8 +58,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
-local io = require("morf.io")
 -- The keyboard. Not a keyboard drawn to look like it — the same file
 -- `examples/demos/text/keyboard.lua` puts in a surface of its own. It cannot have one here
 -- because a kiosk compositor shows a single window, so a login screen's second
@@ -176,7 +174,7 @@ local function face_of(name)
     "/home/" .. name .. "/.face",
     "/home/" .. name .. "/.face.icon",
   } do
-    if io.file_view { path = path }:exists() then return path end
+    if morf.fs.view { path = path }:exists() then return path end
   end
   return nil
 end
@@ -189,7 +187,7 @@ end
 --- and 65534 is `nobody`.
 local function accounts()
   local found = {}
-  local text = io.file("/etc/passwd"):read()
+  local text = morf.fs.file("/etc/passwd"):read()
   if not text then return found end
   for line in text:gmatch("[^\n]+") do
     local name, uid, gecos, shell = line:match("^([^:]+):[^:]*:(%d+):[^:]*:([^:]*):[^:]*:([^:]*)$")
@@ -224,7 +222,7 @@ end
 --- is, and nothing has told them.
 local function sessions()
   local found = {}
-  for _, entry in ipairs(core.desktop_entries(core.session_paths()):applications()) do
+  for _, entry in ipairs(morf.apps.entries(morf.paths.session()):applications()) do
     if entry.command and #entry.command > 0 then
       -- Which directory it was found in is the only statement anywhere of
       -- whether a session is Wayland or X11.
@@ -254,7 +252,7 @@ local users = accounts()
 -- is still that person, made up on the spot, because a lock that offers other
 -- accounts is a switch-user dialog, and this is not one.
 if LOCKING then
-  local me = core.env("USER") or core.env("LOGNAME") or ""
+  local me = morf.env("USER") or morf.env("LOGNAME") or ""
   local mine
   for _, user in ipairs(users) do
     if user.name == me then mine = user end
@@ -274,8 +272,8 @@ local available = LOCKING and {} or sessions()
 --- so the choice is the machine's to make, once, as root.
 local function default_session()
   local path = "/etc/greetd/default-session"
-  if not io.file_view { path = path }:exists() then return 1 end
-  local wanted = ((io.file(path):read() or ""):match("^%s*(.-)%s*$") or ""):lower()
+  if not morf.fs.view { path = path }:exists() then return 1 end
+  local wanted = ((morf.fs.file(path):read() or ""):match("^%s*(.-)%s*$") or ""):lower()
   for index, entry in ipairs(available) do
     if entry.id:lower() == wanted or entry.name:lower() == wanted then return index end
   end
@@ -293,13 +291,13 @@ end
 -- password and then waits for a finger before it will hear a word.
 local PASSWORD_SERVICE = "login"
 for _, service in ipairs({ "morf-lock", "system-auth" }) do
-  if io.file_view { path = "/etc/pam.d/" .. service }:exists() then
+  if morf.fs.view { path = "/etc/pam.d/" .. service }:exists() then
     PASSWORD_SERVICE = service
     break
   end
 end
 local FINGER_SERVICE = PASSWORD_SERVICE ~= "login"
-  and io.file_view { path = "/etc/pam.d/login" }:exists() and "login" or nil
+  and morf.fs.view { path = "/etc/pam.d/login" }:exists() and "login" or nil
 
 --------------------------------------------------------------------------------
 -- State.
@@ -655,7 +653,7 @@ end
 
 -- `-- --numbers-only` puts up a keypad rather than a keyboard: three keys
 -- across instead of ten, so the same width buys targets three times the size.
-local numeric = morf.signal("greeter.numeric", core.options["numbers-only"] == true)
+local numeric = morf.signal("greeter.numeric", morf.options["numbers-only"] == true)
 
 local CAPACITY = 64
 
@@ -699,7 +697,7 @@ local function icon(name, box, extra)
     ui.SdfShape {
       width = box,
       height = box,
-      source = core.shell_path("../assets/icon-" .. name .. ".svg"),
+      source = morf.paths.shell("../assets/icon-" .. name .. ".svg"),
     },
   }
   for key, value in pairs(extra or {}) do field[key] = value end
@@ -873,8 +871,8 @@ place(ui.Rect {
 -- The column: the clock, a rule, the accounts.
 --------------------------------------------------------------------------------
 
-local clock = core.system_clock { precision = "seconds" }
-local hostname = (io.file("/etc/hostname"):read() or "localhost"):match("^%s*(%S*)")
+local clock = require("lib.util.clock")
+local hostname = (morf.fs.file("/etc/hostname"):read() or "localhost"):match("^%s*(%S*)")
 if hostname == "" then hostname = "localhost" end
 
 local TOP = CH + s(16)
@@ -902,7 +900,7 @@ local function lower_room() local _, lower = room() return -lower end
 local squeeze = { kind = "spring", mass = 1, damping = 20, stiffness = 170, epsilon = 0.05 }
 
 local clock_morph = morf.signal("greeter.clock.morph", 0)
-local shown_time = clock:format("%H:%M")
+local shown_time = clock.format("%H:%M")
 local clock_face
 clock_face = ui.Text {
   x = COL_X, y = CLOCK_Y, width = COL_W,
@@ -937,7 +935,7 @@ place(clock_face)
 place(ui.Timer {
   interval = 250, ["repeat"] = true, running = true,
   on_triggered = function()
-    local now = clock:format("%H:%M")
+    local now = clock.format("%H:%M")
     if now ~= shown_time and clock_morph:get() == 0 then
       shown_time = now
       clock_face.morph_to = now
@@ -947,7 +945,7 @@ place(ui.Timer {
 })
 place(line {
   x = COL_X, y = CLOCK_Y + CLOCK_SIZE + s(4), width = COL_W,
-  text = function() return clock:format("%A, %-d %B") .. "  ·  " .. hostname end,
+  text = function() return clock.format("%A, %-d %B") .. "  ·  " .. hostname end,
   horizontal_alignment = "center",
   color = function() return theme.dim end,
   translate_y = lower_room,

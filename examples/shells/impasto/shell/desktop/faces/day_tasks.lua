@@ -194,7 +194,7 @@ function M.linger(when, owner)
     serial = serial + 1
     if when() then shown:set(true) return end
     local mine = serial
-    morf.timer(theme.duration_fast() + 40, function()
+    morf.time.timer(theme.duration_fast() + 40, function()
       if mine == serial then shown:set(false) end
     end, false)
   end, owner and { owner = owner } or nil)

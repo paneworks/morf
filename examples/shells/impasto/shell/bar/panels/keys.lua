@@ -108,7 +108,7 @@ end
 local field
 morf.effect("impasto.keys.lifecycle", function()
   local open = island.state.open_panel() == "keys"
-  morf.timer(1, function()
+  morf.time.timer(1, function()
     if open then K.load() else query:set("") field = nil end
   end, false)
 end)

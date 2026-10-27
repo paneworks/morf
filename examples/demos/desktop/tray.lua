@@ -118,7 +118,7 @@ ui.Rect {
     ui.Text {
       color = "#ffffff",
       font_size = 16,
-      text = function() return morf.clock:get() end,
+      text = function() return morf.time.clock:get() end,
     },
     ui.Text {
       color = "#ffffff",

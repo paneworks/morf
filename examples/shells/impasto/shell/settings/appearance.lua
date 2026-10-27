@@ -278,7 +278,7 @@ function M.transition_picture(kind)
       end,
     }
   end
-  morf.timer(1, run, false)
+  morf.time.timer(1, run, false)
   return node
 end
 
@@ -334,7 +334,7 @@ function M.window_motion(preset)
       { pause = 1300 },
     }
   end
-  morf.timer(1, pass, false)
+  morf.time.timer(1, pass, false)
   return screen
 end
 

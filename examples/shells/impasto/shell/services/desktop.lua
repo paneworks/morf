@@ -577,7 +577,7 @@ end
 function M.queue_sync()
   if sync_queued then return end
   sync_queued = true
-  morf.timer(1, sync, false)
+  morf.time.timer(1, sync, false)
 end
 
 local function save()
@@ -590,7 +590,7 @@ local function write(next_rows)
   bump()
   if not writing then
     writing = true
-    morf.timer(120, save, false)
+    morf.time.timer(120, save, false)
   end
   M.queue_sync()
 end
@@ -1255,7 +1255,7 @@ function M.edit(on)
   local was = M.editing:get()
   M.editing:set(on and true or false)
   if was ~= (on and true or false) then
-    morf.timer(1, function()
+    morf.time.timer(1, function()
       M.board_model:replace(M.editing:get() and { { id = "board" } } or {}, "id")
     end, false)
   end
@@ -1329,7 +1329,7 @@ morf.effect("impasto.desk.theme", function()
   local now = settings.desktopTheme
   if now == seen_theme then return end
   seen_theme = now
-  morf.timer(1, function() M.conform() M.queue_sync() end, false)
+  morf.time.timer(1, function() M.conform() M.queue_sync() end, false)
 end)
 
 -- The board changing size (the dock's band) re-lays every face.

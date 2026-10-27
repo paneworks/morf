@@ -16,9 +16,8 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
 
-local FULL = core.env("MORF_CRT_FULL") == "1"
+local FULL = morf.env("MORF_CRT_FULL") == "1"
 
 local screen = morf.screens[1]
 local SW = (screen and screen.width) or 1280
@@ -40,7 +39,7 @@ morf.surface.keyboard_focus = "none"
 -- The tube.
 --------------------------------------------------------------------------------
 
-morf.shader("crt", {
+morf.shader.define("crt", {
   kind = "effect",
   params = {
     -- How much the glass bows. 0 is a flat panel.

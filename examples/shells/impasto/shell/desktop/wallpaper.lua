@@ -73,7 +73,7 @@ function M.build(width, height)
         track({ over_image, "y" }, r0 - height / 2, r1 - height / 2),
       }
     end
-    morf.timer(ms + 60, finish, false)
+    morf.time.timer(ms + 60, finish, false)
   end
 
   -- Each new picture: the old one goes under, the new one is revealed.
@@ -84,7 +84,7 @@ function M.build(width, height)
     seen = generation
     local path = wallpaper.current:get()
     local kind = wallpaper.transition:get()
-    morf.timer(1, function()
+    morf.time.timer(1, function()
       under_path:set(over_path:get())
       over_path:set(path)
       -- The clip back to where the reveal starts before it runs.

@@ -100,7 +100,7 @@ local function start_captures()
   -- A few at once on open, then one at a time: nine full-size copies in a
   -- frame is a stutter for a grid nobody reads that closely.
   for _ = 1, 3 do capture_one() end
-  capture_timer = morf.timer(500, capture_one, true)
+  capture_timer = morf.time.timer(500, capture_one, true)
 end
 
 local function stop_captures()
@@ -121,14 +121,14 @@ local ghost = morf.state { address = "", class = "", x = 0, y = 0, width = 0, he
 morf.effect("impasto.overview.lifecycle", function()
   local open = island.state.open_panel() == "overview"
   if open then
-    morf.timer(1, function()
+    morf.time.timer(1, function()
       workspaces.reload()
       local active = workspaces.active_id()
       selected:set(math.min(math.max(1, active), settings.workspaceMax))
       start_captures()
     end, false)
   else
-    morf.timer(1, stop_captures, false)
+    morf.time.timer(1, stop_captures, false)
   end
 end)
 

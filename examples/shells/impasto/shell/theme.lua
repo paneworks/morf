@@ -149,7 +149,7 @@ theme.shadow = { range = 14, opacity = 0.5, spread = 4, bar_scale = 0.6 }
 -- ----------------------------------------------------------------- type --
 
 local installed = {}
-for _, family in ipairs(morf.font_families and morf.font_families() or {}) do
+for _, family in ipairs(morf.text.families and morf.text.families() or {}) do
   installed[family] = true
 end
 
@@ -177,7 +177,7 @@ end
 -- it is normally installed as far as the shell can tell; when it is not (the
 -- shell run from elsewhere), a Text that names it also names the file, and
 -- the engine loads that file once before shaping.
-theme.hand_file = morf.fs.join(morf.shell_dir(), "fonts", "GrapeNuts-Regular.ttf")
+theme.hand_file = morf.fs.join(morf.paths.shell(), "fonts", "GrapeNuts-Regular.ttf")
 local hand_bundled = not installed["Grape Nuts"] and morf.fs.is_file(theme.hand_file)
 if hand_bundled then installed["Grape Nuts"] = true end
 

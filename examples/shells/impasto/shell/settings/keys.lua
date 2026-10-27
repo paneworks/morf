@@ -153,7 +153,7 @@ function M.row(W, description, label, filter, note, ruled)
     editing:set(true)
     capturing:set(true)
     -- After the click that opened it, which moves the focus itself.
-    morf.timer(1, function() capture.focus = true end, false)
+    morf.time.timer(1, function() capture.focus = true end, false)
   end
 
   local function toggle(name)
@@ -332,7 +332,7 @@ function M.build(page)
       status_group(W),
       setting.watch(function()
         local now = #shortcuts.table()
-        if now ~= seen then seen = now morf.timer(1, refresh, false) end
+        if now ~= seen then seen = now morf.time.timer(1, refresh, false) end
       end),
       setting.group { width = W,
         ui.Repeater {

@@ -46,7 +46,7 @@ local function activate(action)
   disarm_generation = disarm_generation + 1
   local mine = disarm_generation
   armed:set(action.id)
-  morf.timer(3000, function() if mine == disarm_generation then armed:set("") end end, false)
+  morf.time.timer(3000, function() if mine == disarm_generation then armed:set("") end end, false)
 end
 
 local function tile(index, action)

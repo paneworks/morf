@@ -338,7 +338,7 @@ function M.new(values)
     built = built + 1
     if built > 1 then
       local key = built
-      morf.timer(1, function() model:replace({ { key = key } }, "key") end, false)
+      morf.time.timer(1, function() model:replace({ { key = key } }, "key") end, false)
     end
   end)
 

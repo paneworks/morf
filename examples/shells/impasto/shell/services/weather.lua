@@ -98,7 +98,7 @@ function M.age()
   if not n.available then return "" end
   local at = tonumber(n.updated) or 0
   if at <= 0 then return "" end
-  morf.minute_clock:get()
+  morf.time.minute_clock:get()
   local minutes = math.floor((morf.time.now() - at) / 60)
   if minutes < 2 then return "just now" end
   if minutes < 60 then return minutes .. " min ago" end
@@ -120,7 +120,7 @@ function M.subscribe()
   local n = M.now()
   local at = tonumber(n.updated) or 0
   if not n.available or morf.time.now() - at > 600 then
-    morf.timer(1, function() s.source:refresh() end, false)
+    morf.time.timer(1, function() s.source:refresh() end, false)
   end
 end
 function M.release()
@@ -135,7 +135,7 @@ end
 function M.hours_ahead(count)
   local now = M.now()
   if not now.available then return {} end
-  morf.hour_clock:get()
+  morf.time.hour_clock:get()
   local today = morf.time.date()
   local out = {}
   for _, block in ipairs(now.hourly or {}) do

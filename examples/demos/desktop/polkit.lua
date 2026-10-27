@@ -122,7 +122,7 @@ local Card = component.define {
       current = nil
       password, model.typed = "", 0
       -- Long enough to read the verdict, short enough not to be in the way.
-      morf.timer(1200, function()
+      morf.time.timer(1200, function()
         if not current then
           model.open = false
           show(false)

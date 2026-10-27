@@ -194,7 +194,7 @@ end
 --- scanning is cheaper than watching every XDG directory).
 function M.refresh()
   if not index then
-    local ok, made = pcall(morf.desktop_entries, M.application_paths())
+    local ok, made = pcall(morf.apps.entries, M.application_paths())
     if not ok then
       morf.log("warn", "impasto: cannot read the applications: " .. tostring(made))
       return
@@ -653,7 +653,7 @@ function M.activate(entry)
     local ok, controls = pcall(require, "services.controls")
     local tile = ok and controls.tile_of(entry.id)
     if tile then
-      morf.timer(1, function() controls.activate(tile) end, false)
+      morf.time.timer(1, function() controls.activate(tile) end, false)
     end
   elseif kind == "timer" then
     timer.start(entry.milliseconds, "")

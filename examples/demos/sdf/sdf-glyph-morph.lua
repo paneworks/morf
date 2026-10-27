@@ -27,7 +27,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
 
 -- A window, not a screen. This used to cover the output on the overlay layer
 -- with a click target across the whole of it, which left nothing above it to
@@ -69,7 +68,7 @@ local GLYPHS = {
 -- face they have. The four generic names go in front because they are the ones
 -- that always resolve to something, whatever is installed.
 local FACES = { "sans-serif", "serif", "monospace", "cursive" }
-for _, family in ipairs(core.font_families()) do
+for _, family in ipairs(morf.text.families()) do
   FACES[#FACES + 1] = family
 end
 
@@ -311,4 +310,4 @@ ui.Item {
 }
 
 -- Different every run, so a demonstration is not the same demonstration twice.
-math.randomseed(core.launch_time_ms + seed:get())
+math.randomseed(morf.launch_time_ms + seed:get())

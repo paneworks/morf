@@ -94,7 +94,7 @@ function M.build(on_ran)
           armed:set(action.id)
           generation = generation + 1
           local mine = generation
-          morf.timer(3000, function() if mine == generation then armed:set("") end end, false)
+          morf.time.timer(3000, function() if mine == generation then armed:set("") end end, false)
         end,
       },
     }

@@ -29,7 +29,7 @@ end
 
 -- One shape stepping through the library, a second at a time.
 local step = morf.signal("m3shapes.step", 1)
-morf.timer(1000, function() step:set(step:get() % #shapes.NAMES + 1) end, true)
+morf.time.timer(1000, function() step:set(step:get() % #shapes.NAMES + 1) end, true)
 cells[#cells + 1] = shapes.Shape {
   x = 10, y = 10 + (rows - 1) * CELL, width = 90, height = 90,
   id = "morphing", shape = function() return shapes.NAMES[step:get()] end,

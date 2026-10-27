@@ -7,7 +7,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
 local config = require("config")
 
 local theme = {}
@@ -62,13 +61,13 @@ theme.color = {
 -- ------------------------------------------------------------------- fonts --
 
 theme.font = config.fontFamily
-theme.font_source = core.shell_path("assets/fonts")
+theme.font_source = morf.paths.shell("assets/fonts")
 
 --- The first installed Nerd Font, unless the config names one.
 local function find_icon_font()
   if config.iconFont ~= "auto" and config.iconFont ~= "" then return config.iconFont end
   local installed = {}
-  for _, name in ipairs(morf.font_families()) do installed[name] = true end
+  for _, name in ipairs(morf.text.families()) do installed[name] = true end
   for _, wanted in ipairs {
     -- The Propo and plain faces first: their glyphs are as wide as they
     -- look, where a Mono face squeezes each icon into one cell and lets
@@ -211,9 +210,9 @@ local mounted_count = 0
 function theme.mounted(shown, delay)
   mounted_count = mounted_count + 1
   local mounted = morf.signal("chillpill.mounted." .. mounted_count, shown:get())
-  local clock = morf.elapsed_timer()
+  local clock = morf.time.elapsed()
   local going = false
-  morf.timer(24, function()
+  morf.time.timer(24, function()
     local want = shown:get()
     if want then
       going = false
@@ -267,7 +266,7 @@ function theme.surface_motion(window, root)
     window:open()
     -- A tick later, so the write is its own flush and the behavior runs
     -- from the hidden state rather than landing there.
-    morf.timer(16, function()
+    morf.time.timer(16, function()
       if not closing then
         root.opacity = 1
         root.scale = 1
@@ -279,7 +278,7 @@ function theme.surface_motion(window, root)
     closing = true
     root.opacity = 0
     root.scale = 0.9
-    morf.timer(240, function()
+    morf.time.timer(240, function()
       if closing then window:close() end
     end, false)
   end

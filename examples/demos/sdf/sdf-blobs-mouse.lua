@@ -28,8 +28,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
-local io = require("morf.io")
 
 local screen = morf.screens[1]
 local W = (screen and screen.width) or 1920
@@ -39,7 +37,7 @@ local SHORT = math.min(W, H)
 morf.surface.width = W
 morf.surface.height = H
 morf.surface.anchors = { top = true, left = true, right = true, bottom = true }
-morf.surface.layer = core.env("MORF_BLOB_LAYER") or "overlay"
+morf.surface.layer = morf.env("MORF_BLOB_LAYER") or "overlay"
 morf.surface.keyboard_focus = "none"
 morf.surface.exclusive_zone = -1
 
@@ -54,7 +52,7 @@ local STRIDE = 6
 -- The lens.
 --------------------------------------------------------------------------------
 
-morf.shader("chromatic", {
+morf.shader.define("chromatic", {
   kind = "effect",
   -- Parameters arrive alphabetically whatever order they are declared in, so
   -- the entry point lists them that way: amount, jolt, pulse.
@@ -173,7 +171,7 @@ local BLOBS = {
 local MOUSE = { radius = 0.100, tilt = 2.7, color = "#ffd7a1" }
 local COUNT = #BLOBS + 1
 
-local elapsed = core.elapsed_timer()
+local elapsed = morf.time.elapsed()
 local blobs = {}
 local lens
 local places = {}
@@ -190,13 +188,13 @@ local centres = {}
 local ORIGIN_X = (screen and screen.x) or 0
 local ORIGIN_Y = (screen and screen.y) or 0
 
-local SIGNATURE = core.env("HYPRLAND_INSTANCE_SIGNATURE")
+local SIGNATURE = morf.env("HYPRLAND_INSTANCE_SIGNATURE")
 
 --- Every place this build of Hyprland might have put its sockets.
 local function socket_paths()
   local paths = {}
   if not SIGNATURE or SIGNATURE == "" then return paths end
-  local runtime = core.env("XDG_RUNTIME_DIR")
+  local runtime = morf.env("XDG_RUNTIME_DIR")
   if runtime and runtime ~= "" then
     paths[#paths + 1] = runtime .. "/hypr/" .. SIGNATURE .. "/.socket.sock"
   end
@@ -212,7 +210,7 @@ end
 --- process.
 local function cursor()
   for _, path in ipairs(socket_paths()) do
-    local ok, socket = pcall(io.socket, path)
+    local ok, socket = pcall(morf.socket.open, path)
     if ok and socket then
       socket:send("cursorpos")
       socket:flush()
@@ -333,7 +331,7 @@ local function advance()
   end
 
   if lens then
-    morf.shader_data(lens, "blobs", places)
+    morf.shader.data(lens, "blobs", places)
   end
 end
 

@@ -2,12 +2,11 @@
 --
 -- A surface of its own with the keyboard: type to filter every desktop
 -- entry on the session, up and down to pick, Enter to start it, Escape to
--- put it away. Entries come from `core.desktop_entries`; what to show and
+-- put it away. Entries come from `morf.apps.entries`; what to show and
 -- in what order is decided here.
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
 local config = require("config")
 local theme = require("theme")
 local field = require("field")
@@ -41,8 +40,8 @@ local function entry_paths()
       paths[#paths + 1] = path
     end
   end
-  add((core.env("XDG_DATA_HOME") or (config.home .. "/.local/share")) .. "/applications")
-  for directory in (core.env("XDG_DATA_DIRS") or ""):gmatch("[^:]+") do
+  add((morf.env("XDG_DATA_HOME") or (config.home .. "/.local/share")) .. "/applications")
+  for directory in (morf.env("XDG_DATA_DIRS") or ""):gmatch("[^:]+") do
     add(directory:gsub("/$", "") .. "/applications")
   end
   add("/usr/local/share/applications")
@@ -55,7 +54,7 @@ end
 local function load_entries()
   entries = {}
   local ok, table_ = pcall(function()
-    return core.desktop_entries(entry_paths()):applications()
+    return morf.apps.entries(entry_paths()):applications()
   end)
   if not ok or type(table_) ~= "table" then return end
   local seen = {}
@@ -151,7 +150,7 @@ local function launch(entry)
     for _, word in ipairs(command) do wrapped[#wrapped + 1] = word end
     command = wrapped
   end
-  pcall(core.exec_detached, command)
+  pcall(morf.process.detach, command)
   launcher.close()
 end
 

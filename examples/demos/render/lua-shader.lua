@@ -30,7 +30,7 @@ local theme = morf.theme {
 -- nothing after the first — which is what makes a shader affordable on a bar
 -- that never changes. Nothing here declares which it is: the compiler noticed
 -- while it was lowering the body, where it cannot be forgotten.
-morf.shader("plasma", {
+morf.shader.define("plasma", {
   params = { speed = 1.0, warp = 6.0 },
   fragment = [[
     function fragment(uv, time, resolution, coverage, speed, warp)
@@ -43,7 +43,7 @@ morf.shader("plasma", {
   ]],
 })
 
-morf.shader("sheen", {
+morf.shader.define("sheen", {
   params = { angle = 0.6 },
   fragment = [[
     function fragment(uv, time, resolution, coverage, angle)
@@ -58,7 +58,7 @@ morf.shader("sheen", {
 -- this loop's exit depends on the data it is computing. It cannot run away —
 -- every loop the compiler emits carries an iteration counter the shader cannot
 -- reach around, so a shader can be wrong but never take the session with it.
-morf.shader("orbit", {
+morf.shader.define("orbit", {
   params = { steps = 10.0 },
   fragment = [[
     function fragment(uv, time, resolution, coverage, steps)
@@ -84,7 +84,7 @@ morf.shader("orbit", {
 -- not consulted at all, so the shape here is whatever the shader returns alpha
 -- for. Geometry and shader stop composing in this mode, which is inherent to
 -- it rather than a gap.
-morf.shader("blades", {
+morf.shader.define("blades", {
   kind = "surface",
   params = { count = 6.0 },
   fragment = [[
@@ -105,7 +105,7 @@ morf.shader("blades", {
 -- somewhere to read *from*, so a node carrying one becomes a compositing layer
 -- whether or not anything else about it would have made it into one — its
 -- subtree renders to a target first, and the shader reworks that.
-morf.shader("ripple", {
+morf.shader.define("ripple", {
   kind = "effect",
   params = { amount = 0.012, rate = 2.0 },
   fragment = [[

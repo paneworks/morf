@@ -23,7 +23,7 @@ test.describe("an imported module that runs a program at load", function()
     test.eq(ran, false)
     test.contains(why, "permission")
     test.contains(why, "`fixture_probe`")
-    test.contains(why, "run (morf.spawn)")
+    test.contains(why, "run (morf.process.spawn)")
     test.eq(#permission_lines(), 1, "one log line for the refusal")
   end)
 

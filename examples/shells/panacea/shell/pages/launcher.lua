@@ -3,8 +3,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
-local io = require("morf.io")
 local config = require("config")
 local theme = require("theme")
 local field = require("field")
@@ -33,19 +31,19 @@ local recents = {}
 local recents_path = config.dir .. "/recents.json"
 
 local function load_recents()
-  local ok, handle = pcall(io.file, recents_path)
+  local ok, handle = pcall(morf.fs.file, recents_path)
   if not ok then return end
   local read, text = pcall(handle.read, handle)
   if not read or type(text) ~= "string" or text == "" then return end
-  local decoded, list = pcall(io.json.decode, text)
+  local decoded, list = pcall(morf.json.decode, text)
   if decoded and type(list) == "table" then recents = list end
 end
 load_recents()
 
 local function save_recents()
-  local ok, handle = pcall(io.file, recents_path)
+  local ok, handle = pcall(morf.fs.file, recents_path)
   if not ok then return end
-  local encoded, text = pcall(io.json.encode, recents)
+  local encoded, text = pcall(morf.json.encode, recents)
   if encoded then pcall(handle.write, handle, text) end
 end
 
@@ -66,8 +64,8 @@ local function entry_paths()
       paths[#paths + 1] = path
     end
   end
-  add((core.env("XDG_DATA_HOME") or (config.home .. "/.local/share")) .. "/applications")
-  for directory in (core.env("XDG_DATA_DIRS") or ""):gmatch("[^:]+") do
+  add((morf.env("XDG_DATA_HOME") or (config.home .. "/.local/share")) .. "/applications")
+  for directory in (morf.env("XDG_DATA_DIRS") or ""):gmatch("[^:]+") do
     add(directory:gsub("/$", "") .. "/applications")
   end
   add("/usr/local/share/applications")
@@ -79,7 +77,7 @@ end
 
 local function load_entries()
   entries = {}
-  local ok, list = pcall(function() return core.desktop_entries(entry_paths()):applications() end)
+  local ok, list = pcall(function() return morf.apps.entries(entry_paths()):applications() end)
   if not ok or type(list) ~= "table" then return end
   local seen = {}
   for _, entry in ipairs(list) do
@@ -243,7 +241,7 @@ local function launch(entry, island)
     command = wrapped
   end
   remember(entry.id)
-  pcall(core.exec_detached, command)
+  pcall(morf.process.detach, command)
   island.close()
 end
 

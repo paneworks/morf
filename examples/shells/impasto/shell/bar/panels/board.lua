@@ -51,7 +51,7 @@ local was_open = false
 morf.effect("impasto.board.leave", function()
   local open = island.state.open_panel() == "board"
   if was_open and not open then
-    morf.timer(1, function()
+    morf.time.timer(1, function()
       if island.state.open_panel() ~= "board" then tasks.leave() end
     end, false)
   end

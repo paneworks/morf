@@ -81,7 +81,7 @@ function M.scan(rescan)
   if not rescan then net.refresh() return end
   M.scanning:set(true)
   act.run("rescanning Wi-Fi", net.request_scan)
-  morf.timer(4000, function() M.scanning:set(false) end, false)
+  morf.time.timer(4000, function() M.scanning:set(false) end, false)
 end
 
 -- A row says "Working…" for as long as its operation runs: until the
@@ -113,8 +113,8 @@ local function busy(ssid, what, fn, arguments, settles_on_connect)
   arguments[arguments.n + 1] = done
   local ok, err = act.run(what, fn, table.unpack(arguments, 1, arguments.n + 1))
   -- A dry run (or a call that never went out) has nothing to wait for.
-  if act.dry or not ok then morf.timer(1, function() finish(mine) end, false) end
-  morf.timer(60000, function() finish(mine) end, false)
+  if act.dry or not ok then morf.time.timer(1, function() finish(mine) end, false) end
+  morf.time.timer(60000, function() finish(mine) end, false)
   return ok, err
 end
 
@@ -122,7 +122,7 @@ morf.effect("impasto.network.settled", function()
   local connected, ssid = s.wifi.connected == true, s.wifi.ssid
   local wanted = waiting_for
   if wanted and connected and ssid == wanted.ssid then
-    morf.timer(1, function() finish(wanted.operation) end, false)
+    morf.time.timer(1, function() finish(wanted.operation) end, false)
   end
 end)
 

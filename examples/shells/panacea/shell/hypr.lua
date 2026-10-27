@@ -11,8 +11,6 @@
 -- it has windows, which is what the disc under a number means.
 
 local morf = require("morf")
-local io = require("morf.io")
-local core = require("morf.core")
 local config = require("config")
 
 local hypr = {}
@@ -27,23 +25,23 @@ hypr.state = morf.state {
 -- The same rows as a plain list, for logic that walks them.
 hypr.rows = {}
 
-local pinned = core.env("MORF_MONITOR")
+local pinned = morf.env("MORF_MONITOR")
 if pinned == "" then pinned = nil end
 
 -- ------------------------------------------------------------------ paths --
 
-local signature = core.env("HYPRLAND_INSTANCE_SIGNATURE")
+local signature = morf.env("HYPRLAND_INSTANCE_SIGNATURE")
 
 local function find_sockets()
   if not signature or signature == "" then return nil, nil end
-  local runtime = core.env("XDG_RUNTIME_DIR")
+  local runtime = morf.env("XDG_RUNTIME_DIR")
   local directories = {}
   if runtime and runtime ~= "" then directories[#directories + 1] = runtime .. "/hypr/" .. signature end
   directories[#directories + 1] = "/tmp/hypr/" .. signature
   for _, directory in ipairs(directories) do
     for _, suffix in ipairs { ".sock", "" } do
       -- A connect that works is the test; the stream itself is opened below.
-      local ok, socket = pcall(io.socket, directory .. "/.socket2" .. suffix)
+      local ok, socket = pcall(morf.socket.open, directory .. "/.socket2" .. suffix)
       if ok and socket then
         pcall(socket.close, socket)
         return directory .. "/.socket2" .. suffix, directory .. "/.socket" .. suffix
@@ -66,7 +64,7 @@ local requests = {}
 
 local function request(key, payload, on_reply)
   if not command_path or requests[key] then return false end
-  local ok, handle = pcall(morf.request_socket, command_path, payload, function(reply)
+  local ok, handle = pcall(morf.socket.request, command_path, payload, function(reply)
     requests[key] = nil
     if on_reply then on_reply(reply) end
   end, { timeout_ms = 2000 })
@@ -80,7 +78,7 @@ end
 --- and the windows. Waits at most `timeout_ms`.
 function hypr.ask(payload, timeout_ms)
   if not command_path then return nil end
-  local ok, socket = pcall(io.socket, command_path)
+  local ok, socket = pcall(morf.socket.open, command_path)
   if not ok or not socket then return nil end
   local sent = pcall(socket.send, socket, payload)
   if sent then sent = pcall(socket.flush, socket) end
@@ -100,7 +98,7 @@ end
 function hypr.gaps_out()
   local reply = hypr.ask("j/getoption general:gaps_out", 150)
   if not reply then return 0 end
-  local ok, option = pcall(io.json.decode, reply)
+  local ok, option = pcall(morf.json.decode, reply)
   if not ok or type(option) ~= "table" then return 0 end
   -- `css` is top, right, bottom, left; `int` is one number for all.
   local top = tostring(option.css or ""):match("^%s*(%d+)")
@@ -128,8 +126,8 @@ end
 
 local function rebuild()
   if not pending.monitors or not pending.workspaces then return end
-  local ok_monitors, monitors = pcall(io.json.decode, pending.monitors)
-  local ok_workspaces, workspaces = pcall(io.json.decode, pending.workspaces)
+  local ok_monitors, monitors = pcall(morf.json.decode, pending.monitors)
+  local ok_workspaces, workspaces = pcall(morf.json.decode, pending.workspaces)
   pending.monitors, pending.workspaces = nil, nil
   if not ok_monitors or not ok_workspaces then return end
   if type(monitors) ~= "table" or type(workspaces) ~= "table" then return end
@@ -198,7 +196,7 @@ end
 local function refresh_keymap()
   request("devices", "j/devices", function(reply)
     if not reply then return end
-    local ok, devices = pcall(io.json.decode, reply)
+    local ok, devices = pcall(morf.json.decode, reply)
     if not ok or type(devices) ~= "table" then return end
     for _, keyboard in ipairs(devices.keyboards or {}) do
       if keyboard.main then
@@ -269,11 +267,11 @@ function hypr.tick() end
 -- Without an event stream the state still follows, just later.
 local fallback = nil
 local function follow_slowly()
-  if not fallback then fallback = morf.timer(2000, refresh, true) end
+  if not fallback then fallback = morf.time.timer(2000, refresh, true) end
 end
 
 if events_path then
-  morf.connect {
+  morf.socket.connect {
     path = events_path,
     on_line = on_line,
     -- The compositor closed the stream; it is not coming back.

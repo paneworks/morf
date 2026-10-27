@@ -32,8 +32,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
-local io = require("morf.io")
 
 local screen = morf.screens[1]
 local SW = (screen and screen.width) or 1920
@@ -74,12 +72,12 @@ local theme = morf.theme {
 --- The socket answers once and closes, so this connects each time. That is
 --- cheaper than it reads: a hundred of these round trips take a millisecond and
 --- a half, and none of it is a process.
-local SIGNATURE = core.env("HYPRLAND_INSTANCE_SIGNATURE")
-local RUNTIME = core.env("XDG_RUNTIME_DIR")
+local SIGNATURE = morf.env("HYPRLAND_INSTANCE_SIGNATURE")
+local RUNTIME = morf.env("XDG_RUNTIME_DIR")
 
 local function hypr(command)
   if not (SIGNATURE and RUNTIME) then return nil end
-  local ok, socket = pcall(io.socket, RUNTIME .. "/hypr/" .. SIGNATURE .. "/.socket.sock")
+  local ok, socket = pcall(morf.socket.open, RUNTIME .. "/hypr/" .. SIGNATURE .. "/.socket.sock")
   if not (ok and socket) then return nil end
   socket:send(command)
   socket:flush()
@@ -92,7 +90,7 @@ end
 local function focus(title, app_id)
   local listing = hypr("j/clients")
   if not listing then return end
-  local ok, clients = pcall(io.json.decode, listing)
+  local ok, clients = pcall(morf.json.decode, listing)
   if not (ok and clients) then return end
   for _, client in ipairs(clients) do
     if client.title == title and client.class == app_id then

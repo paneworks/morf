@@ -22,7 +22,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
 local config = require("config")
 local theme = require("theme")
 local system = require("system")
@@ -163,7 +162,7 @@ end
 
 -- `PANACEA_OPEN=main` opens a page at start, for a look at it with
 -- frame_bench.
-local open_at_start = core.env("PANACEA_OPEN") or ""
+local open_at_start = morf.env("PANACEA_OPEN") or ""
 
 local function open() return island.page:get() ~= "" end
 
@@ -197,6 +196,6 @@ island.surface.close = function()
   morf.surface.keyboard_focus = "none"
   morf.surface.backdrop = false
 end
-morf.on_backdrop_click(function() island.close() end)
+morf.window.on_backdrop_click(function() island.close() end)
 
 if open_at_start ~= "" then island.open(open_at_start) end

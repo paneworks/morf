@@ -71,7 +71,7 @@ function page.build(island)
           gap = S(8), align = "center",
           theme.text { size = config.fontSize - 4, color = C.muted,
             text = function()
-              local _ = morf.clock and morf.clock:get()
+              local _ = morf.time.clock and morf.time.clock:get()
               return media.clock(media.position())
             end },
           theme.text { text = "/", size = config.fontSize - 4, color = C.faint },
@@ -89,7 +89,7 @@ function page.build(island)
       width = W, height = S(70),
       playing = function() return m.status == "Playing" end,
       progress = function()
-        local _ = morf.clock and morf.clock:get()
+        local _ = morf.time.clock and morf.time.clock:get()
         return media.progress()
       end,
       seek = media.seek,

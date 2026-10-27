@@ -106,7 +106,7 @@ local function island_part(W)
           return kit.text {
             anchors = { center_in = true }, size = theme.size.large, weight = 600,
             text = function()
-              morf.clock:get()
+              morf.time.clock:get()
               local pattern = format.id
               if settings.clockShowsSeconds then pattern = pattern:gsub("%%M", "%%M:%%S", 1) end
               return morf.time.format(pattern)

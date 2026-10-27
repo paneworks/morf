@@ -59,7 +59,7 @@ function M.flash(icon, label, progress)
   s.osd:set(true)
   osd_generation = osd_generation + 1
   local mine = osd_generation
-  morf.timer(M.TRANSIENT_MS, function()
+  morf.time.timer(M.TRANSIENT_MS, function()
     if mine == osd_generation then s.osd:set(false) end
   end, false)
 end

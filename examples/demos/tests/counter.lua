@@ -18,10 +18,10 @@ local host = morf.signal("counter.host", "?")
 
 -- A second after it starts, the counter says it is ready.
 local ready = morf.signal("counter.ready", false)
-morf.timer(1000, function() ready:set(true) end, false)
+morf.time.timer(1000, function() ready:set(true) end, false)
 
 -- What `uname -n` says, once: a command a spec can stub.
-morf.run({ "uname", "-n" }, function(result)
+morf.process.run({ "uname", "-n" }, function(result)
   host:set(result.ok and (result.stdout:gsub("%s+$", "")) or "unknown")
 end)
 

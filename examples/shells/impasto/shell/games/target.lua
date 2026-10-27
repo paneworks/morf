@@ -29,7 +29,7 @@ return function(ctx)
   local lives = morf.signal("impasto.target." .. id .. ".lives", 3)
   local smashed = morf.signal("impasto.target." .. id .. ".smashed", false)
   local tx, ty = 0, 0
-  local clock = morf.elapsed_timer()
+  local clock = morf.time.elapsed()
   local shrink = nil
   local generation = 0
 

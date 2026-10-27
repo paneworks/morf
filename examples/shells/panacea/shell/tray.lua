@@ -59,8 +59,8 @@ local function open_menu(row)
   local menu = dbusmenu.for_item(row.service .. row.path)
   if not menu then return activate(row) end
   local ok, entries = pcall(menu.entries)
-  if ok and type(entries) == "table" and morf.menu then
-    pcall(morf.menu, entries)
+  if ok and type(entries) == "table" and morf.window.menu then
+    pcall(morf.window.menu, entries)
   end
 end
 

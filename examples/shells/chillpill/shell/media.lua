@@ -7,7 +7,6 @@
 -- so the bar under the title moves smoothly.
 
 local morf = require("morf")
-local core = require("morf.core")
 local proc = require("proc")
 local config = require("config")
 
@@ -76,7 +75,7 @@ end
 
 -- ------------------------------------------------------------ album art --
 
-local cache_dir = (core.env("XDG_CACHE_HOME") or (config.home .. "/.cache")) .. "/chillpill/art"
+local cache_dir = (morf.env("XDG_CACHE_HOME") or (config.home .. "/.cache")) .. "/chillpill/art"
 local art_fetching = {}
 local art_ready = {}
 proc.sh("mkdir -p '" .. cache_dir .. "'")
@@ -116,7 +115,7 @@ end
 
 -- ---------------------------------------------------------------- polling --
 
-local position_clock = morf.elapsed_timer()
+local position_clock = morf.time.elapsed()
 local last_track = nil
 
 local function read(name)
@@ -180,7 +179,7 @@ local function poll()
 end
 
 poll()
-morf.timer(1000, poll, true)
+morf.time.timer(1000, poll, true)
 media.poll = poll
 
 --- Where the track is now, in seconds, carried forward from the last read.
@@ -208,7 +207,7 @@ local function verb(name)
     local proxy = state.player ~= "" and player_proxy(state.player) or nil
     if not proxy then return end
     pcall(proxy.call, proxy, name)
-    morf.timer(150, poll, false)
+    morf.time.timer(150, poll, false)
   end
 end
 
@@ -231,7 +230,7 @@ function media.seek(fraction)
   })
   state.position = micros / 1000000
   position_clock:restart()
-  morf.timer(200, poll, false)
+  morf.time.timer(200, poll, false)
 end
 
 return media

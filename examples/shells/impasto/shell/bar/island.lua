@@ -160,7 +160,7 @@ end
 local function dwell()
   dwell_generation = dwell_generation + 1
   local mine = dwell_generation
-  morf.timer(80, function()
+  morf.time.timer(80, function()
     if mine == dwell_generation and hovered:get() and can_summarise() and not island.rest_busy:get() then
       state.set_summary(true)
     end
@@ -178,7 +178,7 @@ local function on_hover(over)
     held:set(false)
     grace_generation = grace_generation + 1
     local mine = grace_generation
-    morf.timer(260, function()
+    morf.time.timer(260, function()
       if mine == grace_generation and not hovered:get() then state.set_summary(false) end
     end, false)
   end
@@ -195,7 +195,7 @@ morf.effect("impasto.island.glance.busy", function()
   if busy then
     dwell_generation = dwell_generation + 1
   elseif hovered:get() and not state.signals.summary:get() then
-    morf.timer(1, dwell, false)
+    morf.time.timer(1, dwell, false)
   end
 end)
 
@@ -211,7 +211,7 @@ do
       landing:set(true)
       generation = generation + 1
       local mine = generation
-      morf.timer(theme.duration_morph() + 20, function()
+      morf.time.timer(theme.duration_morph() + 20, function()
         if mine ~= generation then return end
         landing:set(false)
         if hovered:get() and not state.signals.summary:get() then dwell() end
@@ -281,7 +281,7 @@ local function mounted(predicate, name)
       mounted_now = true
       shown:set(true)
     elseif mounted_now then
-      morf.timer(theme.duration_morph() + 40, function()
+      morf.time.timer(theme.duration_morph() + 40, function()
         if mine == generation and not predicate() then
           mounted_now = false
           shown:set(false)

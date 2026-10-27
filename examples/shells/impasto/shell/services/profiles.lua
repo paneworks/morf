@@ -37,7 +37,7 @@ local M = {}
 M.FORMAT = 1
 M.NAME_LENGTH = 32
 M.path = fs.join(settings.dir, "profiles.json")
-M.shipped_dir = fs.join(morf.shell_dir(), "profiles")
+M.shipped_dir = fs.join(morf.paths.shell(), "profiles")
 
 -- { id, name, wallpaper, palette, settings }
 local list = {}

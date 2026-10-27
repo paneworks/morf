@@ -3,8 +3,6 @@
 -- The keys are Panacea's own, so the file its settings page writes reads
 -- here unchanged; anything it leaves out takes the default below.
 
-local core = require("morf.core")
-local io = require("morf.io")
 
 local config = {
   -- Type.
@@ -113,11 +111,11 @@ local config = {
   bind_themeSwitch = "SUPER + SHIFT + T",
 }
 
-local home = core.env("HOME") or ""
+local home = morf.env("HOME") or ""
 config.home = home
 -- Set while frame_bench draws one page: sizes land instead of springing,
 -- since the bench draws one frame and a spring needs many.
-config.bench = (core.env("PANACEA_OPEN") or "") ~= ""
+config.bench = (morf.env("PANACEA_OPEN") or "") ~= ""
 
 --- `~` at the start of a path is the home directory.
 function config.expand(path)
@@ -127,16 +125,16 @@ function config.expand(path)
   return path
 end
 
-local dir = (core.env("XDG_CONFIG_HOME") or (home .. "/.config")) .. "/panacea"
+local dir = (morf.env("XDG_CONFIG_HOME") or (home .. "/.config")) .. "/panacea"
 local path = dir .. "/settings.json"
 config.dir = dir
 config.path = path
 
-local ok, handle = pcall(io.file, path)
+local ok, handle = pcall(morf.fs.file, path)
 if ok and handle then
   local read, text = pcall(handle.read, handle)
   if read and type(text) == "string" and text ~= "" then
-    local decoded, values = pcall(io.json.decode, text)
+    local decoded, values = pcall(morf.json.decode, text)
     if decoded and type(values) == "table" then
       for key, value in pairs(values) do
         if config[key] == nil or type(value) == type(config[key]) then
@@ -164,9 +162,9 @@ function config.save(changes)
       end
     end
   end
-  local encoded, text = pcall(io.json.encode, out)
+  local encoded, text = pcall(morf.json.encode, out)
   if not encoded then return false end
-  local opened, file = pcall(io.file, path)
+  local opened, file = pcall(morf.fs.file, path)
   if not opened then return false end
   return pcall(file.write, file, text)
 end

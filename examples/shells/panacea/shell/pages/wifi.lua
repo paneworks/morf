@@ -186,7 +186,7 @@ function page.on_open()
 end
 
 -- A fresh scan every so often while the page is open.
-morf.timer(12000, function()
+morf.time.timer(12000, function()
   if require("island").page:get() == "wifi" then page.scan() end
 end, true)
 

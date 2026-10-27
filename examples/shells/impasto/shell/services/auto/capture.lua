@@ -67,7 +67,7 @@ controls.define_tile("record", {
   -- Stopping needs no pause; starting waits for the island to leave the picture.
   action = function()
     if recorder.recording() then recorder.stop() return end
-    morf.timer(theme.duration_island_gone(), function() recorder.start("screen", nil) end, false)
+    morf.time.timer(theme.duration_island_gone(), function() recorder.start("screen", nil) end, false)
   end,
 })
 
@@ -75,7 +75,7 @@ controls.define_tile("record", {
 -- is not a panel, so the request becomes an opening.
 morf.effect("impasto.capture.button", function()
   if island_state.open_panel() ~= "capture" then return end
-  morf.timer(1, function()
+  morf.time.timer(1, function()
     island_state.close()
     capture.open("", "", "", theme.duration_island_gone())
   end, false)

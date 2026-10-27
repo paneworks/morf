@@ -142,7 +142,7 @@ test.describe("a configuration's own reporting", function()
   test.it("takes the place of the band", function()
     test.source(shell("Item", { extra = [[
 local reported = ""
-morf.on_reload_failed(function(error) reported = error end)
+morf.on_reload(function(ok, error) if not ok then reported = error return true end end)
 morf.ipc.reported = function() return reported end
 ]] }))
     fail_reload()
@@ -150,9 +150,17 @@ morf.ipc.reported = function() return reported end
     test.contains(test.ipc("reported"), PARSE_ERROR)
   end)
 
+  test.it("leaves the band to a handler that does not take the failure", function()
+    test.source(shell("Item", { extra = [[
+morf.on_reload(function(ok) end)
+]] }))
+    fail_reload()
+    test.truthy(band(), "the band is shown")
+  end)
+
   test.it("does not count when the handler throws", function()
     test.source(shell("Item", { extra = [[
-morf.on_reload_failed(function() error("handler broke") end)
+morf.on_reload(function() error("handler broke") end)
 ]] }))
     fail_reload()
     test.truthy(band(), "the band is shown")
@@ -166,7 +174,7 @@ morf.on_reload_failed(function() error("handler broke") end)
     test.source(shell("Item", { extra = [[
 local reported = ""
 morf.ipc.listen = function()
-  morf.on_reload_failed(function(error) reported = error end)
+  morf.on_reload(function(ok, error) if not ok then reported = error return true end end)
 end
 morf.ipc.reported = function() return reported end
 ]] }))

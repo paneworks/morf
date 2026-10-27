@@ -7,7 +7,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
 local config = require("config")
 local theme = require("theme")
 local field = require("field")
@@ -26,7 +25,7 @@ local ROW_HEIGHT = S(56)
 local ROWS = 8
 local THUMB = S(140)
 
-local cache_dir = (core.env("XDG_CACHE_HOME") or (config.home .. "/.cache")) .. "/chillpill/clips"
+local cache_dir = (morf.env("XDG_CACHE_HOME") or (config.home .. "/.cache")) .. "/chillpill/clips"
 proc.sh("mkdir -p '" .. cache_dir .. "'")
 
 -- --------------------------------------------------------------- entries --

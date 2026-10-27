@@ -26,7 +26,7 @@ function M.icon_file(name)
   if name:sub(1, 1) == "/" then
     file = morf.fs.exists and morf.fs.exists(name) and name or false
   else
-    local ok, path = pcall(morf.icon_path, name, nil, 96)
+    local ok, path = pcall(morf.image.icon, name, nil, 96)
     file = ok and path or false
   end
   icon_cache[name] = file

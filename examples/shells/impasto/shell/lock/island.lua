@@ -125,7 +125,7 @@ return function(values)
     if count == seen then return end
     seen = count
     missed:set(true)
-    morf.timer(math.max(1, theme.duration_morph() * 2), function() missed:set(false) end, false)
+    morf.time.timer(math.max(1, theme.duration_morph() * 2), function() missed:set(false) end, false)
     morf.animation.play {
       loops = 2,
       { node = body, property = "translate_x", to = -10, duration = 55, easing = "out_cubic" },

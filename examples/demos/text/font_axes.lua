@@ -25,7 +25,7 @@ local ICON_FAMILY = "Material Symbols Rounded"
 
 -- What the icon font can move, asked of the machine rather than assumed.
 local function has_axis(family, tag)
-  for _, axis in ipairs(morf.font_axes(family)) do
+  for _, axis in ipairs(morf.text.axes(family)) do
     if axis.tag == tag then return true end
   end
   return false

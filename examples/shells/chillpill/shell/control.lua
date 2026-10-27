@@ -124,7 +124,7 @@ local function player_card()
           anchors = { left = true, top = true, top_margin = S(5) },
           fraction = function()
             -- Re-read every second while playing.
-            local _ = morf.clock and morf.clock:get()
+            local _ = morf.time.clock and morf.time.clock:get()
             return media.progress()
           end,
         },
@@ -138,7 +138,7 @@ local function player_card()
         theme.text {
           size = 13, color = C.dim, anchors = { left = true },
           text = function()
-            local _ = morf.clock and morf.clock:get()
+            local _ = morf.time.clock and morf.time.clock:get()
             return media.clock(media.position())
           end,
         },
@@ -184,7 +184,7 @@ end
 
 -- The countdown. `preset` is the index into `timerPresets`; `ends_at` is
 -- when it fires, in elapsed-timer milliseconds, or nil when idle.
-local timer_clock = morf.elapsed_timer()
+local timer_clock = morf.time.elapsed()
 control.timer = morf.state { preset = 1, ends_at = 0, running = false, remaining = "" }
 
 function control.timer_tick()
@@ -636,7 +636,7 @@ local function device_row(row)
     hover_color = row.connected and blue:lighten(0.05) or C.hover,
     on_click = function()
       system.bluetooth_connect(row.path, not row.connected)
-      morf.timer(2000, refresh_devices, false)
+      morf.time.timer(2000, refresh_devices, false)
     end,
     ui.Row {
       gap = S(16), align = "center", height = ROW_H,
@@ -657,7 +657,7 @@ local function device_row(row)
       accepted_buttons = "right",
       on_clicked = function()
         system.bluetooth_forget(row.path)
-        morf.timer(600, refresh_devices, false)
+        morf.time.timer(600, refresh_devices, false)
       end,
     },
   }
@@ -685,7 +685,7 @@ local function bluetooth_panel()
           hover_color = function() return state.bluetooth.powered and C.blue:lighten(0.05) or C.hover end,
           on_click = function()
             system.set_bluetooth_power(not state.bluetooth.powered)
-            morf.timer(800, function() system.poll_bluetooth() refresh_devices() end, false)
+            morf.time.timer(800, function() system.poll_bluetooth() refresh_devices() end, false)
           end,
           ui.Rect {
             width = S(22), height = S(22), radius = S(11), color = C.text,
@@ -759,7 +759,7 @@ function control.build(top)
 end
 
 -- The side panels close with the centre one.
-morf.timer(250, function()
+morf.time.timer(250, function()
   if not control.shown:get() then
     control.wifi_open:set(false)
     control.bluetooth_open:set(false)

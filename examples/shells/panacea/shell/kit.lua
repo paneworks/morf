@@ -59,7 +59,7 @@ function kit.glyph(size, glyph, color)
             if pending then
               local next_glyph = pending
               pending = nil
-              morf.timer(16, function() shape.glyph_morph_to = next_glyph progress:set(1) end, false)
+              morf.time.timer(16, function() shape.glyph_morph_to = next_glyph progress:set(1) end, false)
             end
           end
         end,
@@ -103,7 +103,7 @@ function kit.row(values)
     if now ~= was then
       was = now
       pop:set(true)
-      morf.timer(120, function() pop:set(false) end, false)
+      morf.time.timer(120, function() pop:set(false) end, false)
     end
   end)
   local circle

@@ -47,7 +47,7 @@ local server, why = notifications.serve {
         local row = {
           id = entry.id, app = entry.app, icon = entry.icon,
           summary = entry.summary, body = entry.body, urgency = entry.urgency,
-          time = theme.clock:format("%H:%M"), actions = entry.actions,
+          time = theme.clock.format("%H:%M"), actions = entry.actions,
         }
         table.insert(history, 1, row)
         while #history > 60 do table.remove(history) end
@@ -56,7 +56,7 @@ local server, why = notifications.serve {
           while #popups > 3 do table.remove(popups) end
           local linger = entry.urgency >= 2 and config.notifCritTimeout or config.notifTimeout
           if linger > 0 then
-            morf.timer(linger, function() drop_popup(row.id) end, false)
+            morf.time.timer(linger, function() drop_popup(row.id) end, false)
           end
         end
       end
@@ -96,15 +96,15 @@ end
 
 --- One from the shell itself.
 function notify.local_notice(app, summary, body, glyph)
-  local id = -(#history + 1) - math.floor(morf.elapsed_timer():elapsed_ms())
+  local id = -(#history + 1) - math.floor(morf.time.elapsed():elapsed_ms())
   local row = {
     id = id, app = app, icon = "", glyph = glyph, summary = summary, body = body or "",
-    urgency = 1, time = theme.clock:format("%H:%M"), actions = {},
+    urgency = 1, time = theme.clock.format("%H:%M"), actions = {},
   }
   table.insert(history, 1, row)
   table.insert(popups, 1, row)
   while #popups > 3 do table.remove(popups) end
-  morf.timer(config.notifTimeout, function() drop_popup(id) end, false)
+  morf.time.timer(config.notifTimeout, function() drop_popup(id) end, false)
   push_models()
 end
 

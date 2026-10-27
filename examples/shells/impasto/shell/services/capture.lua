@@ -198,7 +198,7 @@ function M.open(shape, kind, destination, after)
   s.busy:set(true)
   M.screen_name = ((morf.screens or {})[1] or {}).name or ""
   local path = fs.join(runtime(), "impasto-grab-" .. morf.time.now_ms() .. ".png")
-  morf.timer(math.max(1, after or 1), function()
+  morf.time.timer(math.max(1, after or 1), function()
     local queued, err = pcall(morf.screencopy.save, {
       path = path, output = M.screen().name ~= "" and M.screen().name or nil,
       on_done = function(done, info)
@@ -318,14 +318,14 @@ local function deliver(cut, destination, name)
       command[#command + 1] = "--copy-command"
       command[#command + 1] = wl_copy
     end
-    local child = morf.spawn { command = command, detached = true }
+    local child = morf.process.spawn { command = command, detached = true }
     if not child then fs.remove(cut) end
     say(child and "Opening the editor" or "satty would not start", "", child and "󰏫" or "󰀦")
     return
   end
   -- Read as text.
   languages(function(langs)
-    morf.run({ tools.text, cut, "-", "-l", langs }, { timeout_ms = 60000 }, function(result)
+    morf.process.run({ tools.text, cut, "-", "-l", langs }, { timeout_ms = 60000 }, function(result)
       fs.remove(cut)
       local text = tostring(result.stdout or ""):match("^%s*(.-)%s*$")
       if not result.ok or text == "" then
@@ -357,7 +357,7 @@ function M.fire(x, y, width, height)
       width = math.floor(width + 0.5), height = math.floor(height + 0.5),
     } or nil
     -- A frame for the surface to leave the screen before the encoder looks.
-    morf.timer(theme.duration_fast(), function()
+    morf.time.timer(theme.duration_fast(), function()
       require("services.recorder").start(whole and "screen" or M.shape(), box)
     end, false)
     return

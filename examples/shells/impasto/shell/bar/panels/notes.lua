@@ -45,7 +45,7 @@ local was_open = false
 morf.effect("impasto.notes.leave", function()
   local open = island.state.open_panel() == "notes"
   if was_open and not open then
-    morf.timer(1, function()
+    morf.time.timer(1, function()
       if island.state.open_panel() ~= "notes" then
         notes.leave()
         showing_archived:set(false)

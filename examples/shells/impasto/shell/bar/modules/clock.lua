@@ -20,7 +20,7 @@ end
 function clock.text()
   local pattern = format()
   -- Woken as often as the pattern changes: every second only with seconds.
-  if pattern:find("%%[STr]") then morf.clock:get() else morf.minute_clock:get() end
+  if pattern:find("%%[STr]") then morf.time.clock:get() else morf.time.minute_clock:get() end
   return morf.time.format(pattern)
 end
 
@@ -33,7 +33,7 @@ function clock.face()
     kit.text {
       visible = function() return settings.clockShowsDate end,
       text = function()
-        morf.hour_clock:get()
+        morf.time.hour_clock:get()
         return morf.time.format("%a %-d %b")
       end,
       size = theme.size.small, color = theme.color.textMuted,

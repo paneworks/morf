@@ -104,7 +104,7 @@ ui.Item {
     x = 570,
     y = 25,
     width = 145,
-    text = function() return morf.clock:get() end,
+    text = function() return morf.time.clock:get() end,
     horizontal_alignment = "right",
     color = "#94a3b8",
     font_size = 14,

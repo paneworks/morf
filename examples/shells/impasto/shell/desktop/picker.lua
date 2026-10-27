@@ -62,7 +62,7 @@ end
 -- thread would stall the desk for seconds, so each picture is made small
 -- once, by `morf.image.process` on a worker, and kept in the cache; a tile
 -- shows its thumbnail when it is there.
-local THUMB_DIR = morf.cache_path and morf.cache_path("impasto-thumbs")
+local THUMB_DIR = morf.paths.cache and morf.paths.cache("impasto-thumbs")
   or (morf.fs.home() .. "/.cache/impasto-thumbs")
 local made = morf.signal("impasto.desk.picker.thumbs", 0)
 local pending = {}

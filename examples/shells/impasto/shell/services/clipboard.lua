@@ -12,7 +12,7 @@
 --             can show
 --
 -- Every screen's runtime runs this file, but only the primary one
--- (`morf.primary()`) keeps what is copied: one copy, one entry, one writer
+-- (`morf.window.primary()`) keeps what is copied: one copy, one entry, one writer
 -- of the index for what arrives. The others read the index back whenever it
 -- changes (as the settings are), and what a person does to the history on
 -- any screen -- forget one, wipe it -- is written there and read back by
@@ -93,7 +93,7 @@ end
 local function save_soon()
   if saving then return end
   saving = true
-  morf.timer(300, save, false)
+  morf.time.timer(300, save, false)
 end
 
 -- morf.json hands arrays back as tagged tables; the history keeps plain ones.
@@ -345,7 +345,7 @@ function M.start()
   require("services.watch").file(M.index_path, reread)
   local ok, err = pcall(morf.clipboard.watch, function(offer)
     -- Only the primary runtime keeps copies; the others read them back.
-    if not morf.primary() then return end
+    if not morf.window.primary() then return end
     -- nil: the clipboard was emptied.
     if not offer or not settings.clipboardHistory then return end
     local offered = offer.mime_types or {}
@@ -384,14 +384,14 @@ morf.ipc.clipboard = function(arg)
     return require("services.launcher").toggle_clipboard()
   end
   -- Every screen hears the verb; the primary one wipes, once.
-  if arg == "wipe" and morf.primary() then M.wipe() end
+  if arg == "wipe" and morf.window.primary() then M.wipe() end
   local ok, supported = pcall(morf.clipboard.supported)
   return ("%d kept, data control %s"):format(#entries, (ok and supported) and "on" or "off")
 end
 
 morf.ipc.clipboard_add = function(text)
   -- Kept once, by the primary runtime; the others read it back.
-  if not morf.primary() then return nil end
+  if not morf.window.primary() then return nil end
   if not text or text == "" then return "nothing to add" end
   -- `png:<path>` keeps that picture as a copied image.
   local path = text:match("^png:(.+)$")

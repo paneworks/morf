@@ -17,7 +17,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
 local config = require("config")
 local theme = require("theme")
 local system = require("system")
@@ -95,8 +94,8 @@ end
 --- What each strip piece says while collapsed.
 local function strip_words()
   return {
-    day = theme.clock:format("%a"),
-    clock = theme.clock:format(clock_format),
+    day = theme.clock.format("%a"),
+    clock = theme.clock.format(clock_format),
     ws = hypr.state.active_label,
     layout = hypr.state.keymap ~= "" and hypr.state.keymap or "US",
     battery = state.battery.percent .. "%",
@@ -133,12 +132,12 @@ local function capsule(width, height, content)
   local flares = {}
   if NOTCH then
     flares[1] = ui.Image {
-      source = core.shell_path("assets/flare-left.svg"),
+      source = morf.paths.shell("assets/flare-left.svg"),
       width = FLARE, height = FLARE,
       anchors = { left = true, top = true, left_margin = -FLARE },
     }
     flares[2] = ui.Image {
-      source = core.shell_path("assets/flare-right.svg"),
+      source = morf.paths.shell("assets/flare-right.svg"),
       width = FLARE, height = FLARE,
       anchors = { right = true, top = true, right_margin = -FLARE },
     }
@@ -180,7 +179,7 @@ local function morpher(values)
         if pending then
           local next_word = pending
           pending = nil
-          morf.timer(16, function()
+          morf.time.timer(16, function()
             node.morph_to = next_word
             target = next_word
             progress:set(1)
@@ -546,7 +545,7 @@ function island.build()
     day_to(a) clock_to(b) ws_to(c) layout_to(d) battery_to(e) glyph_to(g)
   end
   island.retarget = retarget
-  morf.timer(100, retarget, true)
+  morf.time.timer(100, retarget, true)
 
   -- The recorder's dot and time, only while it runs.
   local recording = ui.Row {
@@ -571,10 +570,10 @@ function island.build()
   -- something plays, quick settings otherwise, after a moment, and it goes
   -- again once the pointer has left the island for a while. A page opened
   -- by a click or a key stays. Off by default.
-  local hover_clock = morf.elapsed_timer()
+  local hover_clock = morf.time.elapsed()
   local hovering = false
   local opened_by_hover = false
-  if config.pillHover then morf.timer(80, function()
+  if config.pillHover then morf.time.timer(80, function()
     if hovering and not open() and hover_clock:elapsed_ms() > 260 then
       local media = require("media")
       opened_by_hover = true

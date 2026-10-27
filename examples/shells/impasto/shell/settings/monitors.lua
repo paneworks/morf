@@ -135,7 +135,7 @@ local function rebuilding(W, revision, build)
     setting.watch(function()
       local now = tostring(revision())
       if seen ~= nil and now ~= seen then
-        morf.timer(1, function() model:replace({ { key = now } }, "key") end, false)
+        morf.time.timer(1, function() model:replace({ { key = now } }, "key") end, false)
       end
       seen = now
     end),

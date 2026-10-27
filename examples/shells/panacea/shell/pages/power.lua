@@ -19,7 +19,7 @@ page.icon = "󰐥"
 
 page.armed = morf.signal("panacea.power.armed", 0)
 page.current = morf.signal("panacea.power.current", 1)
-local armed_clock = morf.elapsed_timer()
+local armed_clock = morf.time.elapsed()
 
 local ACTIONS = {
   { id = "sleep", glyph = "󰒲", label = "Sleep", hint = "Suspend to memory", accent = morf.color "#38bdf8", run = function() system.launch({ "systemctl", "suspend" }) end },
@@ -43,7 +43,7 @@ local function trigger(index, island)
   action.run()
 end
 
-morf.timer(300, function()
+morf.time.timer(300, function()
   if page.armed:get() ~= 0 and armed_clock:elapsed_ms() > 2600 then page.armed:set(0) end
 end, true)
 

@@ -45,7 +45,7 @@ morf.effect("impasto.games.leave", function()
   if games.playing() == "" then return end
   leave_generation = leave_generation + 1
   local mine = leave_generation
-  morf.timer(theme.duration_island_gone() + 20, function()
+  morf.time.timer(theme.duration_island_gone() + 20, function()
     if mine == leave_generation and island.state.open_panel() ~= "games" then games.leave() end
   end, false)
 end)
@@ -296,7 +296,7 @@ local function frame(item)
   -- island animates up from the shelf, and a game built mid-morph would
   -- start on a board a fraction of its height.
   local roomy = signal(item.id .. ".roomy", false)
-  morf.timer(theme.duration_morph() + 10, function() roomy:set(true) end, false)
+  morf.time.timer(theme.duration_morph() + 10, function() roomy:set(true) end, false)
 
   local board = ui.Loader {
     x = 0, y = 0, width = item.width, height = item.height,
@@ -489,7 +489,7 @@ morf.ipc.game = function(id)
   if island.state.open_panel() ~= "games" then island.open("games") end
   games.leave()
   if id and id ~= "" then
-    morf.timer(30, function() games.open(id) end, false)
+    morf.time.timer(30, function() games.open(id) end, false)
   end
   return id or ""
 end

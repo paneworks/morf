@@ -33,7 +33,7 @@ local floating = morf.signal("editor.floating", {})
 -- The layout survives a restart: kept in the state directory
 -- (EDITOR_STATE names another file), read at start, written a moment
 -- after the dock last changed.
-local STATE_FILE = (morf.env and morf.env("EDITOR_STATE")) or morf.state_path("editor.json")
+local STATE_FILE = (morf.env and morf.env("EDITOR_STATE")) or morf.paths.state("editor.json")
 do
   local ok, text = pcall(morf.fs.read, STATE_FILE)
   local ok2, saved = false, nil
@@ -46,7 +46,7 @@ end
 local save_timer
 local function save()
   if save_timer then save_timer:cancel() end
-  save_timer = morf.timer(500, function()
+  save_timer = morf.time.timer(500, function()
     save_timer = nil
     local ok, err = pcall(morf.fs.write, STATE_FILE, morf.json.encode { layout = layout:get(), floating = floating:get() })
     if not ok then morf.log.warn("editor: could not save the layout: " .. tostring(err)) end

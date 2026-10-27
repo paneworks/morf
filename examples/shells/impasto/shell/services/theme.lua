@@ -41,7 +41,7 @@ local function show(target)
     step = step + 1
     local t = step / M.STEPS
     theme.apply_palette(palette.to_hex(palette.blend(from, target, t)))
-    if step < M.STEPS then morf.timer(math.floor(M.TRANSITION_MS / M.STEPS), tick, false) end
+    if step < M.STEPS then morf.time.timer(math.floor(M.TRANSITION_MS / M.STEPS), tick, false) end
   end
   tick()
 end
@@ -109,7 +109,7 @@ morf.effect("impasto.theme.follow", function()
     last_picture = path
     M.derived = nil
     if M.active_id:get() == "adaptive" then
-      morf.timer(1, M.refresh_adaptive, false)
+      morf.time.timer(1, M.refresh_adaptive, false)
     end
   end
 end)

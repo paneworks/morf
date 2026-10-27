@@ -3,7 +3,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local io = require("morf.io")
 local config = require("config")
 local theme = require("theme")
 local kit = require("kit")
@@ -30,7 +29,7 @@ page.state = morf.state {
 local state = page.state
 
 local process = nil
-local started = morf.elapsed_timer()
+local started = morf.time.elapsed()
 
 local function tick()
   if not state.running then return end
@@ -38,11 +37,11 @@ local function tick()
   state.elapsed = string.format("%02d:%02d", math.floor(seconds / 60), seconds % 60)
   require("island").recording:set(state.elapsed)
 end
-morf.timer(500, tick, true)
+morf.time.timer(500, tick, true)
 
 function page.start()
   if state.running then return end
-  local name = "panacea-" .. theme.clock:format("%Y%m%d-%H%M%S") .. ".mp4"
+  local name = "panacea-" .. theme.clock.format("%Y%m%d-%H%M%S") .. ".mp4"
   local path = state.folder .. "/" .. name
   local command = { "wf-recorder", "-f", path, "-r", tostring(state.fps) }
   if state.audio then
@@ -53,7 +52,7 @@ function page.start()
     -- are asked for, since it is the one people forget to switch on.
     command[#command + 1] = "--audio=@DEFAULT_AUDIO_SOURCE@"
   end
-  local ok, view = pcall(io.process_view, { command = command, environment = { LD_LIBRARY_PATH = "" } })
+  local ok, view = pcall(morf.process.view, { command = command, environment = { LD_LIBRARY_PATH = "" } })
   if not ok then
     state.available = false
     return

@@ -98,7 +98,7 @@ end
 --- between polls.
 function M.remaining()
   if nothing() then return 0 end
-  morf.minute_clock:get()
+  morf.time.minute_clock:get()
   return math.max(0, M.block_ends() * 1000 - morf.time.now_ms())
 end
 
@@ -217,7 +217,7 @@ function M.subscribe()
   if watchers == 1 then
     M.refresh()
     M.ask_limits()
-    limits_poller = morf.timer(M.LIMITS_MS, M.ask_limits, true)
+    limits_poller = morf.time.timer(M.LIMITS_MS, M.ask_limits, true)
   end
 end
 function M.release()

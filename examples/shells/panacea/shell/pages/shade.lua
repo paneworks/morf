@@ -16,7 +16,7 @@ local state = system.state
 local page = {}
 
 page.big = true
-page.subtitle = function() return theme.clock:format("%A, " .. config.clockDateFmt) end
+page.subtitle = function() return theme.clock.format("%A, " .. config.clockDateFmt) end
 page.slots = {}
 
 function page.build(island)

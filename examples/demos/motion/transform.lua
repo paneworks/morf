@@ -1,5 +1,4 @@
 local morf = require("morf")
-local core = require("morf.core")
 local ui = require("morf.ui")
 local window = require("morf.window")
 
@@ -35,7 +34,7 @@ local root = ui.Item {
   },
 }
 
-core.transform_watcher {
+morf.transform_watcher {
   a = root,
   b = target,
   common_parent = root,
