@@ -21,7 +21,7 @@ pub use animation::Animation;
 pub use icons::IconResolver;
 pub use image_cache::{ImageCache, ImageError, MAX_ANIMATIONS, MAX_ANIMATIONS_BYTES};
 pub use inline::{InlineSource, MAX_INLINE_BYTES, inline_source, is_inline_source};
-pub use quantize::{ImageData, ImageRect, PaletteEntry, palette_of, quantize_colors};
+pub use quantize::{ImageData, ImageRect, PaletteEntry, palette_of};
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

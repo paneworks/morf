@@ -19,5 +19,5 @@ pub use pam::{PAM_CANCELLED, PamAuthenticator, PamError, PamSession, PamTask, Se
 pub use pam_conversation::{PamEvent, PamPrompt};
 pub use status_notifier::{StatusNotifierAddress, StatusNotifierError, StatusNotifierHost};
 pub use udev::{UdevError, UdevEvent, UdevMonitor};
-pub use xkb::{XkbError, XkbKey, XkbKeymap, XkbSymbol, xkb_include_paths};
+pub use xkb::xkb_include_paths;
 pub use zeroize::Zeroizing;

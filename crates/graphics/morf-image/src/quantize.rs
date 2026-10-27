@@ -1,6 +1,4 @@
-use std::path::Path;
-
-use crate::image_cache::{ImageError, decode_path, normalize_source, source_dimensions};
+use crate::image_cache::ImageError;
 
 /// Decoded straight-alpha RGBA pixels.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -19,51 +17,6 @@ pub struct ImageRect {
     pub y: u32,
     pub width: u32,
     pub height: u32,
-}
-
-/// Extracts up to `2^depth` prevalent opaque colors from an image.
-pub fn quantize_colors(
-    source: impl AsRef<Path>,
-    depth: u8,
-    crop: Option<ImageRect>,
-    rescale_size: u32,
-) -> Result<Vec<[u8; 4]>, ImageError> {
-    if depth > 8 || rescale_size > 512 {
-        return Err(ImageError::InvalidSize);
-    }
-    let source = normalize_source(source.as_ref())?;
-    let (intrinsic_width, intrinsic_height) = source_dimensions(&source)?;
-    if intrinsic_width == 0
-        || intrinsic_height == 0
-        || u64::from(intrinsic_width) * u64::from(intrinsic_height) > 16_777_216
-    {
-        return Err(ImageError::InvalidSize);
-    }
-    let target = if rescale_size == 0 {
-        (intrinsic_width, intrinsic_height)
-    } else if intrinsic_width >= intrinsic_height {
-        (
-            rescale_size,
-            (u64::from(intrinsic_height) * u64::from(rescale_size) / u64::from(intrinsic_width))
-                .max(1) as u32,
-        )
-    } else {
-        (
-            (u64::from(intrinsic_width) * u64::from(rescale_size) / u64::from(intrinsic_height))
-                .max(1) as u32,
-            rescale_size,
-        )
-    };
-    let image = decode_path(&source, target.0, target.1)?;
-    let crop = crop.map(|crop| ImageRect {
-        x: (u64::from(crop.x) * u64::from(target.0) / u64::from(intrinsic_width)) as u32,
-        y: (u64::from(crop.y) * u64::from(target.1) / u64::from(intrinsic_height)) as u32,
-        width: (u64::from(crop.width) * u64::from(target.0) / u64::from(intrinsic_width)).max(1)
-            as u32,
-        height: (u64::from(crop.height) * u64::from(target.1) / u64::from(intrinsic_height)).max(1)
-            as u32,
-    });
-    quantize_image(&image, depth, crop)
 }
 
 pub(crate) fn quantize_image(
@@ -157,7 +110,7 @@ pub struct PaletteEntry {
 
 /// Up to `count` dominant colours of an image, most common first.
 ///
-/// Median cut alone — what [`quantize_colors`] does — splits the pixels into
+/// Median cut alone splits the pixels into
 /// buckets of *equal* size, so every colour it names covers the same share of
 /// the picture and "dominant" means nothing. Its buckets are good starting
 /// points, though, so they seed a few rounds of k-means, and each colour then
