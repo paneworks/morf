@@ -1055,14 +1055,17 @@ Where the branch differs from the plan above:
   - Most of §8 landed with the steps it follows: impasto received its
     modules in step 2, the editor and settings were ported in step 3, every
     caller in step 4.
-  - The library modules eva was the only caller of stay for now: eva
-    lives on outside this repository and still requires them. Under rule 3
-    they would go (`services.keyring_agent`, `accounts`, `sessions`, `vpns`,
-    `modem`, `keyboards`, `sysinfo`, `shell.auth`, `shell.capture`,
-    `shell.emoji`, `shell.settings`, `shell.launcher`, `shell.audio`'s
-    equalizer, ringer and spectrum, the clipse, lule, lyrics, taskwarrior,
-    tor and weather integrations, `util.remote`, `util.channel`); that is
-    the owner's call.
+  - The library modules eva was the only caller of go too (rule 3):
+    `services.accounts`, `keyboards`, `keyring_agent`, `sessions`, `vpns`,
+    `shell.auth`, `capture`, `emoji`, `settings`, `launcher`, `audio`, the
+    clipse, lule, lyrics and taskwarrior integrations, `util.remote` and
+    `util.channel`, with `services.modem` and `integrations.tor`, which
+    nothing called. `services.sysinfo` and `integrations.weather` stay:
+    impasto uses them. Their 0.6-ready copies are at `32de9936`, for eva's
+    own port to 0.6.
+  - The native helpers they talk to stay (`tools/keyring`,
+    `tools/pattern`, `tools/pam`): eva's NixOS module builds them from
+    morf's tree.
   - `make apply`, `make run` and the permission-cost bench default to
     impasto; the sandbox scripts keep naming an eva checkout of their own.
 - **Step 7:**
