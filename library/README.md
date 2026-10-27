@@ -50,7 +50,7 @@ lib/
   compositor/     compositor IPC (Hyprland today)
   integrations/   third-party tools (weather, lyrics, taskwarrior, lule, tor, clipse, packages)
   shell/          shell features that are not widgets: auth, capture, osk, settings, emoji, launcher, audio
-  util/           generic helpers: poll, remote, channel
+  util/           generic helpers: poll, remote, channel, clock
   testing/        fakes a shell's own specs can use
 ```
 
@@ -728,6 +728,18 @@ The shared machinery for the libraries below that watch something.
 - `poll.ring(n)` is a ring buffer (`push`, `list`) for sparklines.
 - `poll.cache_dir()`, `poll.cache_read(path, ttl)`, `poll.cache_write(path, value)`
   keep JSON with the time it was fetched.
+
+### util.clock
+
+`clock.format(pattern)` is `morf.time.format(pattern)` read in a binding at
+the grain the pattern shows: a pattern with seconds follows
+`morf.time.clock`, one with minutes `morf.time.minute_clock`, any other
+(`"%A"`, `"%d %B"`) `morf.time.hour_clock`.
+
+```lua
+local clock = require("lib.util.clock")
+ui.Text { text = function() return clock.format("%a %H:%M") end }
+```
 
 ## testing
 
