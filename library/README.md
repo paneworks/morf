@@ -249,9 +249,8 @@ shapes.Shape { width = 96, height = 96, shape = function() return which:get() en
 Rounding, cubic resampling, normalization and path formatting run in
 `morf.geometry`, implemented by `morf-outline`. Default named paths (a 100
 square, 72 cubics) preserve the existing outlines exactly and are shared across
-runtimes. Custom named paths use a bounded native cache. `m3shapes_paths.lua`
-remains a compatibility lookup; the Lua wrapper owns node construction and
-animation controls. Native recipes can be exported with
+runtimes. Custom named paths use a bounded native cache. The Lua wrapper owns
+node construction and animation controls. Native recipes can be exported with
 `cargo run -p morf-outline --example generate_shapes`.
 `segments = false` keeps an outline as it was made, for a shape that is only
 drawn.
