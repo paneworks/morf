@@ -308,7 +308,7 @@ function M.make(spec)
   -- is not what it follows.)
   morf.effect("kit.file_chooser.crumbs." .. tostring(crumb_bar), function()
     local list = crumbs()
-    morf.timer(1, function() rebuild(list) end, false)
+    morf.time.timer(1, function() rebuild(list) end, false)
   end, { owner = crumb_bar })
   local function header_width() return get(Wf) or W0 end
   local typing = morf.state { path = false, name = false }

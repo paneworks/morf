@@ -205,7 +205,7 @@ function M.make(widget, spec)
     phase = "leaving"
     shown:set(false)
     if leave_timer then leave_timer:cancel() end
-    leave_timer = morf.timer(linger(), function()
+    leave_timer = morf.time.timer(linger(), function()
       leave_timer = nil
       if phase == "leaving" then morf.overlay.close(root) end
     end, false)
@@ -350,7 +350,7 @@ end
 function M.toast(spec)
   local toast = M.make("toast", spec)
   toast.open(spec.anchor)
-  morf.timer(spec.timeout or 3000, function() toast.close("timeout") end, false)
+  morf.time.timer(spec.timeout or 3000, function() toast.close("timeout") end, false)
   return toast
 end
 
@@ -366,7 +366,7 @@ function M.tooltip(target, text, delay)
     local over = (has_hover and hovered) or target.contains_pointer
     if waiting then waiting:cancel() waiting = nil end
     if over then
-      waiting = morf.timer(delay or 600, function() waiting = nil tip.open(target) end, false)
+      waiting = morf.time.timer(delay or 600, function() waiting = nil tip.open(target) end, false)
     else
       tip.close("left")
     end

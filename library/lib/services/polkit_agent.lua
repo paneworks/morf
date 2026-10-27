@@ -32,7 +32,7 @@ local FAILED = "org.freedesktop.PolicyKit1.Error.Failed"
 --- uid -> login name, read once from the passwd file the helper needs it in.
 local function usernames()
   local names = {}
-  local ok, text = pcall(function() return morf.file("/etc/passwd"):read() end)
+  local ok, text = pcall(function() return morf.fs.file("/etc/passwd"):read() end)
   if not ok or type(text) ~= "string" then return names end
   for line in text:gmatch("[^\n]+") do
     local name, uid = line:match("^([^:]+):[^:]*:(%d+):")
@@ -173,14 +173,14 @@ function polkit_agent.serve(options)
         if request.generation ~= generation then return end
       end
     end
-    local ok, socket = pcall(morf.socket, HELPER_SOCKET)
+    local ok, socket = pcall(morf.socket.open, HELPER_SOCKET)
     trace("helper socket: " .. (ok and "connected" or tostring(socket)))
     if ok and socket then
       request.socket = socket
       socket:send(user .. "\n" .. request.cookie .. "\n")
       socket:flush()
     else
-      local helper = morf.process(HELPER, { user })
+      local helper = morf.process.open(HELPER, { user })
       request.helper = helper
       -- The cookie is the first line; the helper is the one that tells the
       -- authority, and this is how it knows which request it is answering.
@@ -199,7 +199,7 @@ function polkit_agent.serve(options)
       end
       tick:cancel()
     end
-    tick = morf.timer(20, function()
+    tick = morf.time.timer(20, function()
       if not current() then tick:cancel() return end
       if socket_ then
         for _ = 1, 32 do

@@ -46,7 +46,7 @@ function clipse.copy(item, done)
   else
     argv = { "wl-copy", "--", item.value }
   end
-  morf.run(argv, {}, done or function() end)
+  morf.process.run(argv, {}, done or function() end)
 end
 
 return clipse

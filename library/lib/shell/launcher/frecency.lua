@@ -6,7 +6,7 @@
 -- The store is a small JSON file, written a moment after a launch.
 --
 --   local frecency = require("lib.shell.launcher.frecency")
---   local used = frecency.open { path = morf.state_path("launches.json") }
+--   local used = frecency.open { path = morf.paths.state("launches.json") }
 --   used.record(app.id)                            -- on launch
 --   used.score(app.id)                             -- 0 for never
 --   local hits = used.rank(query, apps, { key = "name", id = "id" })
@@ -72,7 +72,7 @@ function frecency.open(opts)
     end
     if count > limit and weakest then entries[weakest] = nil end
     version:set(version:get() + 1)
-    if not pending then pending = morf.timer(opts.debounce_ms or 500, save, false) end
+    if not pending then pending = morf.time.timer(opts.debounce_ms or 500, save, false) end
   end
 
   --- How much `id` is used, now: about the launches of the last half-life.
@@ -88,7 +88,7 @@ function frecency.open(opts)
     if entries[id] then
       entries[id] = nil
       version:set(version:get() + 1)
-      if not pending then pending = morf.timer(opts.debounce_ms or 500, save, false) end
+      if not pending then pending = morf.time.timer(opts.debounce_ms or 500, save, false) end
     end
   end
 

@@ -69,7 +69,7 @@ end
 --- Generate and apply through lule's own configuration and hooks. No shell
 --- interpolation: image paths (including spaces) stay one argument.
 --- `image` or `directory`, `theme`, `palette`; optional `configs`, `cache`,
---- `env`, `command`. Completion receives morf.run's result.
+--- `env`, `command`. Completion receives morf.process.run's result.
 function lule.generate(opts, done)
   opts = opts or {}
   if not opts.image or opts.image == "" then
@@ -87,7 +87,7 @@ function lule.generate(opts, done)
   if opts.theme then argv[#argv + 1] = "--theme=" .. opts.theme end
   if opts.palette then argv[#argv + 1] = "--palette=" .. opts.palette end
   argv[#argv + 1], argv[#argv + 2] = "--", "set"
-  return morf.run(argv, { env = opts.env, timeout_ms = 60000, max_output = 65536 }, done)
+  return morf.process.run(argv, { env = opts.env, timeout_ms = 60000, max_output = 65536 }, done)
 end
 
 return lule

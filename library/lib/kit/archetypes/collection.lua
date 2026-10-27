@@ -91,7 +91,7 @@ function M.make(widget, spec)
   local function load(node)
     if asked[node] or not spec.load_children then return end
     asked[node] = true
-    morf.timer(1, function()
+    morf.time.timer(1, function()
       spec.load_children(node, function(children)
         node.children = children or {}
         node.lazy = nil
@@ -335,7 +335,7 @@ function M.make(widget, spec)
   view = make_view()
   ui.reparent(view, root)
   -- The wheel scrolls by rows; keeping the current row in sight follows it.
-  local function room() return math.max(0, morf.view_extent(view) - (size_of(H) - header_h)) end
+  local function room() return math.max(0, morf.ui.view_extent(view) - (size_of(H) - header_h)) end
   local function scroll_to(y)
     y = math.max(0, math.min(y, room()))
     if y ~= offset:get() then offset:set(y) morf.sync_view(view, y) end
@@ -343,8 +343,8 @@ function M.make(widget, spec)
   morf.effect("kit.collection.follow." .. ctl.id, function()
     local current = t.current
     if current < 1 or current > model:len() then return end
-    local top = morf.view_item_start(view, current)
-    local bottom = (current < model:len()) and morf.view_item_start(view, current + 1) or morf.view_extent(view)
+    local top = morf.ui.view_item_start(view, current)
+    local bottom = (current < model:len()) and morf.ui.view_item_start(view, current + 1) or morf.ui.view_extent(view)
     local now = offset:get()
     if top < now then scroll_to(top) elseif bottom > now + size_of(H) - header_h then scroll_to(bottom - (size_of(H) - header_h)) end
   end, { owner = root })

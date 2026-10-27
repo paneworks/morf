@@ -22,8 +22,8 @@ function M.new(options)
   fs.mkdir(dir)
   pcall(fs.remove, dir .. "/.socket.sock")
   pcall(fs.remove, dir .. "/.socket2.sock")
-  local requests = morf.socket_server(dir .. "/.socket.sock")
-  local events = morf.socket_server(dir .. "/.socket2.sock")
+  local requests = morf.socket.server(dir .. "/.socket.sock")
+  local events = morf.socket.server(dir .. "/.socket2.sock")
 
   self.monitors = options.monitors or {
     { id = 0, name = "eDP-1", description = "BOE 0x0BCA", make = "BOE", model = "0x0BCA", serial = "",

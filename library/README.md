@@ -367,7 +367,7 @@ Hyprland over its own two sockets in
 `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE`: `.socket.sock` for
 requests (one per connection, `j/` for JSON, `[[BATCH]]` for several) and
 `.socket2.sock` for the `EVENT>>DATA` stream. No `hyprctl` is spawned. Both
-sockets are drained from one repeating `morf.timer` (`poll_ms`, default 30),
+sockets are drained from one repeating `morf.time.timer` (`poll_ms`, default 30),
 because the engine does not watch arbitrary sockets for readiness; an idle
 tick blocks at most 1 ms per open socket.
 
@@ -474,7 +474,7 @@ task. Callbacks receive success as a boolean; successful writes refresh the
 list. Mutations require a complete UUID, and recurrence changes apply only
 to the selected occurrence. Callers handle confirmation before deletion.
 
-Commands use argv, asynchronous `morf.run`, and a timeout. Errors remain in
+Commands use argv, asynchronous `morf.process.run`, and a timeout. Errors remain in
 the `error` signal; no optimistic database edits are made. Optional `command`
 and `env` arguments to `new` allow testing against an isolated installation.
 `timestamp`, `date`, and `day` convert exported timestamps to local dates.
@@ -513,7 +513,7 @@ palette = "pigment" }, callback)` runs generation asynchronously, with a
 60-second timeout and bounded output. It uses Lule's own configuration and
 post-generation hooks. `directory` can replace `image` for random selection;
 `configs`, `cache`, `env` and `command` can isolate a run. The returned process
-handle can be cancelled, and the callback receives the normal `morf.run`
+handle can be cancelled, and the callback receives the normal `morf.process.run`
 result. Invalid options return `nil, reason` before starting a process.
 
 ### integrations.weather
@@ -634,7 +634,7 @@ keys the defaults lack are kept in the file untouched.
 
 ```lua
 local config = require("lib.shell.settings").open {
-  path = morf.config_path("shell.json"),
+  path = morf.paths.shell("shell.json"),
   defaults = { appearance = { rounding = { scale = 1 } }, bar = { persistent = true } },
 }
 config.get("appearance.rounding.scale")   config.set("bar.persistent", false)
@@ -657,7 +657,7 @@ of `{key, name, parent?}` descriptors. `request(key)` validates routes,
 bounded lift among comparable matches otherwise.
 
 ```lua
-local used = require("lib.shell.launcher.frecency").open { path = morf.state_path("launches.json") }
+local used = require("lib.shell.launcher.frecency").open { path = morf.paths.state("launches.json") }
 used.record(app.id)
 used.rank(query, apps, { key = "name", id = "id", limit = 30 })   -- fuzzy hits, reordered
 ```

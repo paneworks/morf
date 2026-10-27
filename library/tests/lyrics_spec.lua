@@ -100,7 +100,7 @@ test.describe("lyrics", function()
       trackName = "A Song", syncedLyrics = "[00:02.00]served", plainLyrics = "served",
     })
     local port = 20000 + math.random(0, 20000)
-    local server = assert(morf.spawn {
+    local server = assert(morf.process.spawn {
       command = { "python3", "-m", "http.server", tostring(port), "--bind", "127.0.0.1", "--directory", root },
       on_stderr = function() end,
     })

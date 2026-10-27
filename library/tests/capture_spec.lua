@@ -42,7 +42,7 @@ check("file picker expands folders and export failures finish once",[[
   local calls=0
   C.save("missing","/tmp/capture-unsupported.extension",function(ok) assert(not ok) calls=calls+1 end)
   assert(calls==1)
-  morf.run=function() return nil end
+  morf.process.run=function() return nil end
   C.copy("missing",function(ok) assert(not ok) calls=calls+1 end)
   C.upload("missing","http://invalid",function(ok) assert(not ok) calls=calls+1 end)
   assert(calls==3)
@@ -105,7 +105,7 @@ test.it("KDE full-desktop acquisition crops the requested monitor",function()
   test.load {source=[[
     local C=require("lib.shell.capture") C.kind=function() return "kde" end
     morf.screens={{name="left",x=-8,y=0,width=8,height=8},{name="right",x=0,y=0,width=8,height=8}}
-    morf.run=function(argv,_,done)
+    morf.process.run=function(argv,_,done)
       morf.image.process {source='<svg xmlns="http://www.w3.org/2000/svg" width="32" height="16"><rect width="32" height="16" fill="red"/><rect x="16" width="16" height="16" fill="blue"/></svg>',
         output=argv[#argv],ops={},on_done=function(ok) done({ok=ok}) end}
       return {kill=function() end}
@@ -125,7 +125,7 @@ end)
 check("upload uses HTTPS multipart and copies only a valid returned URL",[[
   local copied=nil local calls=0
   morf.clipboard.set=function(value) copied=value end
-  morf.run=function(argv,options,cb)
+  morf.process.run=function(argv,options,cb)
     assert(argv[1]=="curl" and argv[#argv]=="https://upload.example/api")
     assert(table.concat(argv," "):find("time=72h",1,true))
     assert(table.concat(argv," "):find('fileToUpload=@"/tmp/a b.png"',1,true))

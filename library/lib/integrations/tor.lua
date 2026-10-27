@@ -39,7 +39,7 @@ function tor.new(options)
   function t.up() return listening(port) end
 
   local function systemctl(verb, done)
-    local ok = pcall(morf.run, { "systemctl", verb, unit }, { timeout_ms = 60000 }, function(r)
+    local ok = pcall(morf.process.run, { "systemctl", verb, unit }, { timeout_ms = 60000 }, function(r)
       if done then done(r and r.ok and true or nil, r and r.stderr) end
     end)
     if not ok and done then done(nil, "could not run systemctl") end
@@ -51,7 +51,7 @@ function tor.new(options)
   --- `done(percent, summary)`, or `done(nil)` when the journal will not say
   --- (reading a system unit's journal wants the systemd-journal group).
   function t.bootstrap(done)
-    local ok = pcall(morf.run, { "journalctl", "-u", unit, "-n", "60", "--no-pager", "-o", "cat" },
+    local ok = pcall(morf.process.run, { "journalctl", "-u", unit, "-n", "60", "--no-pager", "-o", "cat" },
       { timeout_ms = 5000 }, function(r)
         local last, summary
         for pct, what in tostring(r and r.stdout or ""):gmatch("Bootstrapped (%d+)%%[^:]*:%s*([^\n]*)") do

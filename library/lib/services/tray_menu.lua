@@ -1,9 +1,9 @@
--- A tray item's menu, read off the bus and handed to `morf.menu`.
+-- A tray item's menu, read off the bus and handed to `morf.window.menu`.
 --
 -- Every tray icon with a right-click menu publishes it as
 -- `com.canonical.dbusmenu`: a tree of ids with properties, fetched with
 -- `GetLayout`, and a `clicked` event sent back with `Event`. The vocabulary
--- is nearly `morf.menu`'s already -- label, enabled, visible, separator,
+-- is nearly `morf.window.menu`'s already -- label, enabled, visible, separator,
 -- checkmark or radio, submenu -- so this is a translation, not a model. The
 -- item's address comes from the tray host; the menu's path is the item's own
 -- `Menu` property.
@@ -24,7 +24,7 @@ local function strip_mnemonic(label)
 end
 
 --- One dbusmenu node -- `{ id, properties, children }` as the engine decodes
---- the `(ia{sv}av)` struct -- as a `morf.menu` entry.
+--- the `(ia{sv}av)` struct -- as a `morf.window.menu` entry.
 local function convert(node, on_click)
   local id, props, children = node[1], node[2] or {}, node[3] or {}
   local entry = {
@@ -61,7 +61,7 @@ end
 --- Opens the menu published at `path` by `service`.
 ---
 --- Returns an object with `entries()`, which fetches the current tree as
---- `morf.menu` entries, and `click(id)`, which tells the application. Both
+--- `morf.window.menu` entries, and `click(id)`, which tells the application. Both
 --- talk to the bus when called; a menu is read when it is about to be shown,
 --- not kept in step forever.
 function dbusmenu.open(service, path, options)

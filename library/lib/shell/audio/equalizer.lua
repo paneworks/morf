@@ -69,7 +69,7 @@ function M.new(options)
   local running=false
   local latest,attempts
   local owner=tostring(morf.process_id)..":"..options.name
-  local path=options.path or morf.state_path("equalizer-runtime.conf")
+  local path=options.path or morf.paths.state("equalizer-runtime.conf")
   local function cancel()
     token=token+1
     if pending then pending:cancel() pending=nil end
@@ -84,7 +84,7 @@ function M.new(options)
   local function discover()
     if not running or query then return end
     local generation=token
-    query=morf.run({"pw-dump"},{timeout_ms=2000,max_output=4*1024*1024},function(result)
+    query=morf.process.run({"pw-dump"},{timeout_ms=2000,max_output=4*1024*1024},function(result)
       if generation~=token or not running then return end
       query=nil
       local ok,objects=pcall(morf.json.decode,result.stdout or "")
@@ -100,7 +100,7 @@ function M.new(options)
       else
         attempts=attempts+1
         if attempts>=15 then fail("PipeWire did not create the equalizer. Check WirePlumber and filter-chain support.")
-        else pending=morf.timer(200,function() pending=nil discover() end,false) end
+        else pending=morf.time.timer(200,function() pending=nil discover() end,false) end
       end
     end)
   end
@@ -113,7 +113,7 @@ function M.new(options)
   apply=function()
     if not running or not node or command then return end
     local generation,revision=token,latest
-    command=morf.run({"pw-cli","set-param",tostring(node),"Props",morf.json.encode(M.controls(revision))},
+    command=morf.process.run({"pw-cli","set-param",tostring(node),"Props",morf.json.encode(M.controls(revision))},
       {timeout_ms=2000,max_output=65536},function(result)
         if generation~=token or not running then return end
         command=nil
@@ -125,7 +125,7 @@ function M.new(options)
     latest=curve
     if not running or not node then return end
     if pending then pending:cancel() end
-    pending=morf.timer(90,function() pending=nil apply() end,false)
+    pending=morf.time.timer(90,function() pending=nil apply() end,false)
   end
   function e.start(curve)
     latest=curve
@@ -134,7 +134,7 @@ function M.new(options)
     local generation=token
     -- Smart filters are a WirePlumber policy. Refuse unsupported setups
     -- rather than presenting a non-functional virtual output as enabled.
-    query=morf.run({"wireplumber","--version"},{timeout_ms=2000,max_output=4096},function(result)
+    query=morf.process.run({"wireplumber","--version"},{timeout_ms=2000,max_output=4096},function(result)
       if generation~=token or not running then return end
       query=nil
       local major,minor=(result.stdout or ""):match("(%d+)%.(%d+)")
@@ -143,7 +143,7 @@ function M.new(options)
       end
       local ok,why=morf.fs.write(path,morf.json.encode(M.graph(latest,owner),true))
       if not ok then fail("Cannot write equalizer configuration: "..tostring(why)) return end
-      process,why=morf.spawn {command={"pipewire","-c",path},on_stderr=function() end,
+      process,why=morf.process.spawn {command={"pipewire","-c",path},on_stderr=function() end,
         on_exit=function()
           if generation~=token or not running then return end
           process=nil fail("Equalizer process stopped. Turn it off and on to retry.")

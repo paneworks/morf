@@ -197,7 +197,7 @@ function bluez.connect(options)
 
     -- A scan in progress is when strangers move; see the header.
     if state.discovering and not poll then
-      poll = morf.timer(options.discovery_poll_ms or 2000, function()
+      poll = morf.time.timer(options.discovery_poll_ms or 2000, function()
         if not state.discovering then
           poll:cancel()
           poll = nil

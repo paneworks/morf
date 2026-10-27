@@ -35,14 +35,14 @@ function authsteps.new()
     state.step = step
     state.since = morf.time.now_ms()
     if quiet then quiet:cancel() end
-    quiet = morf.timer(QUIET[step] or 1500, function()
+    quiet = morf.time.timer(QUIET[step] or 1500, function()
       quiet = nil
       if step == "ok" or step == "failed" then
         state.step = "idle"
         state.failures = 0
       else
         state.step = "failed"
-        quiet = morf.timer(QUIET.failed, function()
+        quiet = morf.time.timer(QUIET.failed, function()
           quiet = nil
           state.step = "idle"
           state.failures = 0

@@ -281,7 +281,7 @@ end
 
 function Weather:_wttr(done, why)
   local place = self.location or (self.latitude and (self.latitude .. "," .. self.longitude)) or ""
-  local url = self.wttr_url .. "/" .. morf.http.url_encode(place) .. "?format=j1"
+  local url = self.wttr_url .. "/" .. morf.encoding.url_encode(place) .. "?format=j1"
   morf.http.get(url, { headers = { ["user-agent"] = "curl/8" }, timeout_ms = 20000 }, function(response)
     local data = response.ok and response.json() or nil
     if not data or not data.current_condition then

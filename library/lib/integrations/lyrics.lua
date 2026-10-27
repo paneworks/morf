@@ -110,25 +110,25 @@ end
 function lyrics.find(track, on_done, opts)
   opts = opts or {}
   if (track.title or "") == "" then
-    morf.timer(1, function() on_done(nil, "no title") end, false)
+    morf.time.timer(1, function() on_done(nil, "no title") end, false)
     return
   end
   local local_text = beside(track.url)
   if local_text then
-    morf.timer(1, function() on_done(lyrics.parse(local_text), "file") end, false)
+    morf.time.timer(1, function() on_done(lyrics.parse(local_text), "file") end, false)
     return
   end
   local cache = (opts.cache_dir or poll.cache_dir()) .. "/lyrics-" .. key_of(track) .. ".json"
   local cached = poll.cache_read(cache, opts.ttl or 7 * 86400)
   if cached then
-    morf.timer(1, function()
+    morf.time.timer(1, function()
       if cached.missing then return on_done(nil, "missing") end
       on_done(lyrics.parse(cached.text), "cache")
     end, false)
     return
   end
   if opts.offline then
-    morf.timer(1, function() on_done(nil, "offline") end, false)
+    morf.time.timer(1, function() on_done(nil, "offline") end, false)
     return
   end
   local query = morf.http.query {
@@ -230,7 +230,7 @@ function lyrics.follow(media, opts)
   local ticking = morf.effect(name .. ".tick", function()
     local run = f.status:get() == "synced" and media.state.active.playing == true
     if run and not timer then
-      timer = morf.timer(opts.tick_ms or 100, function()
+      timer = morf.time.timer(opts.tick_ms or 100, function()
         show(lyrics.index_at(parsed, media.position()))
       end, true)
     elseif not run and timer then

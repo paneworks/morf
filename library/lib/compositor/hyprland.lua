@@ -3,8 +3,8 @@
 -- morf's core does not know which compositor it runs under, and should not:
 -- what Hyprland calls a workspace, a submap or a window address is Hyprland's
 -- vocabulary, so it lives here, in a library a configuration may require or
--- ignore. Nothing below needs more than `morf.connect`,
--- `morf.request_socket`, `morf.json`, `morf.state`, `morf.timer`,
+-- ignore. Nothing below needs more than `morf.socket.connect`,
+-- `morf.socket.request`, `morf.json`, `morf.state`, `morf.time.timer`,
 -- `morf.fs` and `morf.log`; nothing spawns
 -- `hyprctl`, because a process per question is slower than the question.
 --
@@ -235,7 +235,7 @@ end
 local function begin(entry)
   local path = socket_path(".socket.sock")
   if not path then return finish(entry, nil, "unavailable") end
-  local ok, socket = pcall(morf.request_socket, path, entry.payload, function(reply, err)
+  local ok, socket = pcall(morf.socket.request, path, entry.payload, function(reply, err)
     forget(entry)
     entry.socket = nil
     if reply == nil and err ~= "timed out" then
@@ -935,7 +935,7 @@ local connect
 
 local function schedule_reconnect()
   cancel(retry)
-  retry = morf.timer(backoff_ms, function()
+  retry = morf.time.timer(backoff_ms, function()
     retry = nil
     protected("reconnect", connect)
   end, false)
@@ -980,7 +980,7 @@ local function hold_title(line)
   local address = line:match("^windowtitlev2>>([^,]*)") or ""
   if not held_titles then
     held_titles = {}
-    morf.timer(TITLE_HOLD_MS, function() protected("titles", apply_held_titles) end, false)
+    morf.time.timer(TITLE_HOLD_MS, function() protected("titles", apply_held_titles) end, false)
   end
   held_titles[address] = line
   return true
@@ -1013,7 +1013,7 @@ connect = function()
   local path = socket_path(".socket2.sock")
   if not path then return end
   local up = false
-  local ok, made = pcall(morf.connect, {
+  local ok, made = pcall(morf.socket.connect, {
     path = path,
     max_line = settings.line_limit + 1,
     on_connect = function()
@@ -1112,7 +1112,7 @@ end
 -- A deferred start, so a configuration that calls `start{...}` in the same
 -- chunk as the `require` gets its options rather than a second connection.
 if hyprland.available() then
-  morf.timer(1, function()
+  morf.time.timer(1, function()
     if not started then protected("start", hyprland.start) end
   end, false)
 end

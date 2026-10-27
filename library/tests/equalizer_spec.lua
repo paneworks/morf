@@ -32,7 +32,7 @@ local HOST=[[
   local owner
   local missing=false
   local version="wireplumber 0.5.14"
-  morf.run=function(argv,options,callback)
+  morf.process.run=function(argv,options,callback)
     calls[#calls+1]=argv
     local result={ok=true,stdout=""}
     if argv[1]=="wireplumber" then result.stdout=version
@@ -40,10 +40,10 @@ local HOST=[[
       result.stdout=morf.json.encode(missing and {} or {{id=54,info={props={
         ["node.name"]="morf.equalizer.input",["morf.equalizer.owner"]=owner}}}})
     end
-    local timer=morf.timer(1,function() callback(result) end,false)
+    local timer=morf.time.timer(1,function() callback(result) end,false)
     return {kill=function() timer:cancel() end}
   end
-  morf.spawn=function(options)
+  morf.process.spawn=function(options)
     local config=morf.json.decode(morf.fs.read(options.command[3]))
     owner=config["context.modules"][5].args["capture.props"]["morf.equalizer.owner"]
     calls[#calls+1]=options.command

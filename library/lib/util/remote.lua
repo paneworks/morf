@@ -47,12 +47,7 @@ local function extension(bytes, url)
   return (url:match("%.(%w+)$") or "bin"):lower()
 end
 
-local function folder()
-  local ok, core = pcall(require, "morf.core")
-  if ok and core.cache_path then return core.cache_path("remote") end
-  local base = (morf.env and morf.env("XDG_CACHE_HOME")) or (morf.fs.home() .. "/.cache")
-  return base .. "/morf/remote"
-end
+local function folder() return morf.paths.cache("remote") end
 
 local function fetch(url)
   fetching[url] = true

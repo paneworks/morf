@@ -12,7 +12,7 @@
 -- walk it, typing jumps, Return or a press picks) whose rows set each
 -- family's name in the theme's face and a line in the family itself, and
 -- under them the family the list is on in a larger sample (`sample =
--- false` leaves it out). The families are `fonts`, or `morf.font_families()`
+-- false` leaves it out). The families are `fonts`, or `morf.text.families()`
 -- where the engine lists them. The search ranks them fuzzily (`filter =
 -- false` leaves the list as given and only calls `on_search(query)` -- a
 -- configuration that pages its own list); Return in the search picks the

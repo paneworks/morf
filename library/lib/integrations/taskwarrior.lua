@@ -51,7 +51,7 @@ function M.new(options)
       end
       callback(true, result.stdout or "")
     end
-    local ok, why = pcall(morf.run, argv, { env = options.env, timeout_ms = 15000, max_output = 8 * 1024 * 1024 }, done)
+    local ok, why = pcall(morf.process.run, argv, { env = options.env, timeout_ms = 15000, max_output = 8 * 1024 * 1024 }, done)
     if not ok then done { error = tostring(why), ok = false } end
   end
 
@@ -85,7 +85,7 @@ function M.new(options)
     if timer then timer:cancel() timer = nil end
     if on then
       self.refresh()
-      timer = morf.timer(10000, self.refresh, true)
+      timer = morf.time.timer(10000, self.refresh, true)
     end
   end
 

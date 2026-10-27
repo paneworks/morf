@@ -49,7 +49,7 @@ function M.serve(options)
       closed()
     end
   end
-  child = morf.spawn {
+  child = morf.process.spawn {
     command = { helper }, env = { LD_LIBRARY_PATH = "", G_MESSAGES_DEBUG = "",
       DBUS_SESSION_BUS_ADDRESS = morf.env("DBUS_SESSION_BUS_ADDRESS") },
     stdin = "pipe", lines = true, max_line = 65536,

@@ -4,140 +4,78 @@
 ---@class Morf
 ---@field animation Morf.Animation
 ---@field app_id string
+---@field apps Morf.Apps
 ---@field archive Morf.Archive
 ---@field args Morf.Args
 ---@field audio Morf.Audio
 ---@field broadcast fun(...): any
----@field cache_dir fun(...): any
----@field cache_path fun(...): any
 ---@field capabilities Morf.Capabilities
 ---@field channel fun(...): any
 ---@field clipboard Morf.Clipboard
----@field clock any
 ---@field color Morf.Color
----@field color_quantizer fun(...): any
----@field config_path fun(...): any
----@field connect fun(...): any
----@field core Morf.Core
----@field data_dir fun(...): any
----@field data_path fun(...): any
 ---@field dbus Morf.Dbus
----@field density fun(...): any
----@field desktop_entries fun(...): any
 ---@field drag Morf.Drag
 ---@field easing Morf.Easing
----@field easing_curve fun(...): any
 ---@field effect fun(...): any
----@field elapsed_timer fun(...): any
 ---@field encoding Morf.Encoding
 ---@field env fun(...): any
----@field exec_detached fun(...): any
 ---@field executable string
----@field file fun(...): any
----@field file_view fun(...): any
 ---@field focus Morf.Focus
----@field font_axes fun(...): any
----@field font_families fun(...): any
 ---@field fs Morf.Fs
 ---@field gamma Morf.Gamma
 ---@field geometry Morf.Geometry
 ---@field greetd Morf.Greetd
----@field has_icon fun(...): any
----@field has_version fun(...): any
----@field hour_clock any
 ---@field http Morf.Http
----@field icon_path fun(...): any
 ---@field idle Morf.Idle
 ---@field image Morf.Image
 ---@field input_method Morf.Input_method
 ---@field instance_id string
----@field io Morf.Io
 ---@field ipc Morf.Ipc
 ---@field json Morf.Json
 ---@field keys Morf.Keys
----@field kill fun(...): any
 ---@field launch_time_ms integer
 ---@field list_model fun(...): any
----@field lock_surface fun(...): any
+---@field lock Morf.Lock
 ---@field log Morf.Log
----@field menu fun(...): any
----@field minute_clock any
----@field on_backdrop_click fun(...): any
----@field on_keyboard_focus fun(...): any
----@field on_primary fun(...): any
----@field on_reload_completed fun(...): any
----@field on_reload_failed fun(...): any
----@field on_session_lock_state fun(...): any
----@field on_session_locked fun(...): any
+---@field on_reload fun(...): any
 ---@field operands Morf.Operands
 ---@field options Morf.Options
 ---@field output_power Morf.Output_power
 ---@field overlay Morf.Overlay
 ---@field pam Morf.Pam
----@field persistent fun(...): any
+---@field paths Morf.Paths
 ---@field prefers any
----@field primary fun(...): any
----@field process fun(...): any
+---@field process Morf.Process
 ---@field process_id integer
----@field process_view fun(...): any
 ---@field quit fun(...): any
 ---@field reload fun(...): any
 ---@field reloadable fun(...): any
----@field request_socket fun(...): any
----@field retain_lock fun(...): any
----@field retainable fun(...): any
----@field run fun(...): any
 ---@field satisfies fun(...): any
----@field scope fun(...): any
 ---@field screencopy Morf.Screencopy
 ---@field screens Morf.Screens
----@field screens_revision fun(...): any
 ---@field service fun(...): any
----@field session_lock any
----@field session_lock_state fun(...): any
----@field session_paths fun(...): any
----@field shader fun(...): any
----@field shader_data fun(...): any
+---@field shader Morf.Shader
 ---@field shared fun(...): any
----@field shell_dir fun(...): any
 ---@field shell_id fun(...): any
----@field shell_path fun(...): any
 ---@field shortcuts Morf.Shortcuts
 ---@field signal fun(...): any
----@field socket fun(...): any
----@field socket_server fun(...): any
----@field spawn fun(...): any
----@field split_parser fun(...): any
+---@field socket Morf.Socket
 ---@field state fun(...): any
----@field state_dir fun(...): any
----@field state_path fun(...): any
 ---@field status_notifier Morf.Status_notifier
----@field stream_collector fun(...): any
 ---@field surface Morf.Surface
 ---@field sync_view fun(...): any
----@field system_clock fun(...): any
 ---@field terminal Morf.Terminal
 ---@field text Morf.Text
----@field text_input Morf.Text_input
 ---@field theme fun(...): any
 ---@field time Morf.Time
----@field timer fun(...): any
----@field toplevel Morf.Toplevel
 ---@field toplevels Morf.Toplevels
 ---@field transform_watcher fun(...): any
----@field transition_parent fun(...): any
 ---@field udev Morf.Udev
 ---@field ui Morf.Ui
----@field variants fun(...): any
 ---@field version string
----@field view_extent fun(...): any
----@field view_item_start fun(...): any
 ---@field virtual_keyboard Morf.Virtual_keyboard
----@field virtual_list fun(...): any
----@field watch_files fun(...): any
 ---@field window Morf.Window
 ---@field windows Morf.Windows
----@field working_directory fun(...): any
 ---@field workspace Morf.Workspace
 ---@field workspaces Morf.Workspaces
 ---@field xkb Morf.Xkb
@@ -158,6 +96,9 @@
 ---@field set_enabled fun(...): any
 ---@field stop fun(...): any
 
+---@class Morf.Apps
+---@field entries fun(...): any
+
 ---@class Morf.Archive
 ---@field tar fun(...): any
 ---@field tar_read fun(...): any
@@ -166,7 +107,6 @@
 
 ---@class Morf.Audio
 ---@field available fun(...): any
----@field backend fun(...): any
 ---@field default_sink fun(...): any
 ---@field default_source fun(...): any
 ---@field device fun(...): any
@@ -186,122 +126,19 @@
 
 ---@class Morf.Clipboard
 ---@field set fun(...): any
----@field subscribe fun(...): any
 ---@field supported fun(...): any
 ---@field watch fun(...): any
 
 ---@class Morf.Color
----@field ansi8 fun(...): any
----@field cmyk fun(...): any
 ---@field distinct fun(...): any
----@field gray fun(...): any
 ---@field hct fun(...): any
----@field hsl fun(...): any
 ---@field hsv fun(...): any
----@field lab fun(...): any
----@field lch fun(...): any
----@field lms fun(...): any
 ---@field mix fun(...): any
----@field named fun(...): any
----@field names fun(...): any
----@field oklab fun(...): any
 ---@field oklch fun(...): any
 ---@field random fun(...): any
 ---@field rgb fun(...): any
 ---@field scale fun(...): any
 ---@field tonal_palette fun(...): any
----@field xyz fun(...): any
-
----@class Morf.Core
----@field app_id string
----@field args Morf.Core.Args
----@field cache_dir fun(...): any
----@field cache_path fun(...): any
----@field clock any
----@field color_quantizer fun(...): any
----@field config_path fun(...): any
----@field data_dir fun(...): any
----@field data_path fun(...): any
----@field desktop_entries fun(...): any
----@field easing_curve fun(...): any
----@field effect fun(...): any
----@field elapsed_timer fun(...): any
----@field env fun(...): any
----@field exec_detached fun(...): any
----@field executable string
----@field font_families fun(...): any
----@field geometry Morf.Core.Geometry
----@field has_icon fun(...): any
----@field has_version fun(...): any
----@field icon_path fun(...): any
----@field instance_id string
----@field launch_time_ms integer
----@field list_model fun(...): any
----@field menu fun(...): any
----@field on_primary fun(...): any
----@field on_reload_completed fun(...): any
----@field on_reload_failed fun(...): any
----@field operands Morf.Core.Operands
----@field options Morf.Core.Options
----@field persistent fun(...): any
----@field prefers any
----@field primary fun(...): any
----@field process_id integer
----@field reload fun(...): any
----@field reloadable fun(...): any
----@field retain_lock fun(...): any
----@field retainable fun(...): any
----@field satisfies fun(...): any
----@field scope fun(...): any
----@field screens Morf.Core.Screens
----@field session_paths fun(...): any
----@field shell_dir fun(...): any
----@field shell_id fun(...): any
----@field shell_path fun(...): any
----@field signal fun(...): any
----@field state_dir fun(...): any
----@field state_path fun(...): any
----@field sync_view fun(...): any
----@field system_clock fun(...): any
----@field theme fun(...): any
----@field timer fun(...): any
----@field transform_watcher fun(...): any
----@field transition_parent fun(...): any
----@field variants fun(...): any
----@field version string
----@field virtual_list fun(...): any
----@field watch_files fun(...): any
----@field working_directory fun(...): any
-
----@class Morf.Core.Args
-
----@class Morf.Core.Geometry
----@field arc fun(...): any
----@field graph_grid fun(...): any
----@field graph_series fun(...): any
----@field hatch fun(...): any
----@field hatch_under fun(...): any
----@field lobes fun(...): any
----@field plot fun(...): any
----@field polygon fun(...): any
----@field regular fun(...): any
----@field ruler fun(...): any
----@field sector fun(...): any
----@field segments fun(...): any
----@field shape_curves fun(...): any
----@field shape_names Morf.Core.Geometry.Shape_names
----@field shape_path fun(...): any
----@field shape_segments integer
----@field star fun(...): any
----@field ticks fun(...): any
-
----@class Morf.Core.Geometry.Shape_names
-
----@class Morf.Core.Operands
-
----@class Morf.Core.Options
-
----@class Morf.Core.Screens
 
 ---@class Morf.Dbus
 ---@field call_async fun(...): any
@@ -314,10 +151,10 @@
 
 ---@class Morf.Drag
 ---@field start fun(...): any
----@field supported fun(...): any
 
 ---@class Morf.Easing
 ---@field color fun(...): any
+---@field curve fun(...): any
 ---@field number fun(...): any
 ---@field point fun(...): any
 ---@field rect fun(...): any
@@ -326,12 +163,6 @@
 ---@class Morf.Encoding
 ---@field base64_decode fun(...): any
 ---@field base64_encode fun(...): any
----@field compression fun(...): any
----@field crc32 fun(...): any
----@field decompress fun(...): any
----@field hex_decode fun(...): any
----@field hex_encode fun(...): any
----@field random_bytes fun(...): any
 ---@field sha1 fun(...): any
 ---@field sha256 fun(...): any
 ---@field url_decode fun(...): any
@@ -346,35 +177,29 @@
 ---@field set fun(...): any
 
 ---@class Morf.Fs
----@field append fun(...): any
----@field basename fun(...): any
 ---@field copy fun(...): any
 ---@field dir fun(...): any
----@field dirname fun(...): any
 ---@field disk fun(...): any
 ---@field exists fun(...): any
 ---@field expand fun(...): any
----@field extension fun(...): any
+---@field file fun(...): any
 ---@field glob fun(...): any
 ---@field home fun(...): any
 ---@field is_dir fun(...): any
 ---@field is_file fun(...): any
----@field is_link fun(...): any
 ---@field join fun(...): any
 ---@field lines fun(...): any
 ---@field list fun(...): any
 ---@field matches fun(...): any
 ---@field mkdir fun(...): any
----@field normalize fun(...): any
 ---@field read fun(...): any
 ---@field read_async fun(...): any
 ---@field read_link fun(...): any
----@field realpath fun(...): any
 ---@field remove fun(...): any
 ---@field rename fun(...): any
 ---@field stat fun(...): any
----@field stem fun(...): any
 ---@field symlink fun(...): any
+---@field view fun(...): any
 ---@field watch fun(...): any
 ---@field write fun(...): any
 
@@ -386,11 +211,9 @@
 ---@class Morf.Geometry
 ---@field arc fun(...): any
 ---@field graph_grid fun(...): any
----@field graph_series fun(...): any
 ---@field hatch fun(...): any
 ---@field hatch_under fun(...): any
 ---@field lobes fun(...): any
----@field plot fun(...): any
 ---@field polygon fun(...): any
 ---@field regular fun(...): any
 ---@field ruler fun(...): any
@@ -414,12 +237,9 @@
 ---@field post fun(...): any
 ---@field query fun(...): any
 ---@field request fun(...): any
----@field url_decode fun(...): any
----@field url_encode fun(...): any
 
 ---@class Morf.Idle
 ---@field inhibit fun(...): any
----@field inhibited fun(...): any
 ---@field subscribe fun(...): any
 
 ---@class Morf.Image
@@ -428,9 +248,9 @@
 ---@field annotation_path fun(...): any
 ---@field annotation_pick fun(...): any
 ---@field compose fun(...): any
----@field encode_png fun(...): any
 ---@field from_dbus fun(...): any
----@field from_rgba fun(...): any
+---@field has_icon fun(...): any
+---@field icon fun(...): any
 ---@field info fun(...): any
 ---@field limits Morf.Image.Limits
 ---@field palette fun(...): any
@@ -448,33 +268,7 @@
 ---@class Morf.Input_method
 ---@field commit fun(...): any
 ---@field delete fun(...): any
----@field preedit fun(...): any
 ---@field subscribe fun(...): any
-
----@class Morf.Io
----@field connect fun(...): any
----@field file fun(...): any
----@field file_view fun(...): any
----@field json Morf.Io.Json
----@field kill fun(...): any
----@field process fun(...): any
----@field process_view fun(...): any
----@field request_socket fun(...): any
----@field run fun(...): any
----@field socket fun(...): any
----@field socket_server fun(...): any
----@field spawn fun(...): any
----@field split_parser fun(...): any
----@field stream_collector fun(...): any
-
----@class Morf.Io.Json
----@field array fun(...): any
----@field decode fun(...): any
----@field encode fun(...): any
----@field null any
----@field object fun(...): any
----@field read_file fun(...): any
----@field write_file fun(...): any
 
 ---@class Morf.Ipc
 
@@ -484,8 +278,6 @@
 ---@field encode fun(...): any
 ---@field null any
 ---@field object fun(...): any
----@field read_file fun(...): any
----@field write_file fun(...): any
 
 ---@class Morf.Keys
 ---@field Alt_L integer
@@ -566,6 +358,12 @@
 ---@field XF86MonBrightnessUp integer
 ---@field space integer
 
+---@class Morf.Lock
+---@field on_locked fun(...): any
+---@field on_state fun(...): any
+---@field state any
+---@field surface fun(...): any
+
 ---@class Morf.Log
 ---@field debug fun(...): any
 ---@field error fun(...): any
@@ -587,8 +385,21 @@
 
 ---@class Morf.Pam
 ---@field authenticate fun(...): any
----@field authenticate_unlock fun(...): any
 ---@field session fun(...): any
+
+---@class Morf.Paths
+---@field cache fun(...): any
+---@field session fun(...): any
+---@field shell fun(...): any
+---@field state fun(...): any
+
+---@class Morf.Process
+---@field detach fun(...): any
+---@field kill fun(...): any
+---@field open fun(...): any
+---@field run fun(...): any
+---@field spawn fun(...): any
+---@field view fun(...): any
 
 ---@class Morf.Screencopy
 ---@field capture fun(...): any
@@ -598,9 +409,19 @@
 
 ---@class Morf.Screens
 
+---@class Morf.Shader
+---@field data fun(...): any
+---@field define fun(...): any
+
 ---@class Morf.Shortcuts
 ---@field inhibit fun(...): any
 ---@field subscribe fun(...): any
+
+---@class Morf.Socket
+---@field connect fun(...): any
+---@field open fun(...): any
+---@field request fun(...): any
+---@field server fun(...): any
 
 ---@class Morf.Status_notifier
 ---@field subscribe fun(...): any
@@ -612,48 +433,40 @@
 ---@field parse fun(...): any
 
 ---@class Morf.Text
+---@field axes fun(...): any
+---@field families fun(...): any
 ---@field fuzzy fun(...): any
----@field fuzzy_score fun(...): any
----@field highlight fun(...): any
-
----@class Morf.Text_input
----@field content_type fun(...): any
----@field cursor_rect fun(...): any
----@field disable fun(...): any
----@field subscribe fun(...): any
----@field surrounding fun(...): any
 
 ---@class Morf.Time
 ---@field add fun(...): any
+---@field clock any
 ---@field date fun(...): any
----@field days_between fun(...): any
 ---@field days_in_month fun(...): any
 ---@field duration fun(...): any
+---@field elapsed fun(...): any
 ---@field format fun(...): any
----@field is_leap_year fun(...): any
+---@field hour_clock any
+---@field minute_clock any
 ---@field month fun(...): any
 ---@field now fun(...): any
 ---@field now_ms fun(...): any
 ---@field parse fun(...): any
----@field relative fun(...): any
 ---@field start_of fun(...): any
 ---@field time fun(...): any
----@field timezone fun(...): any
+---@field timer fun(...): any
 ---@field weekday fun(...): any
 
----@class Morf.Toplevel
+---@class Morf.Toplevels
 ---@field activate fun(...): any
 ---@field close fun(...): any
----@field set_fullscreen fun(...): any
----@field set_maximized fun(...): any
----@field set_minimize_target fun(...): any
----@field set_minimized fun(...): any
-
----@class Morf.Toplevels
 ---@field get fun(...): any
 ---@field list fun(...): any
 ---@field on_changed fun(...): any
 ---@field revision fun(...): any
+---@field set_fullscreen fun(...): any
+---@field set_maximized fun(...): any
+---@field set_minimize_target fun(...): any
+---@field set_minimized fun(...): any
 
 ---@class Morf.Udev
 ---@field subscribe fun(...): any
@@ -686,25 +499,28 @@
 ---@field Timer fun(...): any
 ---@field claims fun(node: morf.Node, claims: morf.ui.ClaimSet): table<string, morf.ui.ClaimHandle>
 ---@field destroy fun(...): any
----@field each fun(...): any
 ---@field follow fun(...): any
 ---@field reparent fun(...): any
----@field smoothed fun(...): any
 ---@field spring fun(...): any
+---@field view_extent fun(...): any
+---@field view_item_start fun(...): any
 
 ---@class Morf.Virtual_keyboard
 ---@field key fun(...): any
 ---@field modifiers fun(...): any
 
 ---@class Morf.Window
----@field floating fun(...): any
+---@field density fun(...): any
 ---@field layer fun(...): any
----@field layer_surface Morf.Window.Layer_surface
+---@field menu fun(...): any
+---@field on_backdrop_click fun(...): any
+---@field on_keyboard_focus fun(...): any
+---@field on_primary fun(...): any
 ---@field popup fun(...): any
+---@field primary fun(...): any
 ---@field region fun(...): any
+---@field screens_revision fun(...): any
 ---@field toplevel fun(...): any
-
----@class Morf.Window.Layer_surface
 
 ---@class Morf.Windows
 
@@ -716,7 +532,6 @@
 ---@class Morf.Workspaces
 
 ---@class Morf.Xkb
----@field compile fun(...): any
 ---@field include_paths fun(...): any
 
 ---@class morf.ui.ClaimSet

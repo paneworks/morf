@@ -66,14 +66,14 @@ local function sample_async(sample, done)
       if read_ok and type(text) == "string" then return resume(text) end
       return resume(nil, "cannot read " .. value)
     end
-    if value == false then morf.timer(1, resume, false) return end
+    if value == false then morf.time.timer(1, resume, false) return end
     local submitted, err = morf.fs.read_async({ value }, function(success, contents)
       if success and type(contents[1]) == "string" then resume(contents[1])
       else resume(nil, "cannot read " .. value) end
     end, limit)
     if not submitted then jobs[thread] = nil done(nil, err) end
   end
-  morf.timer(1, resume, false)
+  morf.time.timer(1, resume, false)
 end
 
 local sysinfo = {
@@ -441,9 +441,9 @@ local NVIDIA_FIELDS = "pci.bus_id,utilization.gpu,utilization.encoder,utilizatio
   .. "temperature.gpu,power.draw,power.limit,clocks.gr,clocks.max.gr,clocks.mem,clocks.max.mem,driver_version"
 
 local function ask_nvidia()
-  if nvidia.asking or not morf.run then return end
+  if nvidia.asking or not morf.process.run then return end
   nvidia.asking = true
-  local ok = pcall(morf.run, { "nvidia-smi", "--query-gpu=" .. NVIDIA_FIELDS, "--format=csv,noheader,nounits" }, {},
+  local ok = pcall(morf.process.run, { "nvidia-smi", "--query-gpu=" .. NVIDIA_FIELDS, "--format=csv,noheader,nounits" }, {},
     function(result)
       nvidia.asking = false
       if not (result and result.ok) then return end

@@ -100,7 +100,7 @@ function M.make(widget, spec)
     local snap = get(spec.snap)
     if snap == nil or snap == "none" or gliding then return end
     if pause then pause:cancel() end
-    pause = morf.timer(140, function()
+    pause = morf.time.timer(140, function()
       pause = nil
       if gliding then return end
       settling = true

@@ -70,7 +70,7 @@ function spectrum.new(opts)
     level = morf.signal(name .. ".level", 0),
   }
   vis.filter = spectrum.filter(o)
-  local clock = morf.elapsed_timer()
+  local clock = morf.time.elapsed()
   local last = clock:elapsed_ms()
   local ok, meter = pcall(morf.audio.monitor, {
     device = o.device,

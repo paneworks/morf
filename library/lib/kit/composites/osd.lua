@@ -28,7 +28,7 @@ return function(spec)
   function handle.show()
     shown.open(spec.anchor)
     if timer then timer:cancel() end
-    timer = morf.timer(spec.timeout or 1500, function() timer = nil shown.close("timeout") end, false)
+    timer = morf.time.timer(spec.timeout or 1500, function() timer = nil shown.close("timeout") end, false)
   end
   function handle.hide() if timer then timer:cancel() timer = nil end shown.close("closed") end
   function handle.is_open() return shown.is_open() end

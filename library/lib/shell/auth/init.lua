@@ -158,7 +158,7 @@ function Lock:hear(name)
         self:finish()
       elseif not self.done and self.wanted[name] then
         local quick = (morf.time.now_ms() - started) < 1000
-        morf.timer(quick and 10000 or 1500, function()
+        morf.time.timer(quick and 10000 or 1500, function()
           if self.wanted[name] then self:hear(name) end
         end, false)
       end
@@ -288,7 +288,6 @@ end
 --- Asks logind to "Suspend", "Reboot" or "PowerOff". Not interactive: a
 --- login screen has nobody to answer a polkit prompt. True, or nil and why.
 function auth.power(method)
-  local io = require("morf.io")
   local ok, manager = pcall(io.dbus.proxy, "system", "org.freedesktop.login1",
     "/org/freedesktop/login1", "org.freedesktop.login1.Manager")
   if not (ok and manager) then return nil, "cannot reach logind" end

@@ -62,7 +62,7 @@ local SURFACE_POINTER = { Drag = true }
 local DRAG = { Range = true, Plane = true, Drag = true, Canvas = true }
 local WHEEL = { Range = true, Plane = true }
 -- The clock typeahead measures pauses on.
-local clock = morf.elapsed_timer()
+local clock = morf.time.elapsed()
 -- Handlers that are an archetype's signals, raised through `apply`, not
 -- given to the node.
 local SIGNALS = { on_clicked = true, on_toggled = true, on_moved = true, on_value_changed = true,
@@ -228,14 +228,14 @@ function M.make(archetype, widget, spec, extra)
       local name = signal[1]
       if name == "schedule_repeat" then
         if repeat_timer then repeat_timer:cancel() end
-        repeat_timer = morf.timer(signal[2], function()
+        repeat_timer = morf.time.timer(signal[2], function()
           repeat_timer = nil
           appliers[id](native.send(id, "repeat"))
         end, false)
       elseif name == "schedule_hold" then
         -- A press that must be held: told once the hold is done.
         if repeat_timer then repeat_timer:cancel() end
-        repeat_timer = morf.timer(signal[2], function()
+        repeat_timer = morf.time.timer(signal[2], function()
           repeat_timer = nil
           appliers[id](native.send(id, "held"))
         end, false)

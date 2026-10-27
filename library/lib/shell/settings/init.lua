@@ -12,7 +12,7 @@
 --
 --   local settings = require("lib.shell.settings")
 --   local config = settings.open {
---     path = morf.config_path("shell.json"),   -- or anywhere
+--     path = morf.paths.shell("shell.json"),   -- or anywhere
 --     defaults = { appearance = { rounding = { scale = 1 } }, bar = { persistent = true } },
 --   }
 --   config.get("appearance.rounding.scale")      -- tracked
@@ -190,7 +190,7 @@ function settings.open(opts)
     if not accepts(key, value) then return false, key .. " should be a " .. kind(defaults[key]) end
     if equal(signals[key]:get(), value) then return true end
     signals[key]:set(copy(value))
-    if not pending then pending = morf.timer(opts.debounce_ms or 150, save, false) end
+    if not pending then pending = morf.time.timer(opts.debounce_ms or 150, save, false) end
     return true
   end
 

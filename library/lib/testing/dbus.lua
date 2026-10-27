@@ -207,7 +207,7 @@ end
 --- the callback runs from a timer.
 local function answer_later(callback, ok, reply)
   local morf = require("morf")
-  morf.timer(1, function() callback(ok, reply) end, false)
+  morf.time.timer(1, function() callback(ok, reply) end, false)
 end
 
 local function dispatch_async(bus, dest, path, iface, method, args, callback)
@@ -323,9 +323,9 @@ function fake.steps(steps, done, gap_ms)
       done("FAIL step " .. index .. ": " .. tostring(err))
       return
     end
-    morf.timer(gap_ms or 120, run, false)
+    morf.time.timer(gap_ms or 120, run, false)
   end
-  morf.timer(1, run, false)
+  morf.time.timer(1, run, false)
 end
 
 --- `assert` with the two values in the message.

@@ -364,7 +364,7 @@ function osk.new(options)
       if now - last_shift < 400 then sig:set("lock") else sig:set("off") end
     else sig:set("off") end
   end
-  local clock = morf.elapsed_timer()
+  local clock = morf.time.elapsed()
   local function act(action)
     if action == "shift" then
       local now = clock:elapsed_ms()
@@ -455,14 +455,14 @@ function osk.new(options)
         show_preview()
         if spec.rep then
           if not touching and not touch then commit() repeated = true end
-          repeat_timer = morf.timer(420, function()
+          repeat_timer = morf.time.timer(420, function()
             commit() repeated = true
-            repeat_timer = morf.timer(55, function() commit() end, true)
+            repeat_timer = morf.time.timer(55, function() commit() end, true)
           end, false)
           return
         end
         if spec.alts and #spec.alts > 0 then
-          long_timer = morf.timer(380, function()
+          long_timer = morf.time.timer(380, function()
             long_timer = nil
             long = true
             preview.on:set(false)
@@ -742,7 +742,7 @@ function osk.new(options)
       local list = dots:get()
       finger:set({ -1, -1 })
       if #list > 0 then on_pattern(list) end
-      pattern_timer = morf.timer(350, function() pattern_timer = nil dots:set({}) end, false)
+      pattern_timer = morf.time.timer(350, function() pattern_timer = nil dots:set({}) end, false)
     end,
   }
   layers[#layers + 1] = ui.Item(pattern_nodes)

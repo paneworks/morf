@@ -166,7 +166,7 @@ function modem.connect(options)
   -- InterfacesAdded also contains UnlockRetries on older engines. Keep
   -- discovery live there when that signal cannot be decoded. New engines
   -- use the ObjectManager signals and do no periodic bus reads.
-  morf.timer(10000, function() if legacy_dictionary then read_all() end end, true)
+  morf.time.timer(10000, function() if legacy_dictionary then read_all() end end, true)
   return mobile
 end
 

@@ -152,7 +152,7 @@ function M.rebind(binding,previous,include_file,cb)
 end
 function M.session(options)
   options=options or {} next_id=next_id+1
-  local runtime=morf.env("XDG_RUNTIME_DIR") or morf.state_path("capture-tmp")
+  local runtime=morf.env("XDG_RUNTIME_DIR") or morf.paths.state("capture-tmp")
   local root=runtime.."/morf"
   morf.fs.mkdir(root)
   local screen=(morf.screens or {})[1] or {}
@@ -306,7 +306,7 @@ run=function(argv,options,cb)
   local function done(result)
     if completed then return end completed=true cb(result)
   end
-  local ok,child=pcall(morf.run,argv,options,done)
+  local ok,child=pcall(morf.process.run,argv,options,done)
   if not ok or not child then done({ok=false,stderr=ok and "Could not start "..argv[1] or tostring(child)}) end
   return ok and child or nil
 end

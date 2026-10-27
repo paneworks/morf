@@ -82,7 +82,7 @@ function dbus_client.debounce(ms, fn)
   return function()
     if pending then return end
     pending = true
-    morf.timer(ms, function()
+    morf.time.timer(ms, function()
       pending = false
       fn()
     end, false)

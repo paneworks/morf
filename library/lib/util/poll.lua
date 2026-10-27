@@ -69,7 +69,7 @@ function poll.job(body, on_done, options)
       if timer then timer:cancel() end
       if on_done then on_done(value) end
     elseif not timer then
-      timer = morf.timer(options.every_ms or 1, step, true)
+      timer = morf.time.timer(options.every_ms or 1, step, true)
     end
   end
   function handle.cancel()
@@ -79,7 +79,7 @@ function poll.job(body, on_done, options)
     return true
   end
   function handle.done() return finished end
-  if options.now then step() else morf.timer(1, step, false) end
+  if options.now then step() else morf.time.timer(1, step, false) end
   return handle
 end
 
@@ -132,7 +132,7 @@ end
 
 -- Whether this copy is the one that samples a shared source.
 local function sampling(self)
-  return not self._shared or morf.primary()
+  return not self._shared or morf.window.primary()
 end
 
 function Source:_share(spec)
@@ -147,7 +147,7 @@ function Source:_share(spec)
   morf.effect(key .. ".mirror", function()
     if not self._shared then return end
     local sample = self._shared:get()
-    if morf.primary() or sample.n == applied then return end
+    if morf.window.primary() or sample.n == applied then return end
     applied = sample.n
     self.value, self.error, self.updated = sample.value, sample.error, sample.updated
     self.samples = self.samples + 1
@@ -160,13 +160,13 @@ function Source:_share(spec)
     local at = self._wanted:get()
     if at == wanted then return end
     wanted = at
-    if morf.primary() then
+    if morf.window.primary() then
       self._idle = 0
       self._reads = self._reads + 1
-      if not self._running then morf.timer(1, function() self:_start() end, false) end
+      if not self._running then morf.time.timer(1, function() self:_start() end, false) end
     end
   end)
-  morf.on_primary(function(primary)
+  morf.window.on_primary(function(primary)
     if primary and self._pinned then self:_start()
     elseif not primary then self:_halt() end
   end)
@@ -189,7 +189,7 @@ function Source:_want()
   local now = morf.time.now_ms()
   if self._asked and now - self._asked < self.interval then return end
   self._asked = now
-  morf.timer(1, function() self._wanted:set(now) end, false)
+  morf.time.timer(1, function() self._wanted:set(now) end, false)
 end
 
 --- The value, read so that a binding follows it. Starts polling.
@@ -273,10 +273,10 @@ function Source:_start()
   self._running = true
   self._idle = 0
   self._published = false
-  self._timer = morf.timer(self.interval, function() self:_tick() end, true)
+  self._timer = morf.time.timer(self.interval, function() self:_tick() end, true)
   -- The first sample now rather than an interval from now; a timer rather
   -- than a call, because a read inside a binding must not write signals.
-  morf.timer(1, function() self:_take() end, false)
+  morf.time.timer(1, function() self:_take() end, false)
 end
 
 function Source:_halt()
@@ -296,7 +296,7 @@ end
 
 --- Takes a sample now, whether or not the timer runs.
 function Source:refresh()
-  morf.timer(1, function() self:_take() end, false)
+  morf.time.timer(1, function() self:_take() end, false)
 end
 
 --- Changes the interval; a running timer is restarted at the new pace.
@@ -305,7 +305,7 @@ function Source:set_interval(ms)
   if self._running then
     self:_halt()
     self._running = true
-    self._timer = morf.timer(self.interval, function() self:_tick() end, true)
+    self._timer = morf.time.timer(self.interval, function() self:_tick() end, true)
   end
 end
 
@@ -366,9 +366,9 @@ function poll.run(argv, on_done, options)
   local program = argv[1]
   local args = {}
   for index = 2, #argv do args[#args + 1] = argv[index] end
-  local ok, process = pcall(morf.process, program, args)
+  local ok, process = pcall(morf.process.open, program, args)
   if not ok then
-    morf.timer(1, function()
+    morf.time.timer(1, function()
       on_done({ ok = false, stdout = "", stderr = "", error = tostring(process) })
     end, false)
     return { cancel = function() return false end }
@@ -387,7 +387,7 @@ function poll.run(argv, on_done, options)
     result.stderr = table.concat(err)
     on_done(result)
   end
-  timer = morf.timer(options.poll_ms or 20, function()
+  timer = morf.time.timer(options.poll_ms or 20, function()
     -- A bounded drain: a program that prints a lot is read over a few ticks.
     for _ = 1, 64 do
       local event = process:next()
@@ -419,10 +419,10 @@ end
 -- ---------------------------------------------------------------------------
 -- Caches
 
---- The folder caches go in: `morf.cache_dir()` when the shell has one, else
+--- The folder caches go in: `morf.paths.cache()` when the shell has one, else
 --- the XDG cache folder's `morf`.
 function poll.cache_dir()
-  local ok, dir = pcall(morf.cache_dir)
+  local ok, dir = pcall(morf.paths.cache)
   if ok and type(dir) == "string" and dir ~= "" then return dir end
   return (morf.fs.dir("cache") or "/tmp") .. "/morf"
 end

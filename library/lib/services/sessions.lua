@@ -12,7 +12,6 @@
 -- without XDG_CURRENT_DESKTOP comes up with its portals guessing.
 
 local morf = require("morf")
-local core = require("morf.core")
 
 local sessions = {}
 
@@ -20,7 +19,7 @@ local sessions = {}
 --- first, then by name.
 function sessions.list()
   local found = {}
-  local ok, entries = pcall(function() return core.desktop_entries(core.session_paths()):applications() end)
+  local ok, entries = pcall(function() return morf.apps.entries(morf.paths.session()):applications() end)
   for _, entry in ipairs(ok and entries or {}) do
     if entry.command and #entry.command > 0 then
       -- The directory it was found in is the only statement of its kind.

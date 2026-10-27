@@ -224,7 +224,7 @@ function M.make(widget, spec)
   -- late, and would slide in from nothing. (A behavior cannot be given
   -- after a node is made, so the motion is played.)
   local armed, last_side, last_main = false, nil, nil
-  morf.timer(300, function() armed = true end, false)
+  morf.time.timer(300, function() armed = true end, false)
   local function slide(node, offset, easing)
     if math.abs(offset) < 0.5 then return end
     pcall(morf.animation.play, { { node = node, property = "translate_x", from = offset, to = 0,

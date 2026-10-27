@@ -198,7 +198,7 @@ function notifications.serve(options)
       by_id[id] = entry
       -- Critical never expires on its own; that is what critical means.
       if expires and entry.timeout_ms > 0 and entry.urgency < 2 then
-        morf.timer(entry.timeout_ms, function()
+        morf.time.timer(entry.timeout_ms, function()
           if by_id[id] == entry then remove(id, EXPIRED) end
         end, false)
       end

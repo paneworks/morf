@@ -33,7 +33,7 @@ local TOOLS = {
 }
 
 local function run(argv, done)
-  local ok = pcall(morf.run, argv, { timeout_ms = 8000, max_output = 256 * 1024 }, function(result)
+  local ok = pcall(morf.process.run, argv, { timeout_ms = 8000, max_output = 256 * 1024 }, function(result)
     done(result or {})
   end)
   if not ok then done({ ok = false }) end
@@ -197,7 +197,7 @@ function vpns.watch(kind, interval_ms)
   readers[kind] = readers[kind] + 1
   if not timers[kind] then
     refresh(kind)
-    timers[kind] = morf.timer(interval_ms or 10000, function() refresh(kind) end, true)
+    timers[kind] = morf.time.timer(interval_ms or 10000, function() refresh(kind) end, true)
   end
   return vpns.rows[kind]
 end

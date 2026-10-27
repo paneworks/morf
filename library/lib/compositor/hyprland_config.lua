@@ -71,7 +71,7 @@ function M.flavour(cb)
         -- Asked before the library had started, or while the compositor
         -- was busy: ask again shortly rather than give up for good.
         tries = tries + 1
-        morf.timer(300, ask, false)
+        morf.time.timer(300, ask, false)
         return
       end
       local list = waiting

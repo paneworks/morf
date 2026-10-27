@@ -308,7 +308,7 @@ return function(S, theme, draw)
     local track = glide(t, function(x, y, w, h) return x + w / 2 - 11, y + h / 2 - 4, 22, 8 end, function(duration)
       if not field then return end
       field.blend = 6
-      morf.timer(duration, function() if field then field.blend = 0 end end, false)
+      morf.time.timer(duration, function() if field then field.blend = 0 end end, false)
     end)
     field = ui.Sdf { anchors = { fill = true }, blend = 0, behavior = { blend = { duration = 160 } },
       ui.SdfShape { shape = "box", radius = 4, track = track, operation = "smooth_union",
