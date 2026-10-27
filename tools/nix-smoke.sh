@@ -16,7 +16,7 @@ export XDG_DATA_DIRS="$scratch/no-system-data"
 unset MORF_RUNTIME_PATH LUA_PATH LUA_CPATH
 mkdir -p "$HOME"
 cp "$source_dir/library/tests/kit_spec.lua" "$scratch/kit_spec.lua"
-cp "$source_dir/library/tests/frecency_spec.lua" "$scratch/frecency_spec.lua"
+cp "$source_dir/library/tests/sysinfo_poll_spec.lua" "$scratch/sysinfo_poll_spec.lua"
 cd "$scratch"
 
 test "$("$engine/bin/morf" --version)" = "morf $version"
@@ -44,5 +44,5 @@ tail -n +4 "$scratch/ui.md" | cmp - "$source_dir/docs/UI.md"
 "$engine/bin/morf" docs --io > "$scratch/io.md"
 test "$(head -n 1 "$scratch/io.md")" = "# $reported I/O guide"
 tail -n +4 "$scratch/io.md" | cmp - "$source_dir/docs/IO.md"
-"$engine/bin/morf" test --no-dbus "$scratch/kit_spec.lua" "$scratch/frecency_spec.lua"
+"$engine/bin/morf" test --no-dbus "$scratch/kit_spec.lua" "$scratch/sysinfo_poll_spec.lua"
 printf 'Installed engine and Lua library smoke checks passed\n'

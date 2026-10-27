@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1] - 2026-10-27
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- Fetch luna by its pinned revision
+- Smoke the library with a spec it ships
+
 ## [0.6.0] - 2026-10-27
 
 ### <!-- 2 -->🚜 Refactor
