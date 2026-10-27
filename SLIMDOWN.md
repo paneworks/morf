@@ -956,7 +956,7 @@ is everything a theme or shell outside this repo needs to follow.
 - [x] 2. Library layout
 - [x] 3. Kit reset
 - [x] 4. Lua API
-- [ ] 5. Engine edges
+- [x] 5. Engine edges
 - [ ] 6. Examples
 - [ ] 7. Docs and changelog
 
@@ -1038,3 +1038,16 @@ Where the branch differs from the plan above:
   - Platform code only a deleted binding called (`quantize_colors`,
     `XkbKeymap::compile`, `VirtualList`, the fs path-part helpers) goes in
     step 5 with the other engine edges.
+- **Step 5:**
+  - `VirtualList` stays: `ui.ListView` is built on it.
+  - `MORF_HDR_WHITE`, which §7.4 leaves out, joins `MORF_HDR` as
+    `white=<n>` (`MORF_HDR=pq,white=300`).
+  - `MORF_FRAME_LOG=2` (a frame's detail) becomes
+    `MORF_PROFILE=frame_split` on the host's side and `render_split` on the
+    renderer's, each taking the threshold that `MORF_FRAME_SPLIT_MS` and
+    `MORF_RENDER_SPLIT_MS` gave: `MORF_PROFILE=frame_split=0`.
+  - The plain variables are read through `morf_value::env::var`, `path`
+    and `paths`, so no crate reads the environment itself; the desktop
+    layer smoke example's `MORF_OUTPUT` stays a direct read.
+  - The environment variables a configuration reads itself
+    (`MORF_KIT_VARIANT`, the demos' switches) are not the engine's and stay.
