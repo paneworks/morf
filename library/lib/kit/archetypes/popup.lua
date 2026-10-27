@@ -1,46 +1,51 @@
--- Popups (the Popup archetype) on the engine's overlay layer: menus,
--- tooltips, dialogs, toasts, popovers -- and a shell's drawers, tracked
--- where they already are.
+-- Popups (the Popup archetype) on the engine's overlay layer: popovers and
+-- their menus, tooltips, dialogs, a bottom sheet, toasts -- and a shell's
+-- drawers, tracked where they already are.
 --
---     local menu = popup.make("menu", { items = {
+--     local menu = popup.make("popover_menu", { items = {
 --       { label = "Copy", icon = "content_copy", on_clicked = copy },
 --       { label = "Wrap", checked = function() return wrap:get() end, on_toggled = set_wrap },
 --     } })
 --     menu.open(button)            -- beside its anchor; menu.close(), menu.toggle(button)
 --
---     popup.make("dialog", { title = "Discard?", body = "...", width = 360,
---       buttons = { { label = "Cancel" }, { label = "Discard", on_clicked = discard } } }).open()
+--     popup.make("alert_dialog", { title = "Discard?", body = "...", width = 360, root = surface_root,
+--       buttons = { { label = "Cancel" }, { label = "Discard", destructive = true, on_clicked = discard } } }).open()
 --
 --     popup.toast { text = "Copied", timeout = 2500, root = node }
 --     popup.tooltip(target, "Mute")
 --
 -- A popup's own content is `spec.content` (a node), or what its widget
 -- builds from `items`, `title`, `body` and `buttons`; the theme's skin
--- draws its `background`. `on_opened`, `on_closed(reason)` and
--- `on_about_to_close(reason)` -- returning false keeps it open -- follow
--- it. `popup.track(node, spec)` gives a node that stays where it is (a
--- drawer) the same behaviour: Escape, a press outside, the stack.
+-- draws its `background` and says how it comes in (`popup_motion`).
+-- `on_opened`, `on_closed(reason)` and `on_about_to_close(reason)` --
+-- returning false keeps it open -- follow it. `popup.track(node, spec)`
+-- gives a node that stays where it is (a drawer) the same behaviour:
+-- Escape, a press outside, the stack.
 local ui = require("morf.ui")
 local control = require("lib.kit.control")
+local tokens = require("lib.kit.tokens")
 
 local M = {}
 local function get(v) if type(v)=="function" then return v() end return v end
 
--- What each widget is unless its spec says otherwise.
+-- What each widget is unless its spec says otherwise; `dropdown`, `toast`
+-- and the dialogs a composite opens are kinds of their own.
 local DEFAULTS = {
-  menu = { placement = "bottom-start", close_policy = "escape+outside" },
-  context_menu = { placement = "bottom-start", close_policy = "escape+outside" },
-  submenu = { placement = "right-start", close_policy = "escape+outside" },
+  popover_menu = { placement = "bottom-start", close_policy = "escape+outside" },
+  popover_menu_bar = { placement = "bottom-start", close_policy = "escape+outside" },
   popover = { placement = "bottom", close_policy = "escape+outside" },
   dropdown = { placement = "bottom-start", close_policy = "escape+outside" },
   tooltip = { placement = "top", close_policy = "none", focus_on_open = false },
-  rich_tooltip = { placement = "top", close_policy = "escape", focus_on_open = false },
   dialog = { placement = "center", close_policy = "escape", modal = true, dim = true },
-  alert_dialog = { placement = "center", close_policy = "none", modal = true, dim = true },
+  alert_dialog = { placement = "center", close_policy = "escape", modal = true, dim = true },
+  about_dialog = { placement = "center", close_policy = "escape", modal = true, dim = true },
+  preferences_dialog = { placement = "center", close_policy = "escape", modal = true, dim = true },
+  shortcuts_dialog = { placement = "center", close_policy = "escape", modal = true, dim = true },
   bottom_sheet = { placement = "center", close_policy = "escape+outside", modal = true, dim = true },
   toast = { placement = "center", close_policy = "none", focus_on_open = false, padding = 12 },
-  snackbar = { placement = "center", close_policy = "none", focus_on_open = false },
 }
+-- Those on the dark on-screen-display ground, written in white.
+local OSD = { tooltip = true, toast = true }
 
 local function merged(widget, spec)
   local out = {}
@@ -72,15 +77,15 @@ local function build_content(widget, spec, close)
       entry.id = item.id or (spec.id and (spec.id .. "-item-" .. i)) or nil
       entry.width=function() return math.min(width(),get(spec.item_width) or width()) end
       entry.height=item.height or spec.item_height or 36
-      local kind = "menu_item"
-      if item.checked ~= nil then kind = item.group and "radio_menu_item" or "check_menu_item" end
+      local kind = item.checked ~= nil and (item.group and "radio" or "check") or nil
+      entry.kind = kind
       local clicked = item.on_clicked
       entry.on_clicked = function(...)
         if clicked then clicked(...) end
         -- A plain item closes its menu; a checkable one stays to be toggled again.
-        if kind == "menu_item" then close("activated") end
+        if kind == nil then close("activated") end
       end
-      rows[#rows + 1] = kit[kind](entry)
+      rows[#rows + 1] = kit.menu_item(entry)
     end
     return ui.Column(rows)
   end
@@ -88,27 +93,19 @@ local function build_content(widget, spec, close)
   local width=content_width(360)
   local function inner() return math.max(1,width()-40) end
   local column = { gap = 12, x = 20, y = 18, width = inner }
-  -- The ink the theme writes in, not a colour of this file's choosing: a
-  -- light dialog ground wants dark text.
-  local has_kit, theme_kit = pcall(require, "kit")
-  -- (A theme whose ground for this widget is not its usual one -- a dark
-  -- tooltip or toast -- says which ink reads on it: `popup_ink`.)
-  local themed = has_kit and type(theme_kit) == "table"
-  -- In the theme's face, when there is a theme.
-  local text = (themed and theme_kit.text) or require("morf.ui").Text
-  local function ink_of(level)
-    local own = themed and theme_kit.popup_ink and theme_kit.popup_ink(widget, level)
-    return own or (themed and theme_kit.ink and theme_kit.ink(level)) or nil
-  end
-  local ink = spec.ink or ink_of("hi") or "#ffffff"
-  local ink_lo = spec.ink or ink_of("lo") or ink
+  -- The ink that reads on its ground: white on a tooltip's or a toast's
+  -- dark one, the dialog's or the popover's foreground otherwise.
+  local dialog = widget:match("dialog$") ~= nil
+  local ink = spec.ink or (OSD[widget] and "#ffffff") or tokens.color(dialog and "dialog_fg" or "popover_fg")
+  local ink_lo = spec.ink or (OSD[widget] and "#ffffffb8") or tokens.color(dialog and "dialog_fg" or "popover_fg", 0.72)
+  local function text(props) return kit.label(props) end
   -- Words alone (a tooltip, a toast): as wide as they are.
   if spec.text and not spec.title and not spec.body and not spec.buttons then
     return text { text = spec.text, font_size = 13, color = ink,
       width=spec.width and width or nil,wrap=spec.width~=nil }
   end
   if spec.title then
-    column[#column + 1] = text { text = spec.title, font_size = 18, font_weight = 600, width = inner,
+    column[#column + 1] = text { text = spec.title, variant = "title_4", width = inner,
       wrap=true,color = ink }
   end
   if spec.body then
@@ -122,10 +119,8 @@ local function build_content(widget, spec, close)
   if spec.buttons then
     local actions={}
     local ready=morf.signal("kit.popup.actions."..tostring(actions),false)
-    local caption=require("lib.kit.caption")
-    local has_theme,theme=pcall(require,"theme")
-    theme=(themed and theme_kit.theme) or (has_theme and type(theme)=="table" and theme) or {}
-    local font_size=theme.size and theme.size.normal or 14
+    local caption=require("lib.kit.archetypes.press")
+    local font_size=tokens.type("body").size
     for i,b in ipairs(spec.buttons) do actions[i]={spec=b} end
     local function visible(action) return get(action.spec.visible)~=false end
     local function desired(action)
@@ -163,8 +158,8 @@ local function build_content(widget, spec, close)
       local clicked = b.on_clicked
       -- A destructive choice (Discard, Reset) or the suggested one is
       -- drawn as such by the theme.
-      local kind=b.destructive and "destructive" or b.suggested and "suggested" or "push"
-      local node,_,ctl=control.make("Press",kind,{widget=kind,
+      local variant=b.destructive and "destructive" or b.suggested and "suggested" or nil
+      local node,_,ctl=control.make("Press","button",{widget="button",variant=variant,
         id = b.id or (spec.id and (spec.id .. "-button-" .. i)) or nil,
         label=b.label,icon=b.icon,enabled=b.enabled,visible=b.visible,accessible_name=b.accessible_name,
         width=function() return stacked() and inner() or desired(action) end,height=b.height or 34,
@@ -235,8 +230,8 @@ function M.make(widget, spec)
     -- How the theme brings it in (`popup_motion`), asked once shut and once
     -- open: its node's pose in each, which two claims hold, and the
     -- behaviours that carry it between them.
-    local has_kit, theme_kit = pcall(require, "kit")
-    local themed = spec.behavior == nil and has_kit and type(theme_kit) == "table" and theme_kit.popup_motion
+    local found = spec.behavior == nil and require("lib.kit.skin").find("popup_motion") or nil
+    local themed = type(found) == "function" and found or nil
     local function pose(open)
       return themed(widget, spec, { open = function() return open end,
         size = function(axis) return root and root["layout_" .. axis] or 0 end })

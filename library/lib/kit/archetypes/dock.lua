@@ -3,7 +3,7 @@
 -- it, onto an edge splits beside it, out of the dock floats -- and
 -- maximises, closes, and walks by keys.
 --
---     local node, dock = lib.kit.dock.make("dock_area", {
+--     local node, dock = lib.kit.archetypes.dock.make("dock_area", {
 --       width = 1200, height = 800,
 --       panels = {
 --         files = { title = "Files", icon = "folder", content = file_tree },

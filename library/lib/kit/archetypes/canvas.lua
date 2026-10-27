@@ -315,8 +315,26 @@ local function box(item)
 end
 M.box = box
 
+-- What each widget is unless its spec says otherwise.
+local DEFAULTS = {
+  zoomable_canvas = { wheel_zooms = true, resizable = true },
+  node_graph = { grid = 16, snap = true },
+  whiteboard = { tool = "freehand", resizable = true },
+  diagram = { grid = 10, snap = true, resizable = true },
+  map_view = { wheel_zooms = true, min_zoom = 0.001, max_zoom = 1e6, movable = false },
+  image_viewer = { wheel_zooms = true, movable = false, multi_select = false },
+  chart_inspector = { axes = "x", tool = "brush", movable = false, wheel_zooms = true },
+  timeline_track = { axes = "x" },
+  drawing_board = { tool = "rect", grid = 8, snap = true, resizable = true },
+}
+
 function M.make(widget, spec)
-  spec = spec or {}
+  do
+    local merged = {}
+    for k, v in pairs(DEFAULTS[widget] or {}) do merged[k] = v end
+    for k, v in pairs(spec or {}) do merged[k] = v end
+    spec = merged
+  end
   local t, ctl, root
   local by_id, port_at = {}, {}
   local full = {}

@@ -1,8 +1,10 @@
--- Application shells (the Shell archetype): a window's header bar, sidebar,
--- content, inspector, bottom bar, banner and toasts, arranged for the
--- window's width and rearranged as it narrows.
+-- Application shells (the Shell archetype): AdwApplicationWindow, its
+-- toolbar view, split views, breakpoint bin, clamp and multi-layout view --
+-- a window's header bar, sidebar, content, inspector, bottom bar, banner
+-- and toasts, arranged for the window's width and rearranged as it
+-- narrows.
 --
---     local node, app = shell.make("window_layout", {
+--     local node, app = shell.make("application_window", {
 --       width = function() return win.width end, height = function() return win.height end,
 --       header_bar = header, sidebar = list, content = page, inspector = details,
 --       bottom_bar = tabs, banner = notice, toasts = stack,
@@ -161,7 +163,7 @@ function M.make(widget, spec)
     -- the configuration's colour, else the kit's sidebar tone.
     local ok, kit = pcall(require, "kit")
     local P = ok and type(kit) == "table" and kit.theme and kit.theme.P
-    local ground = spec.sidebar_color or (P and function() return P().sidebar end)
+    local ground = spec.sidebar_color or (P and function() return P().sidebar_bg end)
     if ground then ui.reparent(ui.Rect { anchors = { fill = true }, z = -1, color = ground }, side) end
     -- The scrim fades in and out; only an open drawer's takes the press.
     local function drawer() return live() ~= nil and t.collapsed and t.sidebar_open end
@@ -248,6 +250,62 @@ function M.make(widget, spec)
   function handle.toggle_sidebar() ctl.send("toggle_sidebar") end
   function handle.dismiss() ctl.send("dismiss") end
   return root, handle
+end
+
+
+--- AdwHeaderBar: a window's title, its own controls at the start and end,
+--- and the window controls -- minimize, maximize, close -- for a window
+--- that decorates itself.
+---
+---     local node = widgets.header_bar {
+---       id = "header", width = function() return win.width end, window = win,
+---       title = "Settings", subtitle = function() return page:get() end,
+---       start = { toggle_button }, ["end"] = { menu_button },
+---     }
+---
+--- A press on the bar's empty part moves the window (`start_system_move`),
+--- a double press maximises or restores it. `title_widget` puts a node
+--- where the title is (a view switcher). `controls = false` leaves the
+--- window controls out (a dialog, a phone). The `flat` variant leaves out
+--- its ground and rule: a Shell's skin draws them under its header region.
+function M.header_bar(spec)
+  spec = spec or {}
+  local tokens = require("lib.kit.tokens")
+  local press = require("lib.kit.archetypes.press")
+  local skin = require("lib.kit.skin")
+  local id = spec.id or "header-bar"
+  local W, H = spec.width or 600, spec.height or 46
+  local win = spec.window
+  local gap = 6
+  local flat = press.has(spec, "flat")
+  local function control(name, icon, label, action)
+    return press.make("button", { id = id .. "-" .. name, width = 32, height = 32, icon = icon,
+      variant = "flat circular", accessible_name = label, on_clicked = action })
+  end
+  local ends = {}
+  for _, node in ipairs(spec["end"] or {}) do ends[#ends + 1] = node end
+  if win and spec.controls ~= false then
+    ends[#ends + 1] = control("minimize", "minimize", "Minimize", function() win:minimized(true) end)
+    ends[#ends + 1] = control("maximize", "crop_square", "Maximize", function() win:maximized(not win:maximized()) end)
+    ends[#ends + 1] = control("close", "close", "Close", function() win:close() end)
+  end
+  local start_row = ui.Row { anchors = { left = true, left_margin = gap, vertical_center = true }, gap = gap,
+    table.unpack(spec.start or {}) }
+  local end_row = ui.Row { anchors = { right = true, right_margin = gap, vertical_center = true }, gap = gap,
+    table.unpack(ends) }
+  local title = spec.title_widget or skin.draw("window_title", { id = id .. "-title", title = spec.title or "",
+    subtitle = spec.subtitle, anchors = { center_in = true } })
+  -- The empty part of the bar: it moves the window, a double press toggles maximised.
+  local drag = ui.MouseArea { anchors = { fill = true },
+    on_pressed = function() if win then win:start_system_move() end end,
+    on_double_clicked = function() if win then win:maximized(not win:maximized()) end end }
+  local node = ui.Item { id = id, x = spec.x, y = spec.y, anchors = spec.anchors, width = W, height = H,
+    accessible_role = "toolbar", accessible_name = spec.accessible_name or "Header bar",
+    ui.Rect { anchors = { fill = true }, color = spec.color or tokens.color("headerbar_bg"), visible = not flat },
+    ui.Rect { anchors = { left = true, right = true, bottom = true }, height = 1, color = tokens.color("headerbar_shade"),
+      visible = not flat },
+    drag, start_row, title, end_row }
+  return node, { node = node }
 end
 
 return M

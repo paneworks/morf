@@ -1,19 +1,20 @@
--- Collections (the Collection archetype): lists, grids, tables and trees
--- over a model, through the engine's list view -- only the rows in sight
--- are built, and a row scrolled out is rebound to the row scrolled in.
+-- Collections (the Collection archetype): list and grid views, column
+-- views, list and flow boxes, and trees over a model, through the engine's
+-- list view -- only the rows in sight are built, and a row scrolled out
+-- is rebound to the row scrolled in.
 --
---     collection.make("list", {
+--     collection.make("list_view", {
 --       rows = model,                 -- a morf.list_model (or a plain array)
 --       width = 300, height = 400, row_height = 36,
 --       size_field = "height",        -- rows that say how tall they are
 --       kind_field = "kind",          -- delegates only reused within a kind
 --       on_activated = function(i) end, on_end_reached = load_more,
 --     })
---     collection.make("table", { rows = files, columns = {
+--     collection.make("column_view", { rows = files, columns = {
 --       { key = "name", title = "Name", width = 220, sortable = true },
 --       { key = "size", title = "Size", width = 90, sortable = true } },
 --       on_sort_changed = function(key, ascending) end })
---     collection.make("tree", { tree = { { key = "a", label = "A", children = { ... } } } })
+--     collection.make("tree_expander", { tree = { { key = "a", label = "A", children = { ... } } } })
 --
 -- The skin draws each row with its `row(row, s)` builder -- returning a node
 -- and an updater `function(row)` that rebinds it -- where `s` reads the
@@ -56,37 +57,14 @@ local function flatten(nodes, expanded, depth, out, load)
 end
 
 -- What each widget is unless its spec says otherwise: its layout and the
--- size of its rows. A file list given no delegate of its own is a table of
--- name, size and date; a tree table is a tree whose rows are a table's.
+-- size of its rows.
 local DEFAULTS = {
   grid_view = { layout = "grid" },
   flow_box = { layout = "flow", cell_width = 128, cell_height = 44 },
-  data_table = { layout = "table" },
-  tree_view = { layout = "tree" },
-  tree_table = { layout = "tree" },
-  file_list = { row_height = 36 },
-  boxed_list = { row_height = 50 },
+  column_view = { layout = "table" },
+  tree_expander = { layout = "tree" },
   list_box = { row_height = 52 },
-  timeline = { row_height = 56 },
-  feed = { row_height = 92 },
-  kanban_column = { row_height = 64 },
-  chat_log = { row_height = 48, size_field = "height" },
 }
-local FILE_COLUMNS = {
-  { key = "name", title = "Name", width = 0.56, sortable = true },
-  { key = "size", title = "Size", width = 0.2, sortable = true },
-  { key = "modified", title = "Modified", width = 0.24, sortable = true },
-}
-
---- A chat message's height: its lines at the bubble's width, and room
---- round them (rows that say how tall they are keep theirs).
-local function bubble_height(row, width)
-  local text = type(row) == "table" and tostring(row.text or row.label or "") or tostring(row)
-  local per_line = math.max(8, math.floor((width * 0.72 - 28) / 7.4))
-  local lines = 0
-  for part in (text .. "\n"):gmatch("([^\n]*)\n") do lines = lines + math.max(1, math.ceil(#part / per_line)) end
-  return 20 * math.max(1, lines) + 40
-end
 
 function M.make(widget, spec)
   spec = spec or {}
@@ -94,28 +72,12 @@ function M.make(widget, spec)
     local merged = {}
     for k, v in pairs(DEFAULTS[widget] or {}) do merged[k] = v end
     for k, v in pairs(spec) do merged[k] = v end
-    if widget == "file_list" and merged.delegate == nil and merged.columns == nil then
-      merged.layout = merged.layout or "table"
-      local W0 = tonumber(type(merged.width) == "function" and merged.width() or merged.width) or 300
-      local columns = {}
-      for i, c in ipairs(FILE_COLUMNS) do
-        columns[i] = { key = c.key, title = c.title, sortable = c.sortable, width = math.floor(W0 * c.width) }
-      end
-      merged.columns = columns
-    end
     spec = merged
   end
   local layout = spec.layout or widget
   if layout ~= "grid" and layout ~= "table" and layout ~= "tree" and layout ~= "flow" then layout = "list" end
-  -- A tree with columns (a tree table) draws its rows as a table's.
+  -- A tree with columns draws its rows as a table's.
   local tabular = layout == "table" or (layout == "tree" and spec.columns ~= nil)
-  -- A chat log's messages are as tall as their text.
-  if widget == "chat_log" and spec.size_field == "height" and type(spec.rows) == "table" then
-    for _, row in ipairs(spec.rows) do
-      if type(row) == "table" and row.height == nil then row.height = bubble_height(row,
-        tonumber(type(spec.width) == "function" and spec.width() or spec.width) or 300) end
-    end
-  end
   local model = spec.rows
   if type(model) ~= "userdata" then model = morf.list_model(model or {}) end
   -- A tree's rows are its nodes as far as they are expanded.

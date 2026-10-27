@@ -33,7 +33,7 @@ local SETTINGS = {
     "disabled", "follow_focus", "reorderable" },
   Popup = { "modal", "dim", "close_policy", "placement", "focus_on_open", "restore_focus" },
   TextField = { "text", "placeholder", "echo", "read_only", "max_length", "validator", "minimum", "maximum",
-    "required", "revert_on_escape", "capture" },
+    "required", "revert_on_escape" },
   Scroll = { "scroll_policy_x", "scroll_policy_y", "snap", "item_size", "step" },
   Collection = { "count", "labels", "current", "selected", "mode", "wrap", "orientation", "columns", "page",
     "disabled", "follow_focus", "layout", "columns_spec", "tree_rows", "end_margin" },
@@ -41,32 +41,25 @@ local SETTINGS = {
   Drag = { "mode", "axis", "threshold", "minimum", "maximum", "value", "extent", "swipe_distance", "swipe_speed" },
   Navigation = { "mode", "pages", "current", "wrap" },
   Shell = { "breakpoints", "layouts", "collapse_below", "inspector_below", "regions", "width", "sidebar" },
-  -- (`items` and `ports` are lib.kit.canvas's to send: it keeps them by id.)
+  -- (`items` and `ports` are lib.kit.archetypes.canvas's to send: it keeps them by id.)
   Canvas = { "zoom", "view_x", "view_y", "min_zoom", "max_zoom", "zoom_step", "axes", "bounds", "grid", "snap",
     "tool", "port_radius", "selection", "multi_select", "movable", "wheel_zooms", "fit_padding", "hit_tolerance", "resizable", "min_item" },
-  -- (`layout` and `floating` are lib.kit.dock's to send and keep.)
+  -- (`layout` and `floating` are lib.kit.archetypes.dock's to send and keep.)
   Dock = { "fixed", "edge", "min_ratio" },
-  Transform = { "min_width", "min_height", "max_width", "max_height", "aspect", "bounds", "snap", "movable",
-    "resizable", "rotatable", "angle", "handles" },
-  Sheet = { "rows", "columns", "row", "column", "editable", "read_only", "page_rows", "wrap", "toggle" },
-  Roving = { "count", "current", "orientation", "columns", "wrap", "disabled", "menubar" },
-  Form = { "submit_on_enter", "show_errors" },
-  Overflow = { "widths", "priorities", "pinned", "available", "more_width", "gap", "mode" },
 }
 -- How each archetype takes focus by default: a press by Tab only, so a click
 -- leaves a search field typing; a range by click too, so the arrows move
 -- what was just dragged.
 local POLICY = { Control = "none", Press = "tab", Range = "strong", Plane = "strong", Selection = "strong",
   TextField = "none", Scroll = "none", Collection = "strong", Disclosure = "tab", Drag = "tab", Navigation = "none",
-  Shell = "none", Canvas = "strong", Dock = "none", Transform = "strong", Sheet = "strong", Roving = "none",
-  Form = "none", Overflow = "none" }
+  Shell = "none", Canvas = "strong", Dock = "none" }
 -- Which take keys and the wheel.
 local KEYS = { Press = true, Range = true, Plane = true, Selection = true, Scroll = true, Collection = true,
-  Disclosure = true, Drag = true, Navigation = true, Canvas = true, Dock = true, Transform = true, Sheet = true }
+  Disclosure = true, Drag = true, Navigation = true, Canvas = true, Dock = true }
 -- Which take the pointer in surface coordinates: a handle that moves under
 -- the pointer would see its own local ones drift.
 local SURFACE_POINTER = { Drag = true }
-local DRAG = { Range=true, Plane=true, Drag=true, Canvas=true, Transform=true, Sheet=true }
+local DRAG = { Range = true, Plane = true, Drag = true, Canvas = true }
 local WHEEL = { Range = true, Plane = true }
 -- The clock typeahead measures pauses on.
 local clock = morf.elapsed_timer()

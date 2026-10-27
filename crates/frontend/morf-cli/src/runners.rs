@@ -198,7 +198,8 @@ fn check_a11y(headless: &Headless) -> usize {
 }
 
 /// `--kit`: the configuration's `kit` module against the widget contract.
-/// Prints the contract's stage, how much is due and every problem;
+/// Prints how much of the contract is due and every problem (what the
+/// editor group lacks as warnings);
 /// returns how many problems there were.
 fn check_kit(headless: &mut Headless) -> usize {
     const CHECK: &[u8] = br#"
@@ -208,8 +209,10 @@ fn check_kit(headless: &mut Headless) -> usize {
           local ok, kit = pcall(require, "kit")
           if not ok then return "no kit module: " .. tostring(kit) end
           local summary = check.summary(kit)
-          local out = { ("stage %d: %d due, %d missing"):format(summary.stage, summary.due, summary.missing) }
+          local out = { ("contract: %d due, %d missing; editor: %d due, %d missing"):format(summary.due,
+            summary.missing, summary.editor, summary.editor_missing) }
           for _, problem in ipairs(check.kit(kit)) do out[#out + 1] = problem end
+          for _, problem in ipairs(check.editor(kit)) do out[#out + 1] = problem end
           return table.unpack(out)
         end
     "#;
@@ -230,12 +233,17 @@ fn check_kit(headless: &mut Headless) -> usize {
     };
     let mut lines = lines.iter().map(text);
     let head = lines.next().unwrap_or_default();
-    if !head.starts_with("stage ") {
+    if !head.starts_with("contract: ") {
         outln!("  error: kit: {head}");
         return 1;
     }
     outln!("  kit     {head}");
-    let problems = lines.collect::<Vec<_>>();
+    // The editor group is a theme's to skip: what it lacks there is said,
+    // not counted.
+    let (editor, problems): (Vec<_>, Vec<_>) = lines.partition(|line| line.starts_with("editor "));
+    for problem in &editor {
+        outln!("  warning: kit: {problem}");
+    }
     for problem in &problems {
         outln!("  error: kit: {problem}");
     }

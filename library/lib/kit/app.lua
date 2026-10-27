@@ -10,7 +10,7 @@
 --     }
 --
 -- `application` opens the main window, decorated by the application itself
--- (client-side: a header bar from `lib.kit.composites.header_bar`, edges
+-- (client-side: a header bar, `lib.kit.widgets.header_bar`, edges
 -- that resize, a press on the header that moves), and ends the process
 -- when it closes. Under `morf app` the configuration's own surface is
 -- shrunk to nothing on the background layer -- the windows are the
