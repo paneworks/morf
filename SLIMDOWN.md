@@ -957,7 +957,7 @@ is everything a theme or shell outside this repo needs to follow.
 - [x] 3. Kit reset
 - [x] 4. Lua API
 - [x] 5. Engine edges
-- [ ] 6. Examples
+- [x] 6. Examples
 - [ ] 7. Docs and changelog
 
 Where the branch differs from the plan above:
@@ -1051,3 +1051,17 @@ Where the branch differs from the plan above:
     layer smoke example's `MORF_OUTPUT` stays a direct read.
   - The environment variables a configuration reads itself
     (`MORF_KIT_VARIANT`, the demos' switches) are not the engine's and stay.
+- **Step 6:**
+  - Most of §8 landed with the steps it follows: impasto received its
+    modules in step 2, the editor and settings were ported in step 3, every
+    caller in step 4.
+  - The library modules eva was the only caller of stay for now: eva
+    lives on outside this repository and still requires them. Under rule 3
+    they would go (`services.keyring_agent`, `accounts`, `sessions`, `vpns`,
+    `modem`, `keyboards`, `sysinfo`, `shell.auth`, `shell.capture`,
+    `shell.emoji`, `shell.settings`, `shell.launcher`, `shell.audio`'s
+    equalizer, ringer and spectrum, the clipse, lule, lyrics, taskwarrior,
+    tor and weather integrations, `util.remote`, `util.channel`); that is
+    the owner's call.
+  - `make apply`, `make run` and the permission-cost bench default to
+    impasto; the sandbox scripts keep naming an eva checkout of their own.
