@@ -1507,11 +1507,10 @@ screen. `examples/demos/sdf/path.lua` has one of each.
 and `lobes(count, inner, opts)` build custom outlines. `lib.theme.shapes` wraps these
 operations with the existing `Shape` node and morph animation controls.
 
-`graph_series(values, {width, height, samples, bottom=0, top, closed=false})`
-draws a bounded history with its newest sample at the right edge; `closed=true`
-adds the fill under it. `graph_grid(width, height, columns, rows)` builds the
-grid. Sampling intervals, history ownership, colors and UI structure remain
-configuration choices; only numeric path generation moves into the engine.
+`graph_grid(width, height, columns, rows)` builds a graph's grid; the graph
+itself is a `ui.Path` reading a data channel (below). Sampling intervals,
+history ownership, colors and UI structure remain configuration choices;
+only numeric path generation moves into the engine.
 
 The marks a style draws with, as path data (angles in degrees, clockwise
 from twelve o'clock):
@@ -1525,7 +1524,6 @@ from twelve o'clock):
 | `ticks(cx, cy, r0, r1, { from, sweep, count \| angles, major, major_r0 })` | radial ticks; every `major`-th from `major_r0` |
 | `ruler(length, size, { pitch = 8, major = 5, minor = size / 2, min_count = 4, vertical })` | a tick ruler along an edge |
 | `segments(width, height, count, gap = 2, { vertical })` | a segmented bar's cells |
-| `plot(values, plot)` | what a path reading a channel with that `plot` draws (below) |
 
 ### Data channels
 
