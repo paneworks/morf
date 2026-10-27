@@ -5,7 +5,6 @@
 //! `nil, message`, since the input usually came from outside.
 
 use luna::{Callback, CallbackReturn, Context, Table, Value as LuaValue};
-use morf_io::archive::{self, DEFAULT_MAX_ENTRIES, DEFAULT_MAX_OUTPUT, MAX_ENTRIES, MAX_OUTPUT};
 use morf_io::codec;
 
 use crate::api::ui::scene::*;
@@ -37,128 +36,6 @@ fn flag<'gc>(
         },
         _ => Err(HostError("encoding options must be a table".into())),
     }
-}
-
-fn count_option<'gc>(
-    ctx: Context<'gc>,
-    options: LuaValue<'gc>,
-    field: &str,
-    default: usize,
-    most: usize,
-) -> Result<usize, HostError> {
-    let LuaValue::Table(table) = options else {
-        return Ok(default);
-    };
-    match table.get_value(ctx, field) {
-        LuaValue::Nil => Ok(default),
-        LuaValue::Integer(value) if value > 0 && value as u64 <= most as u64 => Ok(value as usize),
-        LuaValue::Number(value) if value >= 1.0 && value <= most as f64 => Ok(value as usize),
-        _ => Err(HostError(format!("{field} must be 1..{most}"))),
-    }
-}
-
-fn entry_table<'gc>(
-    ctx: Context<'gc>,
-    entry: &archive::TarEntry,
-    data: Option<&[u8]>,
-) -> Table<'gc> {
-    let row = Table::new(&ctx);
-    row.set_field(
-        ctx,
-        "name",
-        luna::String::from_slice(&ctx, entry.name.as_bytes()),
-    );
-    row.set_field(ctx, "type", entry.kind);
-    row.set_field(ctx, "size", entry.size as i64);
-    row.set_field(ctx, "mode", i64::from(entry.mode));
-    row.set_field(ctx, "mtime", entry.mtime);
-    if !entry.link.is_empty() {
-        row.set_field(
-            ctx,
-            "link",
-            luna::String::from_slice(&ctx, entry.link.as_bytes()),
-        );
-    }
-    if let Some(data) = data {
-        row.set_field(ctx, "data", luna::String::from_slice(&ctx, data));
-    }
-    row
-}
-
-pub(crate) fn install_archive_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
-    let module = Table::new(&ctx);
-
-    // tar(bytes, { contents = false, max_size, max_entries }): every member,
-    // `data` included when `contents` is true. A gzip, zstd or xz archive is
-    // inflated first.
-    module.set_field(
-        ctx,
-        "tar",
-        Callback::from_fn(&ctx, |ctx, _, mut stack| {
-            let (input, options): (LuaValue, LuaValue) = stack.consume(ctx)?;
-            let input = bytes(input, "archive.tar")?;
-            let contents = flag(ctx, options, "contents", false)?;
-            let max_output =
-                count_option(ctx, options, "max_size", DEFAULT_MAX_OUTPUT, MAX_OUTPUT)?;
-            let max_entries = count_option(
-                ctx,
-                options,
-                "max_entries",
-                DEFAULT_MAX_ENTRIES,
-                MAX_ENTRIES,
-            )?;
-            let listed = archive::tar_bytes(input, max_output).and_then(|tar| {
-                archive::tar_entries(&tar, max_entries).map(|entries| (tar, entries))
-            });
-            match listed {
-                Ok((tar, entries)) => {
-                    let list = Table::new(&ctx);
-                    for (index, entry) in entries.iter().enumerate() {
-                        let data = contents.then(|| &tar[entry.data.clone()]);
-                        list.set(ctx, index as i64 + 1, entry_table(ctx, entry, data))?;
-                    }
-                    stack.replace(ctx, list);
-                }
-                Err(error) => stack.replace(ctx, (LuaValue::Nil, error.into_message())),
-            }
-            Ok(CallbackReturn::Return)
-        }),
-    );
-
-    // tar_read(bytes, name, options): one member's bytes, or nil and why.
-    module.set_field(
-        ctx,
-        "tar_read",
-        Callback::from_fn(&ctx, |ctx, _, mut stack| {
-            let (input, name, options): (LuaValue, luna::String, LuaValue) = stack.consume(ctx)?;
-            let input = bytes(input, "archive.tar_read")?;
-            let max_output =
-                count_option(ctx, options, "max_size", DEFAULT_MAX_OUTPUT, MAX_OUTPUT)?;
-            let max_entries = count_option(
-                ctx,
-                options,
-                "max_entries",
-                DEFAULT_MAX_ENTRIES,
-                MAX_ENTRIES,
-            )?;
-            let wanted = String::from_utf8_lossy(name.as_bytes()).into_owned();
-            let found = archive::tar_bytes(input, max_output).and_then(|tar| {
-                let entries = archive::tar_entries(&tar, max_entries)?;
-                let entry = entries
-                    .iter()
-                    .find(|entry| entry.name == wanted && entry.kind == "file")
-                    .ok_or_else(|| format!("{wanted}: no such file in the archive"))?;
-                Ok(tar[entry.data.clone()].to_vec())
-            });
-            match found {
-                Ok(data) => stack.replace(ctx, luna::String::from_slice(&ctx, data)),
-                Err(error) => stack.replace(ctx, (LuaValue::Nil, error.into_message())),
-            }
-            Ok(CallbackReturn::Return)
-        }),
-    );
-
-    morf.set_field(ctx, "archive", module);
 }
 
 pub(crate) fn install_encoding_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {

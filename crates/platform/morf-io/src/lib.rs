@@ -1,6 +1,5 @@
 //! Bounded process, file, socket, and timer primitives for morf.
 
-pub mod archive;
 mod broadcast;
 mod child_signals;
 pub mod codec;

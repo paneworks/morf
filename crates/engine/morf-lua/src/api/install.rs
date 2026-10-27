@@ -80,7 +80,6 @@ pub(crate) fn install_reactive_api(
         crate::api::media::terminal_palette::install_palette_api(ctx, Rc::clone(&state), morf);
         crate::api::io::encoding::install_encoding_api(ctx, morf);
         crate::api::geometry::text::install_text_api(ctx, morf);
-        crate::api::io::encoding::install_archive_api(ctx, morf);
         crate::api::system::log::install_log_api(ctx, Rc::clone(&state), morf);
         crate::api::io::broadcast::install_broadcast_api(ctx, Rc::clone(&state), morf);
         crate::api::media::audio::install_audio_api(ctx, Rc::clone(&state), morf);
