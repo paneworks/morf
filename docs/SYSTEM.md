@@ -106,7 +106,7 @@ problems too.
 ## What a configuration may do
 
 A configuration is a program, run with your privileges. Nothing sandboxes
-it: it can start programs (`morf.run`, `morf.spawn`), read and write your
+it: it can start programs (`morf.process.run`, `morf.process.spawn`), read and write your
 files, open sockets and fetch from the network, talk to the session and
 system buses, and ask PAM to authenticate. Run one you would not run as a
 shell script.

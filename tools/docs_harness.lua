@@ -3,7 +3,7 @@
 -- `morf test` loads this through `test.source` with one fragment appended,
 -- as the demo specs load theirs. Everything that reaches outside the run is
 -- replaced first, on the real `morf` table, so a fragment, a library module
--- it requires and every alias (`morf.io.run`, `morf.core.*`) see the stubs.
+-- it requires and every alias (`morf.process.run`, `morf.*`) see the stubs.
 -- The fragment then runs in a fresh environment over the fixtures below and
 -- reports through the `docs.result` IPC verb.
 
@@ -18,16 +18,18 @@ local harness = { blocked = {} }
 -- What a fragment may name but not do: processes, writes, buses, network,
 -- and the session around the run.
 local BLOCKED = {
-  process = { "run", "spawn", "exec_detached", "process", "process_view", "kill",
-              "terminal.listen" },
-  write = { "fs.write", "fs.append", "fs.copy", "fs.mkdir", "fs.remove", "fs.rename",
-            "fs.symlink", "file", "file_view", "json.write_file", "image.encode_png" },
-  network = { "connect", "socket", "socket_server", "request_socket", "broadcast",
+  process = { "process.run", "process.spawn", "process.detach", "process.open", "process.view",
+              "process.kill", "terminal.listen" },
+  write = { "fs.write", "fs.copy", "fs.mkdir", "fs.remove", "fs.rename",
+            "fs.symlink", "fs.file", "fs.view" },
+  network = { "socket.connect", "socket.open", "socket.server", "socket.request", "broadcast",
               "http.get", "http.post", "http.query", "http.request", "dbus", "greetd",
               "pam", "status_notifier", "idle.inhibit" },
   session = { "quit", "reload", "audio", "clipboard.set", "gamma", "output_power",
-              "virtual_keyboard", "screencopy", "lock_surface", "retain_lock", "toplevel",
-              "workspace", "input_method", "text_input", "shortcuts.inhibit", "drag.start" },
+              "virtual_keyboard", "screencopy", "lock.surface", "toplevels.activate",
+              "toplevels.close", "toplevels.set_fullscreen", "toplevels.set_maximized",
+              "toplevels.set_minimized", "toplevels.set_minimize_target",
+              "workspace", "input_method", "shortcuts.inhibit", "drag.start" },
 }
 
 local function record(path, kind)

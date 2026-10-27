@@ -154,7 +154,7 @@ direction: `start`, `center`, `end`, `stretch`, `baseline`), `justify`
 ui.Flex {
   direction = "row", gap = 8, align = "center", justify = "space_between",
   anchors = { fill = true },
-  ui.Text { text = function() return morf.clock:get() end },
+  ui.Text { text = function() return morf.time.clock:get() end },
   ui.Rect { layout = { grow = 1, minimum_width = 0 }, height = 4, color = "#333" },
   ui.Image { source = "battery.svg", width = 16, height = 16 },
 }
@@ -286,7 +286,7 @@ end }
 ```
 
 The outputs are `morf.screens`, index 1 the one this instance drives, a
-table kept current in place. `morf.screens_revision()` is its tracked
+table kept current in place. `morf.window.screens_revision()` is its tracked
 read: a binding or an effect that calls it runs again when an output is
 plugged or unplugged, moves, resizes, rescales or rotates -- and not when
 the compositor merely repeats the same list -- so nothing has to compare
@@ -294,7 +294,7 @@ lists on a timer:
 
 ```lua
 morf.effect("follow screens", function()
-  morf.screens_revision()
+  morf.window.screens_revision()
   rebuild_for(#morf.screens)
 end)
 ```
@@ -309,7 +309,7 @@ morf.surface.outputless = true
 if #morf.screens == 0 then
   -- Only what makes sense with no screen: a timer, an IPC verb, a D-Bus
   -- service, a process -- here, lighting a screen again.
-  morf.ipc["screen.on"] = function() morf.spawn { command = { "wlr-randr", "--output", "DP-1", "--on" } } end
+  morf.ipc["screen.on"] = function() morf.process.spawn { command = { "wlr-randr", "--output", "DP-1", "--on" } } end
   return
 end
 -- ... the shell as usual ...
@@ -320,7 +320,7 @@ one runtime of its own: `morf.screens` is empty, `morf.capabilities.outputless`
 is `true`, and every surface, window and layer it declares stays unmapped
 (no root is needed). Timers, `morf ipc`, D-Bus, file watches, processes, the
 idle notifications, clipboard, output power and gamma all work, and
-`morf.screens_revision()` moves as ever. When an output appears that
+`morf.window.screens_revision()` moves as ever. When an output appears that
 runtime is stopped and the per-output ones start from scratch, as on any
 hotplug; values kept with `morf.reloadable(name, default)` go across in
 both directions (a counter bumped with every screen off is where it was
@@ -333,10 +333,10 @@ and the shell waits for an output, as before. `morf check --screens 0` and
 Some duties belong to the shell, not to a screen: a bus name only one
 connection can own (a notification server, a tray watcher), a history only
 one writer should keep. Exactly one of the runtimes is the primary one, and
-`morf.primary()` says whether it is this one -- a tracked read, so a
+`morf.window.primary()` says whether it is this one -- a tracked read, so a
 binding or an effect runs again when the duty moves -- and
-`morf.on_primary(function(is_primary) end)` hears each change (not the
-value it starts with, which `morf.primary()` already gives from the first
+`morf.window.on_primary(function(is_primary) end)` hears each change (not the
+value it starts with, which `morf.window.primary()` already gives from the first
 line):
 
 ```lua
@@ -345,8 +345,8 @@ local function follow(primary)
   if primary and not server then server = start_notification_server() end
   if not primary and server then server.close() server = nil end
 end
-follow(morf.primary())
-morf.on_primary(follow)
+follow(morf.window.primary())
+morf.window.on_primary(follow)
 ```
 
 Which one, and when it moves:
@@ -368,9 +368,9 @@ Which one, and when it moves:
 
 A reload that fails -- a syntax error, an error while the new file runs --
 keeps the configuration that was running, and the failure is always shown.
-`morf.on_reload_failed(function(error) end)` hears it (and
-`morf.on_reload_completed(function() end)` a reload that worked). When no
-handler takes it without raising an error of its own, the engine shows a
+`morf.on_reload(function(ok, err) end)` hears it, and every reload that
+worked with `ok` true. When no
+handler takes it -- returns true without raising an error -- the engine shows a
 band across the top of the shell's own surface instead: the file, the line
 when the error names one, and the error, wrapped to the surface's width
 and capped in height. The band is the engine's, outside the
@@ -402,8 +402,8 @@ sample, not three:
 
 ```lua
 local load = morf.shared("cpu.load", 0)
-if morf.primary() then
-  morf.timer(2000, function() load:set(read_load()) end, true)
+if morf.window.primary() then
+  morf.time.timer(2000, function() load:set(read_load()) end, true)
 end
 ui.Text { text = function() return ("%d%%"):format(load:get()) end }
 ```
@@ -423,7 +423,7 @@ Repeater over a `morf.state` list (below).
 Any property given a function is a binding. It runs once at construction
 and again whenever something it read changes: a signal, a `morf.state`
 field, another node's property (`other.width`, or `other.width_target`
-for the animation's destination), `layout_*`, `morf.clock`. It returns a
+for the animation's destination), `layout_*`, `morf.time.clock`. It returns a
 value: a number, a string, a colour, or a table for the properties that
 take one (a gradient, a decoration). It never runs per frame.
 
@@ -433,14 +433,14 @@ once and follows what it reads, and takes the place of any binding the
 property had. A plain value written over a bound property is what it
 shows until the binding next runs.
 
-The time comes in three grains: `morf.clock` ("HH:MM:SS"),
-`morf.minute_clock` ("HH:MM") and `morf.hour_clock` ("HH"). Read the
+The time comes in three grains: `morf.time.clock` ("HH:MM:SS"),
+`morf.time.minute_clock` ("HH:MM") and `morf.time.hour_clock` ("HH"). Read the
 coarsest one that shows what you need: the shell wakes every second only
-while some binding reads `morf.clock`, every minute while one reads the
-minute clock, and not at all for the time when nothing does. A
-`morf.system_clock` binds at its `precision`, or at the grain its `format`
-shows if that is coarser — `clock:format("%H:%M")` is a minute binding
-even on a clock made at seconds.
+while some binding reads `morf.time.clock`, every minute while one reads the
+minute clock, and not at all for the time when nothing does.
+`lib.util.clock.format(pattern)` reads the grain its pattern shows --
+`clock.format("%H:%M")` is a minute binding, `clock.format("%A")` an
+hour one.
 
 A binding or `morf.effect` may itself build nodes with bindings (or make
 another effect): those are registered when the running flush ends and get
@@ -1083,7 +1083,7 @@ not have is ignored, and a face with none of them is drawn as it always
 was. Glyphs are shaped and drawn per point of the design space, quantised
 to 1/64 of the way from an axis's default to either end, so an animation
 through an axis costs at most 65 pictures (and layouts) of each glyph
-however many frames it takes. `morf.font_axes(family)` lists what an
+however many frames it takes. `morf.text.axes(family)` lists what an
 installed family can move: `{ tag, min, default, max }` for each axis.
 
 Optical sizing is automatic, as CSS's `font-optical-sizing: auto`: a face
@@ -1143,7 +1143,7 @@ dropped and its content kept, so a notification body can be drawn as it
 came. `markup` wins over `spans`, which win over `text`.
 
 ```lua
-local function open(href) morf.spawn { command = { "xdg-open", href } } end
+local function open(href) morf.process.spawn { command = { "xdg-open", href } } end
 ui.Text {
   font_size = 14, color = theme.ink, link_color = theme.accent, wrap = true,
   spans = { "Build ", { text = "failed", bold = true, color = "#e5484d" },
@@ -1181,9 +1181,8 @@ matched characters.
 ```lua
 local hits = morf.text.fuzzy(query:get(), apps, { key = { "name", { "exec", 0.5 } }, limit = 30 })
 for _, hit in ipairs(hits) do
-  ui.Text { spans = morf.text.highlight(hit.item.name, hit.positions, { bold = true, color = theme.accent }) }
+  ui.Text { text = hit.item.name }
 end
-local score, positions = morf.text.fuzzy_score("ffx", "Firefox")   -- nil when it does not match
 ```
 
 The scoring is fzf's kind: a match at the start of a word, a camelCase
@@ -1196,9 +1195,7 @@ It works on characters, so accents and CJK match as whole characters; it
 does not fold accents (`e` does not find `é`). Ties go to the shorter
 text, then to the earlier item; an empty query keeps every item in order.
 Ranking 10,000 entries of seventy characters takes a few milliseconds, so it
-can run on every keystroke. `morf.text.highlight(text, positions, style)`
-turns a match into `spans` for a `ui.Text`: the matched characters in
-runs carrying `style` (bold when none is given), the rest plain.
+can run on every keystroke.
 
 ### Text input
 
@@ -1373,7 +1370,7 @@ italic, dim, underline, strikeout, inverse and truecolor are drawn as the
 program asks.
 
 A terminal costs nothing while its program is quiet: output arrives through
-the same reactor as `morf.spawn`'s and is fed to the emulator as it comes,
+the same reactor as `morf.process.spawn`'s and is fed to the emulator as it comes,
 at most 256 KiB a turn of the loop, so `yes` shares the loop with everything
 else; a frame is drawn only when the screen changed, and only the rows that
 changed are repainted. A runtime has at most 16 terminals (`MORF_LIMITS`
@@ -1397,20 +1394,12 @@ ui.Image { source = cover, width = 48, height = 48, fill_mode = "preserve_aspect
 morf.image.release(cover)
 ```
 
-- `morf.image.from_rgba(bytes, width, height, stride, options)` publishes raw
-  pixels and returns their source. `bytes` is a string (what `morf.dbus`
-  gives for an `ay`) or a list of byte values; `stride` is the bytes from
-  one row to the next (`nil`: packed). Options: `format` (`"rgba"`, the
-  default, `"rgb"`, `"bgra"`, `"argb"`), `premultiplied` (divide the colour
-  back out of alpha), and `name`. Returns `nil, why` when the sizes do not
-  fit the bytes.
-- `morf.image.from_dbus(image_data, options)` the same, for a D-Bus
-  `(iiibiiay)` image (8 bits a sample, 3 or 4 channels).
+- `morf.image.from_dbus(image_data, options)` publishes a D-Bus `(iiibiiay)`
+  image (8 bits a sample, 3 or 4 channels; a notification's `image-data`)
+  and returns its source; `name` names it. Returns `nil, why` when the
+  sizes do not fit the bytes.
 - `morf.image.release(source)` lets a published picture go; whether it was
   held.
-- `morf.image.encode_png(bytes, width, height, path, options)` writes raw
-  pixels (same `stride`, `format`, `premultiplied` options) as a PNG file:
-  `true`, or `nil, why`.
 
 What became of the source is on the node, as properties a binding
 follows, and in `on_status(status, error)` (given when the image is made):
@@ -1454,7 +1443,7 @@ A published picture is drawable on every surface and is held until it is
 released, until the same `name` is published again (which answers with a
 *new* source, so nothing draws the old pixels by mistake), or until the
 configuration is reloaded or exits. A configuration may hold 4096 of them
-and 256 MiB of pixels; past that `from_rgba` answers `nil, why`.
+and 256 MiB of pixels; past that `from_dbus` answers `nil, why`.
 
 ### Paths
 
@@ -2271,7 +2260,7 @@ never ends stops the piece it is in, not the shell. The budgets:
 Building is loading's kind of work and gets loading's room; a handler
 answers something and must be quick. A handler that runs out stops with
 "Lua handler fuel exhausted after N instructions"; do heavy work in
-pieces (`morf.timer(1, ...)`) or off the loop. `MORF_LIMITS` takes
+pieces (`morf.time.timer(1, ...)`) or off the loop. `MORF_LIMITS` takes
 comma-separated `key=N` (`MORF_LIMITS=module=40000000,handler=2000000`).
 
 ### What things cost
@@ -2340,7 +2329,7 @@ An idle shell sleeps until something happens, with no poll of its own: the
 compositor sending an event, a service thread ringing the loop (a D-Bus
 signal or reply, a child's output, an HTTP answer, a decoded image, a
 command over IPC), or the first thing that comes due on the clock — a
-`morf.timer` or running `ui.Timer`, a caret blink, the next frame of a
+`morf.time.timer` or running `ui.Timer`, a caret blink, the next frame of a
 moving picture, a D-Bus call's `timeout_ms`, and the clock at the finest
 grain a binding reads. Motion runs on the compositor's frame callbacks;
 only when a surface gets none (a hidden window in a nested compositor)
@@ -2396,7 +2385,7 @@ represented only by their byte length. These detail lines accompany the
 timestamped frame summaries. They measure CPU stages, not GPU completion.
 
 A shell that wakes more than it should says why under `MORF_WAKE_LOG`:
-a `clock-seconds` every second is a binding reading `morf.clock` where
+a `clock-seconds` every second is a binding reading `morf.time.clock` where
 the minute clock would do, a `timer` is a timer still running.
 
 ### What a frame costs the GPU
@@ -2511,8 +2500,8 @@ sRGB clamps each colour to SDR white first.
 - Keep a palette in a `morf.theme` and derive from it; let
   `morf.prefers` choose the scheme.
 - A secret stays a plain local. Signals are named and observable.
-- Let processes and sockets call you: `morf.run`, `morf.spawn`,
-  `morf.connect` and `morf.request_socket` (see [IO.md](IO.md)) deliver
+- Let processes and sockets call you: `morf.process.run`, `morf.process.spawn`,
+  `morf.socket.connect` and `morf.socket.request` (see [IO.md](IO.md)) deliver
   output as it arrives; a timer that polls them costs every idle second.
 - Check before you run: `morf check shell.lua` lays out every surface --
   hidden ones too -- and names what failed and where; `morf test` drives
@@ -3330,7 +3319,7 @@ A search entry over the families, a list view (a Collection: the arrows
 walk it, typing jumps, Return or a press picks) whose rows set each
 family's name in the theme's face and a line in the family itself, and
 under them the family the list is on in a larger sample (`sample =
-false` leaves it out). The families are `fonts`, or `morf.font_families()`
+false` leaves it out). The families are `fonts`, or `morf.text.families()`
 where the engine lists them. The search ranks them fuzzily (`filter =
 false` leaves the list as given and only calls `on_search(query)` -- a
 configuration that pages its own list); Return in the search picks the

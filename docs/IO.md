@@ -7,15 +7,15 @@ morf calls you back on the main loop as output arrives. Nothing polls, so
 an idle shell costs nothing and a line is seen when it is written.
 
 ```lua
-local morf = require("morf")   -- also on require("morf.io")
+local morf = require("morf")   -- require("morf.process") is morf.process
 ```
 
-## Running a command: `morf.run`
+## Running a command: `morf.process.run`
 
 For a command that prints something and exits.
 
 ```lua
-morf.run({ "git", "status", "--short" }, { cwd = repo }, function(result)
+morf.process.run({ "git", "status", "--short" }, { cwd = repo }, function(result)
   if result.ok then show(result.stdout) else warn(result.stderr) end
 end)
 ```
@@ -34,16 +34,16 @@ end)
 
 Options (all optional): `env`, `clear_env`, `cwd`, `stdin` (a string written
 and then closed), `timeout_ms`, `max_output`. The callback may also be given
-without options: `morf.run(argv, function(result) end)`. The call returns
-the same handle `morf.spawn` does, so a run can be killed.
+without options: `morf.process.run(argv, function(result) end)`. The call returns
+the same handle `morf.process.spawn` does, so a run can be killed.
 
-## Streaming a process: `morf.spawn`
+## Streaming a process: `morf.process.spawn`
 
 For a child that lives on and talks: `pactl subscribe`, `nmcli monitor`,
 `cava`, or one you write to.
 
 ```lua
-local child = morf.spawn {
+local child = morf.process.spawn {
   command = { "pactl", "subscribe" },
   on_stdout = function(line) if line:find("sink") then refresh() end end,
   on_exit = function(code, signal, timed_out) restart_later() end,
@@ -66,7 +66,7 @@ local child = morf.spawn {
 | `max_output` | stdout and stderr past this many bytes are read and dropped. |
 | `detached`   | `true`: survives a reload or exit of morf, in its own process group. |
 
-`morf.spawn` returns `nil, message` when the program cannot be started.
+`morf.process.spawn` returns `nil, message` when the program cannot be started.
 Otherwise the handle has:
 
 - `:write(data)` — to a `stdin = "pipe"` child; `true`, or `false, why`
@@ -79,20 +79,20 @@ Otherwise the handle has:
   not killed; it loses its pipes.
 
 A process morf holds no handle for -- one an earlier shell started, say --
-is signalled by its id: `morf.kill(pid, signal)` (default `TERM`) returns
+is signalled by its id: `morf.process.kill(pid, signal)` (default `TERM`) returns
 `true`, or `false` and the reason. Process groups and init are refused.
 
-## Connecting: `morf.connect`
+## Connecting: `morf.socket.connect`
 
 A long-lived connection to a Unix socket (or TCP with `host`, `port`).
 
 ```lua
 local events
-events = morf.connect {
+events = morf.socket.connect {
   path = runtime .. "/hypr/" .. signature .. "/.socket2.sock",
   on_connect = function() events:send("subscribe\n") end,
   on_line = function(line) handle(line) end,        -- or on_data = function(chunk)
-  on_close = function(reason) morf.timer(1000, reconnect, false) end,
+  on_close = function(reason) morf.time.timer(1000, reconnect, false) end,
 }
 ```
 
@@ -104,13 +104,13 @@ when the other side hung up. `on_line` splits on `\n` (bounded by
 `:send(data)` (queued until connected; `false, why` past 4 MiB waiting),
 `:connected()` and `:close()`, after which no callback runs.
 
-## Asking a socket: `morf.request_socket`
+## Asking a socket: `morf.socket.request`
 
 For request/reply sockets that answer and close — Hyprland's `.socket.sock`,
 and anything shaped like it.
 
 ```lua
-morf.request_socket(path, "j/monitors", function(reply, err)
+morf.socket.request(path, "j/monitors", function(reply, err)
   if reply then monitors = morf.json.decode(reply) end
 end, { timeout_ms = 5000, max_bytes = 8 * 1024 * 1024 })
 ```
@@ -185,9 +185,23 @@ a reload, and the runtime ending. `morf.fs.watch` raises for a call that
 is wrong (no path, no function, a bad option, more than the limit), and
 returns `nil, message` when the kernel refuses the watch.
 
-The older `morf.file(path):watch()` (`watcher:next(timeout)`) and
-`morf.file_view { watch_changes = true }` still work and sit on the same
+The older `morf.fs.file(path):watch()` (`watcher:next(timeout)`) and
+`morf.fs.view { watch_changes = true }` still work and sit on the same
 shared watcher, pulled rather than pushed; prefer `morf.fs.watch`.
+
+## Where a shell keeps its files: `morf.paths`
+
+```lua
+local config = morf.paths.shell("config.json")    -- next to the shell's own files
+local history = morf.paths.state("history.json")  -- $XDG_STATE_HOME/morf/<shell id>/
+local thumbs = morf.paths.cache("thumbs")         -- $XDG_CACHE_HOME/morf/<shell id>/
+```
+
+`morf.paths.shell(rel)`, `state(rel)` and `cache(rel)` are a path under
+the shell's directory, its state directory or its cache directory; with no
+`rel`, the directory itself. A `rel` that is absolute or climbs out with
+`..` is an error. `morf.paths.session()` is the directories a greeter reads
+its sessions' desktop entries from: `morf.apps.entries(morf.paths.session())`.
 
 ## D-Bus values
 
@@ -198,8 +212,8 @@ tables, a variant is its value.
 **Byte arrays (`ay`) are strings.** An image's pixels, an SSID, a path sent
 NUL-terminated arrive as one Lua string of those bytes — `#data`,
 `data:byte(i)`, `data:sub(a, b)` — not a list of numbers (which is what
-they were before, one table slot per byte). `morf.image.from_dbus` and
-`morf.image.from_rgba` take the string as it comes. When sending, an `ay`
+they were before, one table slot per byte). `morf.image.from_dbus` takes
+the string as it comes. When sending, an `ay`
 takes a string or a list of byte values:
 
 ```lua
@@ -246,7 +260,7 @@ options they always took.
   and are the capability vocabulary a module's permissions manifest lists
   (`services = { "media", "power" }`).
 - While an imported module with no approval runs its top level,
-  `morf.service` refuses with `nil` and a reason, as `morf.run` does (the
+  `morf.service` refuses with `nil` and a reason, as `morf.process.run` does (the
   `services` permission group).
 - `binding.close()` ends every subscription and timer the binding holds:
   true the first time, false after. A binding with no `owner` lives as long
@@ -381,7 +395,7 @@ binding is closed and the error is raised from `morf.service`.
   for 50 ms of quiet, and reloads when the files' sizes or times actually
   differ — never by looking at every file on a timer.
 
-## Compressed bytes and archives: `morf.encoding`, `morf.archive`
+## Archives: `morf.archive`
 
 A package manager's sync database, a downloaded tarball, a `.gz` log: bytes
 a configuration read with `morf.fs.read` or `morf.http`, inflated in memory.
@@ -393,13 +407,6 @@ for _, member in ipairs(morf.archive.tar(db, { contents = true })) do
 end
 ```
 
-- `morf.encoding.decompress(bytes, format, { max_size })` — `format` is
-  `"gzip"`, `"zlib"`, `"deflate"`, `"zstd"`, `"xz"` or `"lzma"`; `nil` or
-  `"auto"` goes by the magic number (gzip, zstd, xz and zlib have one).
-  Returns the bytes, or `nil, why` for corrupt input or an output longer
-  than `max_size` (default 64 MiB, at most 512 MiB) — the cap is checked
-  while inflating, so a small bomb never becomes a large allocation.
-- `morf.encoding.compression(bytes)` — the format a magic number names, or `nil`.
 - `morf.archive.tar(bytes, { contents, max_size, max_entries })` — every
   member of a tar archive (ustar, GNU long names, pax paths) as `{ name,
   type, size, mode, mtime, link, data }`: `type` is `file`, `directory`,
@@ -545,7 +552,7 @@ other nodes, in [UI.md](UI.md#terminal).
 
 ## The older API
 
-`morf.io.process_view`, `morf.process` and `morf.socket` still work: they
+`morf.process.view`, `morf.process.open` and `morf.socket.open` still work: they
 are pulled rather than pushed (`:next(timeout)`, `:receive(n, timeout)`),
 so something has to ask them on a timer. Prefer the calls above.
 
@@ -556,7 +563,6 @@ local sub = morf.idle.subscribe(300000, function(idle) end)   -- after 5 minutes
 morf.idle.subscribe(60000, fn, true)   -- input only: counts even while something keeps the session awake
 sub:cancel()
 morf.idle.inhibit(true)                -- keep the session awake (a film, a presentation)
-morf.idle.inhibited()                  -- what was last asked for
 ```
 
 `subscribe` calls back with `true` when the session has been idle that
@@ -670,8 +676,7 @@ A requirement is comparators joined by commas: `>=0.3`, `>=0.3, <0.5`,
 `=0.3` (any 0.3). A version on its own is a minimum; a missing part counts
 as zero. `morf.satisfies(">=0.4")` asks the same of the running engine from
 Lua, for a theme or a plugin that needs a newer one than the shell around
-it; `morf.version` is the engine's version and
-`morf.has_version(major, minor, features)` the older form of the question.
+it; `morf.version` is the engine's version.
 
 ## Imported modules: declare, approve, hold
 
@@ -740,21 +745,20 @@ coroutine it resumes, a metamethod it triggers, a configuration module it
 `require`s first -- returns `nil, "permission: ..."` naming the module and
 the group, and logs that line once at `warn`. The shell keeps running. A
 directory module may still write inside its own folder; a single-file
-module or plugin has none. The gated APIs are `morf.run`, `morf.spawn`,
-`morf.kill`, `morf.process`, `morf.process_view` (and a view's `start`,
-`write`, `kill`, `signal`), `morf.exec_detached` (also on `morf.core`),
-`ui.Terminal`, a desktop entry's `launch`/`launch_action`, `morf.connect`,
-`morf.request_socket`, `morf.socket`, `morf.socket_server` (and a
+module or plugin has none. The gated APIs are `morf.process.run`, `morf.process.spawn`,
+`morf.process.kill`, `morf.process.open`, `morf.process.view` (and a view's `start`,
+`write`, `kill`, `signal`), `morf.process.detach`,
+`ui.Terminal`, a desktop entry's `launch`/`launch_action`, `morf.socket.connect`,
+`morf.socket.request`, `morf.socket.open`, `morf.socket.server` (and a
 socket's `send`, `set_connected`, a server's `accept`, `set_active`),
 `morf.broadcast`, `morf.http.request`/`get`/`post`, all of `morf.dbus`
 (proxies and their methods, `call_async`, `serve` and a service's
 methods, the name queries), `morf.status_notifier.subscribe`,
 `morf.pam.*`, `morf.greetd.*`, the writing half of `morf.fs` (`write`,
-`append`, `mkdir`, `remove`, `rename`, `copy`, `symlink`), a `morf.file`
-handle's `write`, a `morf.file_view`'s `set_text`/`set_data`,
-`morf.json.write_file`, `morf.image.encode_png`/`process`/`compose` and
-`morf.screencopy.save`. The same callbacks answer on `require("morf.io")`
-and `require("morf.core")`.
+`mkdir`, `remove`, `rename`, `copy`, `symlink`), a `morf.fs.file`
+handle's `write`, a `morf.fs.view`'s `set_text`/`set_data`,
+`morf.image.process`/`compose` and
+`morf.screencopy.save`.
 
 The gate holds a module only while its top level runs. What it leaves
 behind -- a timer, a handler, a binding, a closure, a native it hands out
