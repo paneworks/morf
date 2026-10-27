@@ -1,7 +1,7 @@
--- A shortcuts window: an application's keys, grouped, with a search that
+-- AdwShortcutsDialog: an application's keys, grouped, with a search that
 -- narrows them, in a dialog (Popup + Collection, grouped + TextField).
 --
---     local node, keys = composites.shortcuts_window {
+--     local node, keys = composites.shortcuts_dialog {
 --       id = "keys", title = "Keyboard shortcuts", root = surface_root,
 --       groups = {
 --         { title = "General", shortcuts = {
@@ -14,22 +14,21 @@
 --
 -- Each shortcut's `keys` is a chord (`"Ctrl+Shift+P"`), a sequence of
 -- chords apart by spaces, or a list of either (alternatives); every key is
--- drawn as the theme's keycap. The search ranks the shortcuts fuzzily by
+-- drawn as a shortcut label's keycap. The search ranks the shortcuts fuzzily by
 -- description and keys and keeps them under their groups. Escape closes
--- the window and focus goes back to what opened it; the list scrolls with
+-- the dialog and focus goes back to what opened it; the list scrolls with
 -- the wheel and walks with the arrows once it has focus (Down from the
 -- search goes to it). `open_key` (e.g. `"ctrl+?"`) on `root` opens it.
--- `inline = true` returns the window as a node to place. Other fields:
+-- `inline = true` returns the dialog as a node to place. Other fields:
 -- `width` (480), `height` (440), `placeholder`, `on_closed(reason)`. Ids:
 -- `<id>-search`, `<id>-list`, `<id>-row-<g>-<n>` (group, shortcut),
 -- `<id>-close`, `<id>-popup`.
 local ui = require("morf.ui")
-local popup = require("lib.kit.popup")
-local collection = require("lib.kit.collection")
-local control = require("lib.kit.control")
-local group_field = require("lib.kit.composites.input_group")
+local popup = require("lib.kit.archetypes.popup")
+local collection = require("lib.kit.archetypes.collection")
+local widgets = require("lib.kit.widgets")
+local tokens = require("lib.kit.tokens")
 
-local function K() local ok, kit = pcall(require, "kit") return ok and type(kit) == "table" and kit or {} end
 local function get(v) if type(v) == "function" then return v() end return v end
 
 --- The chords of `keys`: a list of alternatives, each a list of chords,
@@ -64,9 +63,8 @@ local serial = 0
 
 local function make(spec)
   spec = spec or {}
-  local kit = K()
   serial = serial + 1
-  local key = "kit.composites.shortcuts_window." .. tostring(spec.id) .. "." .. serial
+  local key = "kit.composites.shortcuts_dialog." .. tostring(spec.id) .. "." .. serial
   local id = spec.id
   local W, H = spec.width or 480, spec.height or 440
   local PAD, TITLE_H, FIELD_H = 12, 40, 40
@@ -119,16 +117,16 @@ local function make(spec)
 
   local function build()
     if content then return content end
-    local title = kit.text { x = PAD + 4, font_size = 17, font_weight = 600, color = kit.ink("hi"),
+    local title = widgets.label { x = PAD + 4, variant = "title_4",
       accessible_role = "heading", y = PAD, height = TITLE_H, vertical_alignment = "center",
       text = spec.title or "Keyboard shortcuts", width = LW - 60, elide = "right" }
-    local close_button = not spec.inline and control.make("Press", "icon", { widget = "icon",
-      id = id and (id .. "-close") or nil, icon_off = "close", icon_on = "close", width = 34, height = 34, size = 20,
-      x = W - PAD - 34, y = PAD + 3, accessible_name = "Close", on_clicked = function() close("closed") end }) or nil
+    local close_button = not spec.inline and widgets.button { variant = "flat circular", icon = "close",
+      id = id and (id .. "-close") or nil, width = 34, height = 34,
+      x = W - PAD - 34, y = PAD + 3, accessible_name = "Close", on_clicked = function() close("closed") end } or nil
     local field
-    field, input = group_field.make {
+    field, input = widgets.search_entry {
       id = id and (id .. "-search") or nil, x = PAD, y = PAD + TITLE_H, width = LW, height = FIELD_H,
-      widget = "search", icon = "search", placeholder = spec.placeholder or "Search shortcuts…",
+      icon = "search", placeholder = spec.placeholder or "Search shortcuts…",
       accessible_name = "Search shortcuts",
       on_edited = function(text) query:set(text) refilter(text) end,
       on_escape = function() if not spec.inline then close("escape") end end,
@@ -152,7 +150,8 @@ local function make(spec)
       end
       if row.kind == "header" then
         return ui.Item { width = LW, height = HEAD_H,
-          kit.label { x = 8, y = 10, width = LW - 16, elide = "right", text = function() return now().title or "" end },
+          widgets.label { x = 8, y = 10, width = LW - 16, elide = "right", variant = "heading",
+            text = function() return now().title or "" end },
         }, rebind
       end
       local caps = ui.Row { gap = 4, align = "center", anchors = { right = true, right_margin = 8, vertical_center = true } }
@@ -161,10 +160,10 @@ local function make(spec)
         for _, n in ipairs(built) do ui.destroy(n, true) end
         built = {}
         for a, sequence in ipairs(chords(r.keys)) do
-          if a > 1 then built[#built + 1] = kit.label { text = "/" } end
+          if a > 1 then built[#built + 1] = widgets.label { text = "/", variant = "dim" } end
           for c, chord in ipairs(sequence) do
-            if c > 1 then built[#built + 1] = kit.label { text = "then" } end
-            for _, name in ipairs(chord) do built[#built + 1] = kit.keycap { text = name, height = 24 } end
+            if c > 1 then built[#built + 1] = widgets.label { text = "then", variant = "caption dim" } end
+            built[#built + 1] = widgets.shortcut_label { accelerator = table.concat(chord, "+"), height = 24 }
           end
         end
         for _, n in ipairs(built) do ui.reparent(n, caps) end
@@ -172,10 +171,10 @@ local function make(spec)
       local area = ui.Item { id = id and ("%s-row-%d-%d"):format(id, row.g, row.n) or nil, width = LW, height = ROW_H,
         accessible_role = "list_item",
         accessible_name = function() local r = now() return (r.description or "") .. ", " .. (r.keys or ""):gsub("|", " or ") end,
-        kit.surface { anchors = { fill = true, margins = 1 }, radius = kit.round and kit.round(8) or 8,
-          color = function() local t = list_handle and list_handle.t return kit.signal("accent")():alpha((t and t.current == index_now() and t.focused) and 0.14 or 0) end },
-        kit.text { x = 8, anchors = { vertical_center = true }, width = LW * 0.55, elide = "right",
-          text = function() return now().description or "" end, color = kit.ink("hi") },
+        ui.Rect { anchors = { fill = true, margins = 1 }, radius = 8,
+          color = function() local t = list_handle and list_handle.t return tokens.color("accent_bg")():alpha((t and t.current == index_now() and t.focused) and 0.14 or 0) end },
+        widgets.label { x = 8, anchors = { vertical_center = true }, width = LW * 0.55, elide = "right",
+          text = function() return now().description or "" end },
         caps }
       draw(row)
       return area, function(next_row)
@@ -184,7 +183,7 @@ local function make(spec)
         draw(next_row)
       end
     end
-    list_node, list_handle = collection.make("list", {
+    list_node, list_handle = collection.make("list_view", {
       id = id and (id .. "-list") or nil, rows = model, x = PAD, y = LIST_Y, width = LW, height = LIST_H,
       row_height = ROW_H, size_field = "height", kind_field = "kind", accessible_name = "Shortcuts",
       disabled = function()
@@ -195,7 +194,8 @@ local function make(spec)
       end,
       delegate = delegate,
     })
-    local empty = kit.label { id = id and (id .. "-empty") or nil, x = PAD + 8, y = LIST_Y + 12, width = LW - 16,
+    local empty = widgets.label { id = id and (id .. "-empty") or nil, x = PAD + 8, y = LIST_Y + 12, width = LW - 16,
+      variant = "dim",
       text = spec.empty_text or "No matching shortcuts", visible = function() return count:get() == 0 end }
     content = ui.Item { width = W, height = H, z = 1, title, close_button, field, list_node, empty }
     return content
@@ -207,7 +207,7 @@ local function make(spec)
   if spec.inline then
     built()
     node = ui.Item { id = id, x = spec.x, y = spec.y, width = W, height = H, anchors = spec.anchors,
-      kit.card { anchors = { fill = true } }, content }
+      widgets.box { variant = "card", anchors = { fill = true } }, content }
     handle.open, handle.close = function() morf.focus.set(input, true) end, function() end
     handle.is_open = function() return true end
   else

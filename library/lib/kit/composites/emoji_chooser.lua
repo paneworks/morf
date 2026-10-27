@@ -1,22 +1,24 @@
--- An emoji picker (composite: TextField search + Selection category tabs +
--- Selection grid of emoji).
+-- GtkEmojiChooser (composite: TextField search + Selection category toggles
+-- + Selection grid of emoji).
 --
---     local node, picker = composites.emoji_picker {
+--     local node, chooser = composites.emoji_chooser {
 --       id = "emoji", width = 340, height = 320,
 --       on_picked = function(emoji, name) insert(emoji) end,
 --     }
 --
--- A search field (a kit `search` entry) over a row of categories (a kit
--- segmented Selection, each its icon) and a kit `emoji_grid` (a
--- Selection: the arrows walk it, a press or Return picks) in a scrolled
--- view, with the emoji the grid is on named under it. Typing searches
--- every category by name and keywords, fuzzily; Down from the search goes
--- to the grid, Return there picks the first match. `emoji` replaces the
--- built-in table (below): a list of `{ key, name, icon, list = { { emoji,
--- name, keywords }, ... } }`. Ids: `<id>-search`, `<id>-categories`,
--- `<id>-category-<key>`, `<id>-grid`, `<id>-emoji-<i>`, `<id>-name`.
+-- A search entry over a toggle group of categories (each its icon) and an
+-- `emoji_grid` (a Selection: the arrows walk it, a press or Return picks)
+-- in a scrolled window, with the emoji the grid is on named under it.
+-- Typing searches every category by name and keywords, fuzzily; Down from
+-- the search goes to the grid, Return there picks the first match. `emoji`
+-- replaces the built-in table (below): a list of `{ key, name, icon, list
+-- = { { emoji, name, keywords }, ... } }`. Ids: `<id>-search`,
+-- `<id>-categories`, `<id>-category-<key>`, `<id>-grid`, `<id>-emoji-<i>`,
+-- `<id>-name`.
 local ui = require("morf.ui")
 local widgets = require("lib.kit.widgets")
+local selection = require("lib.kit.archetypes.selection")
+local tokens = require("lib.kit.tokens")
 
 -- The built-in emoji: categories of "emoji|name|keywords" lines.
 local BUILT_IN = {
@@ -302,7 +304,6 @@ local parsed
 
 return function(spec)
   spec = spec or {}
-  local kit = require("kit")
   local id = spec.id
   local categories
   if spec.emoji then categories = parse(spec.emoji)
@@ -338,18 +339,10 @@ return function(spec)
     if spec.on_picked then spec.on_picked(e.emoji, e.name) end
   end
 
-  local probe = { text = "" }
-  ui.destroy(kit.text(probe), true)
-  local focused = morf.state { on = false }
   local grid, flick
-  local search_node, search = widgets.search { id = id and (id .. "-search"), accessible_name = "Search emoji",
-    x = 10, width = W - 20, height = SEARCH, inset = { 0, 0, 34, 0 },
-    placeholder = spec.placeholder or "Search emoji…",
-    font_family = probe.font_family, font_source = probe.font_source, font_size = probe.font_size,
-    color = kit.ink("hi"), placeholder_color = kit.ink("lo"), caret_color = kit.signal("accent"),
-    selection_color = function() return kit.signal("accent")():alpha(0.3) end, vertical_alignment = "center",
-    focus = spec.focus,
-    on_focus_changed = function(on) focused.on = on end,
+  local field, search = widgets.search_entry { id = id and (id .. "-search"), accessible_name = "Search emoji",
+    width = W, height = SEARCH, icon = "search", placeholder = spec.placeholder or "Search emoji…",
+    vertical_alignment = "center", focus = spec.focus,
     on_text_changed = function(text) st.query = text st.cursor = 0 if flick then flick.content_y = 0 end end,
     on_accepted = function() pick(shown()[1]) end,
     on_escape = spec.on_escape,
@@ -360,10 +353,9 @@ return function(spec)
       morf.focus.set(grid, true)
       return true
     end }
-  local field = kit.field { width = W, height = SEARCH, focused = function() return focused.on end, search_node }
 
   local tab_w = math.floor(W / math.max(1, #categories))
-  local tabs = widgets.segmented { id = id and (id .. "-categories"), accessible_name = "Categories",
+  local tabs = selection.make("toggle_group", { id = id and (id .. "-categories"), accessible_name = "Categories",
     y = SEARCH + 6, items = categories, item_width = tab_w, item_height = TABS, gap = 0,
     item_id = function(_, c) return id and (id .. "-category-" .. c.key) or nil end,
     current = function() return st.query == "" and st.category or 0 end,
@@ -374,13 +366,12 @@ return function(spec)
       if flick then flick.content_y = 0 end
     end,
     delegate = function(_, c, s)
-      return kit.centred(tab_w, TABS, kit.icon(c.icon, 20, function()
-        return (s.current() and kit.ink("accent") or kit.ink("lo"))()
-      end, { accessible_name = c.name }))
-    end }
+      return ui.Item { width = tab_w, height = TABS, widgets.image { icon = c.icon, pixel_size = 20,
+        anchors = { center_in = true }, accessible_name = c.name,
+        color = function() return (s.current() and tokens.color("accent") or tokens.color("window_fg", 0.55))() end } }
+    end })
 
-  local rows_of = function(n) return math.ceil(n / columns) end
-  grid = widgets.emoji_grid { id = id and (id .. "-grid"), accessible_name = "Emoji",
+  grid = selection.make("emoji_grid", { id = id and (id .. "-grid"), accessible_name = "Emoji",
     items = function()
       local list = shown()
       local out = {}
@@ -392,9 +383,9 @@ return function(spec)
     item_id = function(i) return id and (id .. "-emoji-" .. i) or nil end,
     delegate = function(_, e, s)
       return ui.Item { anchors = { fill = true },
-        kit.surface { anchors = { fill = true, margins = 3 }, radius = kit.round(CELL / 4),
-          color = function() local c = kit.signal("accent")() return c:alpha(s.hovered() and 0.1 or 0) end },
-        kit.text { anchors = { center_in = true }, text = e.emoji, font_size = math.floor(CELL * 0.55),
+        ui.Rect { anchors = { fill = true, margins = 3 }, radius = CELL / 4,
+          color = function() return tokens.color("accent_bg")():alpha(s.hovered() and 0.1 or 0) end },
+        widgets.label { anchors = { center_in = true }, text = e.emoji, font_size = math.floor(CELL * 0.55),
           font_source = "", accessible_name = e.name } }
     end,
     on_current_changed = function(i)
@@ -407,13 +398,14 @@ return function(spec)
         elseif top + CELL > y + GRID then flick.content_y = top + CELL - GRID end
       end
     end,
-    on_activated = function(i) st.cursor = i pick(shown()[i]) end }
+    on_activated = function(i) st.cursor = i pick(shown()[i]) end })
   local scroller
-  scroller, flick = widgets.scroll_view { id = id and (id .. "-scroll"), y = SEARCH + TABS + 12, width = W,
+  scroller, flick = widgets.scrolled_window { id = id and (id .. "-scroll"), y = SEARCH + TABS + 12, width = W,
     height = GRID, clip = true,
     grid }
   local root = ui.Item { width = W, height = H, field, tabs, scroller,
-    kit.subtitle { id = id and (id .. "-name"), x = 4, y = H - NAME, width = W - 8, height = NAME, elide = "right",
+    widgets.label { id = id and (id .. "-name"), x = 4, y = H - NAME, width = W - 8, height = NAME, elide = "right",
+      variant = "dim",
       text = function()
         local e = shown()[st.cursor]
         if e then return e.emoji .. "  " .. e.name end

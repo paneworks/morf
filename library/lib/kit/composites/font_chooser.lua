@@ -1,26 +1,27 @@
--- A font picker (composite: TextField search + Collection + preview).
+-- GtkFontChooserWidget (composite: TextField search + Collection + a
+-- sample).
 --
---     local node, picker = composites.font_picker {
+--     local node, chooser = composites.font_chooser {
 --       id = "font", width = 360, height = 320,
 --       fonts = { "Inter", "IBM Plex Mono", ... },   -- or a binding
 --       value = function() return font:get() end,
 --       on_picked = function(family) font:set(family) end,
 --     }
 --
--- A search field (a kit `search` entry) over the families, a kit list (a
--- Collection: the arrows walk it, typing jumps, Return or a press picks)
--- whose rows set each family's name in the theme's face and a line in
--- the family itself, and under them the family the list is on in a
--- larger sample (`sample = false` leaves it out). The families are
--- `fonts`, or `morf.text.families()` where the engine lists them. The
--- search ranks them fuzzily (`filter = false` leaves the list as given
--- and only calls `on_search(query)` -- a configuration that pages its own
--- list); Return in the search picks the first. An empty name keeps a
--- row's place, empty. `status` (a binding) is said while the list is
--- empty. Ids: `<id>-search`, `<id>-list`, `<id>-option-<i>`,
--- `<id>-preview-<i>`, `<id>-sample`.
+-- A search entry over the families, a list view (a Collection: the arrows
+-- walk it, typing jumps, Return or a press picks) whose rows set each
+-- family's name in the theme's face and a line in the family itself, and
+-- under them the family the list is on in a larger sample (`sample =
+-- false` leaves it out). The families are `fonts`, or `morf.font_families()`
+-- where the engine lists them. The search ranks them fuzzily (`filter =
+-- false` leaves the list as given and only calls `on_search(query)` -- a
+-- configuration that pages its own list); Return in the search picks the
+-- first. An empty name keeps a row's place, empty. `status` (a binding) is
+-- said while the list is empty. Ids: `<id>-search`, `<id>-list`,
+-- `<id>-option-<i>`, `<id>-preview-<i>`, `<id>-sample`.
 local ui = require("morf.ui")
 local widgets = require("lib.kit.widgets")
+local tokens = require("lib.kit.tokens")
 
 local function get(v) if type(v) == "function" then return v() end return v end
 
@@ -35,7 +36,6 @@ end
 
 return function(spec)
   spec = spec or {}
-  local kit = require("kit")
   local id = spec.id
   local W, H = spec.width or 360, spec.height or 320
   local ROW = spec.row_height or 46
@@ -74,17 +74,11 @@ return function(spec)
 
   local list_node
   local function handle_list() return list_node end
-  local probe = { text = "" }
-  ui.destroy(kit.text(probe), true)
-  local focused = morf.state { on = false }
-  local search_node, search = widgets.search { id = id and (id .. "-search"), accessible_name = "Search fonts",
-    x = 10, width = W - 20, height = SEARCH, inset = { 0, 0, 34, 0 },
-    placeholder = spec.placeholder or "Search fonts…",
-    font_family = probe.font_family, font_source = probe.font_source, font_size = probe.font_size,
-    color = kit.ink("hi"), placeholder_color = kit.ink("lo"), caret_color = kit.signal("accent"),
-    selection_color = function() return kit.signal("accent")():alpha(0.3) end, vertical_alignment = "center",
+  local face = tokens.type("body").family
+  local search_node, search = widgets.search_entry { id = id and (id .. "-search"), accessible_name = "Search fonts",
+    width = W, height = SEARCH, icon = "search", placeholder = spec.placeholder or "Search fonts…",
+    vertical_alignment = "center",
     focus = spec.focus,
-    on_focus_changed = function(on) focused.on = on end,
     on_text_changed = function(text)
       st.query = text
       if spec.on_search then spec.on_search(text) end
@@ -107,10 +101,9 @@ return function(spec)
       morf.focus.set(handle_list(), true)
       return true
     end }
-  local field = kit.field { width = W, height = SEARCH, focused = function() return focused.on end, search_node }
 
   local list
-  list_node, list = widgets.list { id = id and (id .. "-list"), accessible_name = "Fonts",
+  list_node, list = widgets.list_view { id = id and (id .. "-list"), accessible_name = "Fonts",
     y = SEARCH + 8, width = W, height = LIST, rows = rows, row_height = ROW,
     current = function()
       for i = 1, rows:len() do if family(i) == st.cursor then return i end end
@@ -123,22 +116,22 @@ return function(spec)
       local function now() return s.row() or row end
       local function name() return now().family or "" end
       local area, sample
-      sample = kit.text { id = id and (id .. ("-preview-%d"):format(row.slot)), x = 12, y = ROW / 2, width = W - 24,
+      sample = widgets.label { id = id and (id .. ("-preview-%d"):format(row.slot)), x = 12, y = ROW / 2, width = W - 24,
         height = ROW / 2 - 4, elide = "right", font_source = "",
-        font_family = function() return name() ~= "" and name() or probe.font_family end,
-        text = preview, color = kit.ink("accent") }
+        font_family = function() return name() ~= "" and name() or face end,
+        text = preview, variant = "accent" }
       area = ui.MouseArea { id = id and (id .. ("-option-%d"):format(row.slot)), width = W, height = ROW, cursor = "pointer",
         visible = function() return name() ~= "" end,
         accessible_role = "list_item", accessible_name = name,
         on_clicked = function() pick(name()) end,
-        kit.surface { anchors = { fill = true, margins = 2 }, radius = kit.round(10),
+        ui.Rect { anchors = { fill = true, margins = 2 }, radius = 10,
           color = function()
-            local c = kit.signal("accent")()
+            local c = tokens.color("accent_bg")()
             if s.current() then return c:alpha(0.18) end
             return c:alpha(area and area.hovered and 0.08 or 0)
           end },
-        kit.text { x = 12, y = 4, width = W - 24, height = 18, elide = "right", font_size = spec.name_size,
-          text = name, color = kit.ink("hi") },
+        widgets.label { x = 12, y = 4, width = W - 24, height = 18, elide = "right", font_size = spec.name_size,
+          text = name },
         sample }
       return area, function(next_row)
         if id then
@@ -148,11 +141,11 @@ return function(spec)
       end
     end }
   local root
-  root = ui.Item { width = W, height = H, field, list_node,
-    kit.subtitle { x = 12, y = SEARCH + 20, width = W - 24, height = 40, wrap = true,
+  root = ui.Item { width = W, height = H, search_node, list_node,
+    widgets.label { x = 12, y = SEARCH + 20, width = W - 24, height = 40, wrap = true, variant = "dim",
       visible = function() return rows:len() == 0 end,
       text = function() local s = get(spec.status) return (s and s ~= "") and s or "No matching fonts" end } }
-  morf.effect("kit.font_picker.rows." .. tostring(root), refill, { owner = root })
+  morf.effect("kit.font_chooser.rows." .. tostring(root), refill, { owner = root })
   -- The family the list is on, or its first.
   local function sampled()
     if st.cursor ~= "" then return st.cursor end
@@ -160,17 +153,17 @@ return function(spec)
     return ""
   end
   if SAMPLE > 0 then
-    ui.reparent(kit.surface { y = H - SAMPLE, width = W, height = SAMPLE, radius = kit.round(12),
-      color = kit.stroke("faint"),
-      kit.text { id = id and (id .. "-sample"), x = 14, anchors = { vertical_center = true }, width = W - 28,
+    ui.reparent(ui.Rect { y = H - SAMPLE, width = W, height = SAMPLE, radius = 12,
+      color = tokens.color("window_fg", 0.06),
+      widgets.label { id = id and (id .. "-sample"), x = 14, anchors = { vertical_center = true }, width = W - 28,
         elide = "right", font_size = 22, font_source = "",
-        font_family = function() local f = sampled() return f ~= "" and f or probe.font_family end,
+        font_family = function() local f = sampled() return f ~= "" and f or face end,
         text = function() return sampled() ~= "" and (spec.sample_text or "Aa Bb Cc 0123") or "" end,
-        color = kit.ink("hi") } }, root)
+      } }, root)
   end
   for _, k in ipairs { "x", "y", "anchors", "visible", "z" } do if spec[k] ~= nil then root[k] = spec[k] end end
   if type(spec.value) == "function" then
-    morf.effect("kit.font_picker.value." .. tostring(root), function()
+    morf.effect("kit.font_chooser.value." .. tostring(root), function()
       local v = spec.value()
       if v and v ~= "" then st.cursor = v end
     end, { owner = root })

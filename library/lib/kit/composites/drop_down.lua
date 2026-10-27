@@ -1,101 +1,83 @@
--- A combo box: a closed field showing the current item that opens a list
--- of them (Press + Popup + Selection); with `search = true` the field is a
--- text field that filters the list as it is typed into (TextField + Popup
--- + Collection: autocomplete).
+-- GtkDropDown: a button showing the selected item that opens a list of
+-- them (Press + Popup + Selection); with `search = true` it is a search
+-- entry that filters the list as it is typed into (TextField + Popup +
+-- Collection).
 --
---     local node, combo = composites.combo_box {
+--     local node, drop = composites.drop_down {
 --       id = "size", width = 220, items = { "Small", "Medium", "Large" },
---       current = 2,                      -- or a function (then follow it in on_changed)
+--       selected = 2,                     -- or a binding (then follow it in on_changed)
 --       on_changed = function(index, item) end,
---       variant = "dropdown",             -- "select": no ground, for a row's end
+--       variant = "flat",                 -- a button's: flat for a row's end
 --       placeholder = "Choose…", search = false,
 --     }
---     combo.open() combo.close() combo.current() combo.set(3)
+--     drop.open() drop.close() drop.selected() drop.set(3)
 --
--- Items are strings or tables (`label`, `icon`, ...). The field opens on a
+-- Items are strings or tables (`label`, `icon`, ...). The button opens on a
 -- press, Space, Return and Alt+Down; the list's arrows move, Return or a
--- press picks, Escape closes, and focus goes back to the field. Other
--- fields: `x`, `y`, `height` (40), `icon` (leading), `item_height` (36),
+-- press picks, Escape closes, and focus goes back to the button. Other
+-- fields: `x`, `y`, `height` (34), `icon` (leading), `item_height` (36),
 -- `visible_items` (8), `list_width`, `placement` ("bottom-start"),
 -- `header` (a node over the list), `item_id(index, item)` (each entry's
 -- id; `<id>-item-<index>` otherwise), `except` (nodes a press on which
--- does not close the list), `text_size`, `accessible_name`,
--- `on_opened`, `on_closed(reason)`.
---
--- The field's look -- a theme's card under a menu row's wash, the label
--- and a chevron -- is exported as `field(spec)` for the composites that
--- open something the same way (picker, rows.combo_row).
+-- does not close the list), `accessible_name`, `on_opened`,
+-- `on_closed(reason)`.
 local ui = require("morf.ui")
-local control = require("lib.kit.control")
-local popup = require("lib.kit.popup")
-local selection = require("lib.kit.selection")
-local collection = require("lib.kit.collection")
-local scroll = require("lib.kit.scroll")
+local popup = require("lib.kit.archetypes.popup")
+local press = require("lib.kit.archetypes.press")
+local selection = require("lib.kit.archetypes.selection")
+local collection = require("lib.kit.archetypes.collection")
+local scroll = require("lib.kit.archetypes.scroll")
+local widgets = require("lib.kit.widgets")
+local tokens = require("lib.kit.tokens")
 
 local M = {}
 
 local function get(v) if type(v) == "function" then return v() end return v end
-local function K() local ok, kit = pcall(require, "kit") return ok and type(kit) == "table" and kit or {} end
 
 local function label_of(item)
   if item == nil then return nil end
   if type(item) == "table" then return tostring(item.label or item.name or item.text or item.title or "") end
   return tostring(item)
 end
-M.label_of = label_of
 
 local serial = 0
 local function next_key(spec, what)
   serial = serial + 1
   return ("kit.composites.%s.%s.%d"):format(what, tostring(spec.id or "anon"), serial)
 end
-M.next_key = next_key
 
---- The closed field: a Press (a menu row's wash and the theme's focus ring)
---- over the theme's card, its `text` (fn) and a chevron that turns over
---- while `open` (fn). `spec`: `id`, `x`, `y`, `width`, `height`, `variant`
---- ("select": no card), `icon`, `text`, `placeholder` (fn: whether the
---- text is a placeholder), `open`, `on_clicked`, `on_key_pressed`,
---- `content` (a node drawn instead of the text: a picker's swatch).
-function M.field(spec)
-  local kit = K()
-  local W, H = spec.width or 220, spec.height or 40
+--- The closed drop-down: a button (its `variant`) with its `text` (a
+--- binding) dim while `placeholder()` says so, and a chevron that turns
+--- over while `open()`. `spec`: `id`, `x`, `y`, `width`, `height`, `icon`,
+--- `text`, `placeholder`, `open`, `on_clicked`, `on_key_pressed`.
+local function field_of(spec)
+  local W, H = spec.width or 220, spec.height or 34
   local pad = 12
-  local children = {}
-  if spec.variant ~= "select" and kit.card then
-    children[#children + 1] = kit.card { anchors = { fill = true } }
-  end
   local x = pad
-  if spec.icon and kit.icon then
-    children[#children + 1] = kit.icon(spec.icon, 18, kit.ink and kit.ink("lo"),
-      { x = pad, anchors = { vertical_center = true } })
+  local children = {}
+  if spec.icon then
+    children[#children + 1] = widgets.image { icon = spec.icon, pixel_size = 18, variant = "dim",
+      x = pad, anchors = { vertical_center = true } }
     x = pad + 26
   end
-  if spec.content then
-    spec.content.x = x
-    spec.content.anchors = { vertical_center = true }
-    children[#children + 1] = spec.content
-  elseif kit.text then
-    local hi, lo = kit.ink and kit.ink("hi"), kit.ink and kit.ink("lo")
-    children[#children + 1] = kit.text { x = x, anchors = { vertical_center = true },
-      width = math.max(1, W - x - 34), elide = "right", text = spec.text, font_size = spec.text_size,
-      color = (hi and lo) and function() return (spec.placeholder and spec.placeholder()) and lo() or hi() end or nil }
-  end
-  if kit.icon then
-    children[#children + 1] = ui.Item { width = 20, height = 20,
-      anchors = { right = true, right_margin = 10, vertical_center = true },
-      rotation = function() return spec.open and spec.open() and 180 or 0 end,
-      behavior = { rotation = { duration = 200, easing = "out_cubic" } },
-      kit.icon(spec.chevron or "expand_more", 20, kit.ink and kit.ink("lo")) }
-  end
-  local settings = { widget = "menu_item", id = spec.id, x = spec.x, y = spec.y, width = W, height = H,
-    on_clicked = spec.on_clicked, on_key_pressed = spec.on_key_pressed, anchors = spec.anchors,
-    accessible_name = spec.accessible_name or spec.text, cursor = "pointer", enabled = spec.enabled }
-  return (control.make("Press", "menu_item", settings, { children = children }))
+  local hi, lo = tokens.color("window_fg"), tokens.color("window_fg", 0.55)
+  children[#children + 1] = widgets.label { x = x, anchors = { vertical_center = true },
+    width = math.max(1, W - x - 34), elide = "right", text = spec.text,
+    color = function() return (spec.placeholder and spec.placeholder()) and lo() or hi() end }
+  children[#children + 1] = ui.Item { width = 20, height = 20,
+    anchors = { right = true, right_margin = 10, vertical_center = true },
+    rotation = function() return spec.open and spec.open() and 180 or 0 end,
+    behavior = { rotation = { duration = 200, easing = "out_cubic" } },
+    widgets.image { icon = "expand_more", pixel_size = 20 } }
+  local node = press.make("button", { id = spec.id, x = spec.x, y = spec.y, width = W, height = H,
+    variant = spec.variant, on_clicked = spec.on_clicked, on_key_pressed = spec.on_key_pressed, anchors = spec.anchors,
+    accessible_name = spec.accessible_name or spec.text, cursor = "pointer", enabled = spec.enabled })
+  for _, child in ipairs(children) do ui.reparent(child, node) end
+  return node
 end
 
 --- Whether a key opens a closed field: Alt with Down (or Up).
-function M.opens(name, modifiers)
+local function opens(name, modifiers)
   return (name == "Down" or name == "Up") and tostring(modifiers or ""):find("alt", 1, true) ~= nil
 end
 
@@ -105,7 +87,7 @@ local function plain_list(spec, items, highlight, pick, item_id)
   local W = (spec.list_width or spec.width or 220) - 8
   local ITEM_H = spec.item_height or 36
   local most = spec.visible_items or 8
-  local list, t = selection.make("list_selection", {
+  local list, t = selection.make("sidebar_list", {
     id = spec.id and (spec.id .. "-list") or nil, items = items, orientation = "vertical", gap = 0,
     item_width = W, item_height = ITEM_H, press_activates = true,
     current = function() return highlight:get() end,
@@ -114,8 +96,8 @@ local function plain_list(spec, items, highlight, pick, item_id)
     item_id = item_id, accessible_name = spec.accessible_name or spec.placeholder,
   })
   local view_h = function() return math.max(1, math.min(#items(), most)) * ITEM_H end
-  local node, flick = scroll.make("scroll_view", { width = W, height = view_h, clip = true, list })
-  morf.effect(next_key(spec, "combo.follow"), function()
+  local node, flick = scroll.make("scrolled_window", { width = W, height = view_h, clip = true, list })
+  morf.effect(next_key(spec, "drop.follow"), function()
     local top, h = t.current_y or 0, t.current_height or ITEM_H
     local now, room = flick.content_y or 0, view_h()
     if top < now then flick.content_y = top
@@ -126,17 +108,16 @@ end
 
 local function make(spec)
   spec = spec or {}
-  local kit = K()
   local id = spec.id
-  local W, H = spec.width or 220, spec.height or 40
+  local W, H = spec.width or 220, spec.height or 34
   local function items() return get(spec.items) or {} end
-  local chosen = morf.signal(next_key(spec, "combo.chosen"), type(spec.current) == "number" and spec.current or 0)
+  local chosen = morf.signal(next_key(spec, "drop.chosen"), type(spec.selected) == "number" and spec.selected or 0)
   local function current()
-    if type(spec.current) == "function" then return tonumber(spec.current()) or 0 end
+    if type(spec.selected) == "function" then return tonumber(spec.selected()) or 0 end
     return chosen:get()
   end
-  local open = morf.signal(next_key(spec, "combo.open"), false)
-  local highlight = morf.signal(next_key(spec, "combo.highlight"), 0)
+  local open = morf.signal(next_key(spec, "drop.open"), false)
+  local highlight = morf.signal(next_key(spec, "drop.highlight"), 0)
   local item_id = spec.item_id or (id and function(i) return id .. "-item-" .. i end) or nil
   local handle = {}
   local menu, field, build_content
@@ -150,7 +131,7 @@ local function make(spec)
     if header then content = ui.Column { gap = 4, header, content } end
     -- (Over the popup's ground, which its skin adds after it.)
     content.z = 1
-    menu = popup.make("dropdown_list", {
+    menu = popup.make("dropdown", {
       id = id and (id .. "-popup") or nil, content = content, padding = 4,
       width = (spec.list_width or W),
       placement = spec.placement or "bottom-start", close_policy = "escape+outside",
@@ -184,10 +165,9 @@ local function make(spec)
   -- -------------------------------------------------------- searchable --
   local input, filtered, model, reset
   if spec.search then
-    local group = require("lib.kit.composites.input_group")
-    filtered = morf.signal(next_key(spec, "combo.filtered"), {})
+    filtered = morf.signal(next_key(spec, "drop.filtered"), {})
     model = morf.list_model({})
-    reset = morf.signal(next_key(spec, "combo.reset"), 0)
+    reset = morf.signal(next_key(spec, "drop.reset"), 0)
     local function refilter(query)
       local list = items()
       local labels = {}
@@ -223,7 +203,7 @@ local function make(spec)
     local LW = (spec.list_width or W) - 8
     local list_h = function() return math.max(1, math.min(#filtered:get(), spec.visible_items or 8)) * ITEM_H end
     build_content = function()
-    local list, list_handle = collection.make("list", {
+    local list, list_handle = collection.make("list_view", {
       id = id and (id .. "-list") or nil, rows = model, width = LW, height = (spec.visible_items or 8) * ITEM_H,
       row_height = ITEM_H,
       -- (Read again whenever the rows change: a new filter may have moved
@@ -243,10 +223,10 @@ local function make(spec)
     return ui.Item { width = LW, height = list_h, clip = true, list }
     end
     local node
-    node, input = group.make {
-      id = id, x = spec.x, y = spec.y, width = W, height = H, widget = "search",
+    node, input = widgets.search_entry {
+      id = id, width = W, height = H,
       text = current_text(), placeholder = spec.placeholder or "Search…",
-      variant = spec.variant, icon = spec.icon or "search",
+      icon = spec.icon or "search", inset = { 36, 0, 34, 0 },
       on_edited = function(text)
         if not is_open() then open_list() end
         refilter(text)
@@ -276,14 +256,15 @@ local function make(spec)
         end
         return false
       end,
-      suffix = { icon = "expand_more", id = id and (id .. "-toggle") or nil, accessible_name = "Show all",
-        on_clicked = function() if is_open() then close("closed") else open_list() end end },
     }
-    field = node
+    local toggle = widgets.button { id = id and (id .. "-toggle") or nil, icon = "expand_more", variant = "flat",
+      width = 30, height = 30, anchors = { right = true, right_margin = 2, vertical_center = true },
+      accessible_name = "Show all", on_clicked = function() if is_open() then close("closed") else open_list() end end }
+    field = ui.Item { id = id and (id .. "-box") or nil, x = spec.x, y = spec.y, width = W, height = H, node, toggle }
     handle.open = open_list
     handle.input = input
     -- What a caller sets from outside shows in the field.
-    morf.effect(next_key(spec, "combo.text"), function()
+    morf.effect(next_key(spec, "drop.text"), function()
       local text = current_text()
       if input and not open:get() then input.text = text end
     end, { owner = field })
@@ -294,7 +275,7 @@ local function make(spec)
       open:set(true)
       ensure().open(field)
     end
-    field = M.field {
+    field = field_of {
       id = id, x = spec.x, y = spec.y, width = W, height = H, variant = spec.variant, icon = spec.icon,
       anchors = spec.anchors, enabled = spec.enabled, text_size = spec.text_size,
       text = function() local t = current_text() return t ~= "" and t or (spec.placeholder or "") end,
@@ -305,7 +286,7 @@ local function make(spec)
       end or nil,
       on_clicked = function() if is_open() then close("closed") else open_list() end end,
       on_key_pressed = function(_, _, modifiers, _, name)
-        if M.opens(name, modifiers) then open_list() return true end
+        if opens(name, modifiers) then open_list() return true end
         return false
       end,
     }
@@ -319,7 +300,7 @@ local function make(spec)
   handle.is_open = is_open
   -- (A binding can follow this one: the popup is only made on first open.)
   handle.opened = function() return open:get() end
-  handle.current = current
+  handle.selected = current
   handle.set = function(i) chosen:set(i) end
   handle.highlight = function() return highlight:get() end
   handle.filtered = filtered and function() return filtered:get() end or nil

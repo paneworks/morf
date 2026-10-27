@@ -1,4 +1,4 @@
--- A calendar (composite: Selection days + Navigation months), inline.
+-- GtkCalendar (composite: Selection days + Navigation months), inline.
 --
 --     local node, cal = composites.calendar {
 --       id = "planner", width = 280,
@@ -9,9 +9,9 @@
 --     }
 --     cal.step(1) ; cal.show("2026-12") ; cal.month() --> "2026-10"
 --
--- The days are a kit `day_grid` (a Selection: the arrows walk the days,
--- typing a number jumps to it, Return picks), one per month, in a kit
--- Navigation that slides one month in as the other goes. The arrows walk
+-- The days are a `day_grid` (a Selection: the arrows walk the days,
+-- typing a number jumps to it, Return picks), one per month, in a
+-- view stack that slides one month in as the other goes. The arrows walk
 -- across a month's edge into the next; Page Up and Page Down turn the
 -- month (Shift: the year), keeping the day; Home and End go to the first
 -- and last of the month.
@@ -26,6 +26,8 @@
 -- `<id>-previous`, `<id>-next`, `<id>-month-title`, `<id>-day-<date>`.
 local ui = require("morf.ui")
 local widgets = require("lib.kit.widgets")
+local selection = require("lib.kit.archetypes.selection")
+local tokens = require("lib.kit.tokens")
 
 local M = {}
 
@@ -113,7 +115,6 @@ local function page_of(index) return PAGES[index % 3 + 1] end
 
 function M.make(spec)
   spec = spec or {}
-  local kit = require("kit")
   local id = spec.id
   local first = spec.first_weekday or 1
   local W = spec.width or 280
@@ -205,8 +206,8 @@ function M.make(spec)
     if spec.band then
       for i = 1, 42 do
         local col, row = (i - 1) % 7, (i - 1) // 7
-        ui.reparent(kit.surface { x = col * cw, y = row * ch + 2, width = cw, height = ch - 4,
-          color = function() local c = kit.signal("accent")() return c:alpha(0.16) end,
+        ui.reparent(ui.Rect { x = col * cw, y = row * ch + 2, width = cw, height = ch - 4,
+          color = tokens.color("accent_bg", 0.16),
           visible = function()
             local cell = now().list[i]
             if not (cell and cell.date) then return false end
@@ -218,7 +219,7 @@ function M.make(spec)
           end }, look)
       end
     end
-    local grid = widgets.day_grid {
+    local grid = selection.make("day_grid", {
       id = id and (id .. "-grid-" .. name), accessible_name = spec.accessible_name or "Days",
       items = function() return now().list end,
       columns = 7, gap = 0, item_width = cw, item_height = ch,
@@ -234,20 +235,20 @@ function M.make(spec)
         local cell = now().list[i]
         if cell and cell.date then choose(cell.date, true) end
       end,
-    }
+    })
     grids[name] = grid
     ui.reparent(grid, look)
     -- Today, and the days the configuration marks.
-    ui.reparent(kit.surface { width = cw - 4, height = 3, radius = kit.round(1.5),
-      color = kit.signal("accent"),
+    ui.reparent(ui.Rect { width = cw - 4, height = 3, radius = 1.5,
+      color = tokens.color("accent_bg"),
       x = function() local i = now().at[st.today] return i and ((i - 1) % 7) * cw + 2 or 0 end,
       y = function() local i = now().at[st.today] return i and ((i - 1) // 7 + 1) * ch - 3 or 0 end,
       visible = function() return now().at[st.today] ~= nil end }, look)
     if spec.marked then
       for i = 1, 42 do
         local col, row = (i - 1) % 7, (i - 1) // 7
-        ui.reparent(kit.surface { x = col * cw + cw / 2 - 2, y = row * ch + ch - 9, width = 4, height = 4,
-          radius = kit.round(2), color = kit.ink("accent"),
+        ui.reparent(ui.Rect { x = col * cw + cw / 2 - 2, y = row * ch + ch - 9, width = 4, height = 4,
+          radius = 2, color = tokens.color("accent"),
           visible = function()
             local cell = now().list[i]
             return cell ~= nil and cell.date ~= nil and spec.marked(cell.date) and true or false
@@ -260,8 +261,9 @@ function M.make(spec)
   local pages = {}
   for _, name in ipairs(PAGES) do pages[name] = function() return grid_page(name) end end
   local stack
-  stack, nav = widgets.view_stack { id = id and (id .. "-months"), width = W, height = GRID,
-    mode = "switcher", order = PAGES, wrap = true, current = page_of(st.month), pages = pages }
+  stack, nav = widgets.stack { id = id and (id .. "-months"), width = W, height = GRID,
+    transition_type = "slide_left_right",
+    order = PAGES, wrap = true, current = page_of(st.month), pages = pages }
   local function arrow(days)
     return function()
       local y, m = M.parse(st.selected)
@@ -291,16 +293,17 @@ function M.make(spec)
     local name = morf.time.format("%a", morf.time.time { year = 2024, month = 1, day = 1 + (first - 1 + i) % 7, hour = 12 })
     -- Its first two characters, not bytes.
     local cut = utf8 and utf8.offset(name, 3)
-    week[#week + 1] = kit.centred(cw, WEEK, kit.label { text = cut and name:sub(1, cut - 1) or name, color = kit.ink("lo") })
+    week[#week + 1] = ui.Item { width = cw, height = WEEK, widgets.label { anchors = { center_in = true },
+      text = cut and name:sub(1, cut - 1) or name, variant = "caption dim" } }
   end
   local header = ui.Item { width = W, height = HEAD,
-    widgets.icon { id = id and (id .. "-previous"), accessible_name = "Previous month", width = 32, height = 32,
-      size = 18, icon_off = "chevron_left", anchors = { left = true, vertical_center = true },
+    widgets.button { id = id and (id .. "-previous"), accessible_name = "Previous month", width = 32, height = 32,
+      variant = "flat circular", icon = "chevron_left", anchors = { left = true, vertical_center = true },
       on_clicked = function() step(-1) end },
-    kit.text { id = id and (id .. "-month-title"), anchors = { center_in = true }, font_weight = 600,
+    widgets.label { id = id and (id .. "-month-title"), anchors = { center_in = true }, variant = "heading",
       text = function() return M.month_title(st.month) end },
-    widgets.icon { id = id and (id .. "-next"), accessible_name = "Next month", width = 32, height = 32,
-      size = 18, icon_off = "chevron_right", anchors = { right = true, vertical_center = true },
+    widgets.button { id = id and (id .. "-next"), accessible_name = "Next month", width = 32, height = 32,
+      variant = "flat circular", icon = "chevron_right", anchors = { right = true, vertical_center = true },
       on_clicked = function() step(1) end },
   }
   -- As tall as the month's weeks (`fit = false`: always six).

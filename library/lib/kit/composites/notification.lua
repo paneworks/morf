@@ -1,10 +1,12 @@
--- A notification stack: cards that come in at the top, newest first, stay
--- for a while and go -- by a swipe, their close button or their timeout
--- -- in a non-modal overlay at a corner of the surface (Popup + Collection
--- + Drag, swipe). With `mode = "toast"` it is a toast overlay: slips at
--- the bottom centre in the theme's toast look, a few seconds each.
+-- A desktop shell's notifications (the shell group's `notification`):
+-- cards that come in at the top, newest first, stay for a while and go --
+-- by a swipe, their close button or their timeout -- in a non-modal
+-- overlay at a corner of the surface (Popup + Collection + Drag, swipe).
+-- With `mode = "toast"` it is a toast overlay (lib.kit.composites.
+-- toast_overlay): slips at the bottom centre on the dark toast ground, a
+-- few seconds each.
 --
---     local node, stack = composites.notification_stack {
+--     local node, stack = composites.notification {
 --       id = "notes", root = surface_root, width = 360,
 --       timeout = 6000,                        -- ms; 0 keeps them until dismissed
 --       on_activated = function(note) end, on_dismissed = function(note, reason) end,
@@ -18,29 +20,29 @@
 -- the title and the body's first line; the chevron expands it to the
 -- whole body and its actions. A press on the card is `on_activated`. A
 -- drag sideways past `swipe_distance` (80 px) or a fling dismisses it; let
--- go short and it springs back. The overlay opens with the first note and
--- closes with the last; it never takes focus or a press outside it.
--- `inline = true` returns the stack as a node to place instead. Other
--- fields: `max_visible` (4; toasts 3) -- how many cards the stack is tall
--- -- `anchor` + `placement` (a corner node of the caller's; by default
--- the root's top right, "bottom-end", or its bottom centre for toasts),
+-- go short and it springs back. A toast shows its title and its first
+-- action as a button. The overlay opens with the first note and closes
+-- with the last; it never takes focus or a press outside it. `inline =
+-- true` returns the stack as a node to place instead. Other fields:
+-- `max_visible` (4; toasts 3) -- how many cards the stack is tall --
+-- `anchor` + `placement` (a corner node of the caller's; by default the
+-- root's top right, "bottom-end", or its bottom centre for toasts),
 -- `notifications` (shown at once). Ids: `<id>-list`, `<id>-note-<key>`,
 -- `<id>-close-<key>`, `<id>-expand-<key>`, `<id>-action-<key>-<n>`.
 local ui = require("morf.ui")
-local popup = require("lib.kit.popup")
-local control = require("lib.kit.control")
-local collection = require("lib.kit.collection")
-local drag = require("lib.kit.drag")
-
-local function K() local ok, kit = pcall(require, "kit") return ok and type(kit) == "table" and kit or {} end
+local popup = require("lib.kit.archetypes.popup")
+local press = require("lib.kit.archetypes.press")
+local collection = require("lib.kit.archetypes.collection")
+local drag = require("lib.kit.archetypes.drag")
+local widgets = require("lib.kit.widgets")
+local tokens = require("lib.kit.tokens")
 
 local serial = 0
 
 local function make(spec)
   spec = spec or {}
-  local kit = K()
   serial = serial + 1
-  local skey = "kit.composites.notification_stack." .. tostring(spec.id) .. "." .. serial
+  local skey = "kit.composites.notification." .. tostring(spec.id) .. "." .. serial
   local id = spec.id
   local toast = spec.mode == "toast"
   local W = spec.width or (toast and 320 or 360)
@@ -111,8 +113,8 @@ local function make(spec)
 
   -- ------------------------------------------------------------ a card --
   local function icon_button(name, icon, key, on_clicked)
-    return control.make("Press", "icon", { widget = "icon", id = id and ("%s-%s-%s"):format(id, name, key) or nil,
-      icon_off = icon, icon_on = icon, width = 28, height = 28, size = 18, accessible_name = name,
+    return press.make("button", { id = id and ("%s-%s-%s"):format(id, name, key) or nil, icon = icon,
+      variant = toast and "flat circular osd" or "flat circular", width = 28, height = 28, accessible_name = name,
       on_clicked = on_clicked })
   end
 
@@ -151,8 +153,24 @@ local function make(spec)
     local function draw(r)
       if toast then
         if card then ui.destroy(card, true) end
-        card = kit.toast { width = W, height = CARD_H, title = r.title, text = r.body ~= "" and r.body or nil,
-          icon = r.icon }
+        -- AdwToast: the title on the dark pill, its first action a button.
+        local note = notes[r.key]
+        local action = note and note.actions and note.actions[1]
+        local white = "#ffffff"
+        card = ui.Rect { width = W, height = CARD_H - GAP, radius = (CARD_H - GAP) / 2,
+          color = "#000000d6",
+          ui.Row { anchors = { left = true, left_margin = 18, vertical_center = true }, gap = 10, align = "center",
+            r.icon and widgets.image { icon = r.icon, pixel_size = 18, color = white } or nil,
+            widgets.label { text = r.title ~= "" and r.title or r.body, color = white, elide = "right",
+              width = W - 18 - (r.icon and 28 or 0) - (action and 110 or 0) - 40 } },
+          ui.Row { anchors = { right = true, right_margin = 8, vertical_center = true }, gap = 4, align = "center",
+            action and widgets.button { id = id and ("%s-action-%s-1"):format(id, r.key) or nil, variant = "flat osd",
+              label = action.label, height = 30,
+              on_clicked = function()
+                if action.on_clicked then action.on_clicked(note) end
+                dismiss(r.key, "action")
+              end } or nil,
+            icon_button("close", "close", r.key, function() dismiss(r.key, "closed") end) } }
         ui.reparent(card, area)
         return
       end
@@ -160,13 +178,13 @@ local function make(spec)
       built = {}
       local note = notes[r.key]
       for n, action in ipairs(note and note.actions or {}) do
-        built[n] = control.make("Press", "menu_item", { widget = "menu_item",
+        built[n] = widgets.button { variant = "flat",
           id = id and ("%s-action-%s-%d"):format(id, r.key, n) or nil, label = action.label,
           width = 28 + math.ceil(utf8.len(tostring(action.label or "")) * 8), height = 32,
           on_clicked = function()
             if action.on_clicked then action.on_clicked(note) end
             if action.keep ~= true then dismiss(r.key, "action") end
-          end })
+          end }
         ui.reparent(built[n], actions_row)
       end
       if id then
@@ -175,18 +193,19 @@ local function make(spec)
       end
     end
     if not toast then
-      local hi, lo = kit.ink("hi"), kit.ink("lo")
+      local lo = tokens.color("card_fg", 0.55)
       close_button = icon_button("close", "close", row.key, function() dismiss(key(), "closed") end)
       expand_button = icon_button("expand", "expand_more", row.key, function() expand(key()) end)
       local urgent = function() return now().urgency == "critical" end
-      local tone = function() return urgent() and kit.signal("alert")() or kit.signal("accent")() end
+      local tone = function() return urgent() and tokens.color("error_bg")() or tokens.color("accent_bg")() end
       card = ui.Item { x = 0, y = 0, width = W, height = function() return now().height - GAP end,
-        kit.card { anchors = { fill = true } },
+        widgets.box { variant = "card", anchors = { fill = true } },
         ui.Item { x = 14, y = 14, width = 32, height = 32,
-          kit.surface { anchors = { fill = true }, radius = kit.round and kit.round(16) or 16,
+          ui.Rect { anchors = { fill = true }, radius = 16,
             color = function() return tone():alpha(0.18) end },
-          kit.icon(function() return now().icon or "notifications" end, 18, tone, { anchors = { center_in = true } }) },
-        kit.label { x = 56, y = 10, width = W - 56 - 76, elide = "right",
+          widgets.image { icon = function() return now().icon or "notifications" end, pixel_size = 18, color = tone,
+            anchors = { center_in = true } } },
+        widgets.label { x = 56, y = 10, width = W - 56 - 76, elide = "right", variant = "caption dim",
           text = function()
             local r = now()
             local parts = {}
@@ -194,9 +213,9 @@ local function make(spec)
             if r.time and r.time ~= "" then parts[#parts + 1] = r.time end
             return table.concat(parts, " · ")
           end },
-        kit.text { x = 56, y = 28, width = W - 56 - 14, elide = "right", font_weight = 600, color = hi,
+        widgets.label { x = 56, y = 28, width = W - 56 - 14, elide = "right", variant = "heading",
           text = function() return now().title or "" end },
-        kit.text { x = 56, y = 48, width = W - 56 - 14, color = lo,
+        widgets.label { x = 56, y = 48, width = W - 56 - 14, color = lo,
           wrap = function() return now().expanded == true end,
           elide = function() return now().expanded and "none" or "right" end,
           height = function() local r = now() return r.expanded and math.max(18, r.height - GAP - 48 - 12 - ((r.has_actions and 44) or 0)) or 18 end,
@@ -224,7 +243,7 @@ local function make(spec)
 
   local function build()
     if content then return content end
-    list_node, list_handle = collection.make("list", {
+    list_node, list_handle = collection.make("list_view", {
       id = id and (id .. "-list") or nil, rows = model, width = W, height = MAX * (CARD_H + GAP) + 400,
       row_height = CARD_H + GAP, size_field = "height", focus_policy = "none", accessible_name = "Notifications",
       delegate = delegate,
@@ -254,7 +273,7 @@ local function make(spec)
   local function ensure()
     if spec.inline or overlay then return end
     build()
-    overlay = popup.make(toast and "toast" or "notification_popup", {
+    overlay = popup.make(toast and "toast" or "notification", {
       -- (The popup's ground is a tray round the cards.)
       id = id and (id .. "-popup") or nil, content = content, padding = TRAY, width = W + 2 * TRAY,
       height = function() return total() + 2 * TRAY end, root = spec.root,
@@ -305,4 +324,4 @@ local function make(spec)
   return node, handle
 end
 
-return { make = make }
+return make

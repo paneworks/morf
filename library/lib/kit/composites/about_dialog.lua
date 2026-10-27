@@ -1,4 +1,4 @@
--- An about dialog: an application's name, version, icon and links, with
+-- AdwAboutDialog: an application's name, version, icon and links, with
 -- pages for its credits and its legal text (Popup, dialog + Navigation).
 --
 --     local node, about = composites.about_dialog {
@@ -13,8 +13,8 @@
 --     }
 --     about.open() about.close() about.show("credits") about.page()
 --
--- The pages -- "about", "credits", "legal" -- are a Navigation switcher
--- under tabs: a press on a tab, Ctrl+Tab / Ctrl+Shift+Tab, or
+-- The pages -- "about", "credits", "legal" -- are a view stack under a
+-- view switcher: a press on a tab, Ctrl+Tab / Ctrl+Shift+Tab, or
 -- `show(page)` changes the page, which slides in from its side. A page
 -- with nothing to say (no credits, no legal text or licence) is left
 -- out. Escape or the close button closes the dialog and focus goes back to
@@ -25,19 +25,24 @@
 -- `<id>-tab-<n>`, `<id>-pages`, `<id>-link-<n>`, `<id>-close`,
 -- `<id>-popup`.
 local ui = require("morf.ui")
-local popup = require("lib.kit.popup")
-local control = require("lib.kit.control")
-local selection = require("lib.kit.selection")
-local navigation = require("lib.kit.navigation")
-local scroll = require("lib.kit.scroll")
+local popup = require("lib.kit.archetypes.popup")
+local selection = require("lib.kit.archetypes.selection")
+local navigation = require("lib.kit.archetypes.navigation")
+local scroll = require("lib.kit.archetypes.scroll")
+local widgets = require("lib.kit.widgets")
+local tokens = require("lib.kit.tokens")
 
-local function K() local ok, kit = pcall(require, "kit") return ok and type(kit) == "table" and kit or {} end
+-- A word on a pill of the accent's tint: the version, the licence.
+local function tag(text)
+  local label = widgets.label { text = text, variant = "caption_heading accent", anchors = { center_in = true } }
+  return ui.Rect { height = 24, radius = 12, color = tokens.color("accent_bg", 0.14),
+    width = function() return (label.layout_width or 0) + 20 end, label }
+end
 
 local TITLES = { about = "About", credits = "Credits", legal = "Legal" }
 
 local function make(spec)
   spec = spec or {}
-  local kit = K()
   local id = spec.id
   local W, H = spec.width or 420, spec.height or 460
   local PAD = 16
@@ -64,39 +69,32 @@ local function make(spec)
   local current = morf.signal("kit.composites.about." .. tostring(id) .. "." .. tostring(spec), 1)
 
   local function scrolled(column)
-    local node = scroll.make("scroll_view", { width = PW, height = PH, clip = true, column })
+    local node = scroll.make("scrolled_window", { width = PW, height = PH, clip = true, column })
     return node
   end
 
   local function about_page()
-    local mark = ui.Item { width = 72, height = 72,
-      kit.surface { anchors = { fill = true }, radius = kit.round and kit.round(24) or 24,
-        color = function() return kit.signal("accent")():alpha(0.16) end },
-      kit.icon(spec.icon or "apps", 42, kit.signal("accent"), { anchors = { center_in = true } }) }
+    local mark = ui.Rect { width = 72, height = 72, radius = 20, color = tokens.color("accent_bg", 0.16),
+      widgets.image { icon = spec.icon or "apps", pixel_size = 42, variant = "accent", anchors = { center_in = true } } }
     local column = { width = PW, gap = 8, align = "center", mark,
-      kit.text { text = spec.app_name or "Application", width = PW, horizontal_alignment = "center",
-        accessible_role = "heading", font_weight = 600, color = kit.ink("hi"),
-        elide = "right", font_size = 22 },
+      widgets.label { text = spec.app_name or "Application", width = PW, horizontal_alignment = "center",
+        variant = "title_1", elide = "right" },
     }
-    if spec.version then
-      column[#column + 1] = kit.tag and kit.tag { text = spec.version } or kit.label { text = spec.version }
-    end
+    if spec.version then column[#column + 1] = tag(spec.version) end
     if spec.comments then
-      column[#column + 1] = kit.text { text = spec.comments, width = PW - 24, wrap = true,
-        horizontal_alignment = "center", color = kit.ink("lo") }
+      column[#column + 1] = widgets.label { text = spec.comments, width = PW - 24, wrap = true,
+        horizontal_alignment = "center", variant = "dim" }
     end
     if #links > 0 then
       local row = { gap = 8, align = "center" }
       for n, link in ipairs(links) do
         local label = tostring(link.label or link.url)
-        row[#row + 1] = control.make("Press", "menu_item", { widget = "menu_item",
-          id = id and (id .. "-link-" .. n) or nil, label = label, icon = link.icon or "open_in_new",
-          width = math.min(PW, 56 + math.ceil(utf8.len(label) * 8.2)), height = 36, accessible_name = label,
-          accessible_role = "link",
+        row[#row + 1] = widgets.button { id = id and (id .. "-link-" .. n) or nil, variant = "flat", label = label,
+          icon = link.icon or "open_in_new", height = 34, accessible_name = label, accessible_role = "link",
           on_clicked = function()
             if link.on_clicked then link.on_clicked(link) end
             if spec.on_link then spec.on_link(link.url, link) end
-          end })
+          end }
       end
       column[#column + 1] = ui.Item { width = 1, height = 4 }
       column[#column + 1] = ui.Flex { direction = "row", wrap = true, justify = "center", gap = 8, width = PW,
@@ -109,9 +107,9 @@ local function make(spec)
     local column = { width = PW, gap = 6 }
     for i, section in ipairs(credits) do
       if i > 1 then column[#column + 1] = ui.Item { width = 1, height = 8 } end
-      column[#column + 1] = kit.label { text = section.title or "" }
+      column[#column + 1] = widgets.label { text = section.title or "", variant = "heading" }
       for _, name in ipairs(section.names or {}) do
-        column[#column + 1] = kit.text { text = name, width = PW, elide = "right", color = kit.ink("hi") }
+        column[#column + 1] = widgets.label { text = name, width = PW, elide = "right" }
       end
     end
     return scrolled(ui.Column(column))
@@ -119,13 +117,13 @@ local function make(spec)
 
   local function legal_page()
     local column = { width = PW, gap = 8 }
-    if spec.copyright then column[#column + 1] = kit.text { text = spec.copyright, width = PW, wrap = true } end
+    if spec.copyright then column[#column + 1] = widgets.label { text = spec.copyright, width = PW, wrap = true } end
     if spec.license then
       column[#column + 1] = ui.Row { gap = 8, align = "center",
-        kit.label { text = "Licence" }, kit.tag and kit.tag { text = spec.license } or kit.text { text = spec.license } }
+        widgets.label { text = "Licence", variant = "heading" }, tag(spec.license) }
     end
     if spec.legal then
-      column[#column + 1] = kit.text { text = spec.legal, width = PW, wrap = true, color = kit.ink("lo") }
+      column[#column + 1] = widgets.label { text = spec.legal, width = PW, wrap = true, variant = "dim" }
     end
     return scrolled(ui.Column(column))
   end
@@ -138,7 +136,7 @@ local function make(spec)
     for _, name in ipairs(order) do pages[name] = BUILD[name] end
     local pages_node
     pages_node, nav = navigation.make("view_stack", {
-      id = id and (id .. "-pages") or nil, x = PAD, y = PAGE_Y, width = PW, height = PH, mode = "switcher",
+      id = id and (id .. "-pages") or nil, x = PAD, y = PAGE_Y, width = PW, height = PH,
       order = order, pages = pages, current = order[1],
       on_current_changed = function(name)
         for n, page in ipairs(order) do if page == name then current:set(n) end end
@@ -147,7 +145,7 @@ local function make(spec)
     local names = {}
     for n, page in ipairs(order) do names[n] = { name = TITLES[page], label = TITLES[page] } end
     local TW = W - 2 * PAD - (spec.inline and 0 or 44)
-    local tabs = selection.make("tabs", {
+    local tabs = selection.make("view_switcher", {
       id = id and (id .. "-tabs") or nil, x = PAD, y = PAD, items = names, orientation = "horizontal",
       width = TW, height = TAB_H,
       item_width = math.floor(TW / #names), item_height = TAB_H, press_activates = true,
@@ -156,9 +154,9 @@ local function make(spec)
       on_current_changed = function(n) if order[n] and nav then nav.go(order[n]) end end,
       accessible_name = "Pages",
     })
-    local close_button = not spec.inline and control.make("Press", "icon", { widget = "icon",
-      id = id and (id .. "-close") or nil, icon_off = "close", icon_on = "close", width = 36, height = 36, size = 20,
-      x = W - PAD - 36, y = PAD + 2, accessible_name = "Close", on_clicked = function() close("closed") end }) or nil
+    local close_button = not spec.inline and widgets.button { id = id and (id .. "-close") or nil, icon = "close",
+      variant = "flat circular", width = 34, height = 34, x = W - PAD - 34, y = PAD + 2, accessible_name = "Close",
+      on_clicked = function() close("closed") end } or nil
     content = ui.Item { width = W, height = H, z = 1, tabs, close_button, pages_node }
     return content
   end
@@ -168,7 +166,7 @@ local function make(spec)
   if spec.inline then
     build()
     node = ui.Item { id = id, x = spec.x, y = spec.y, width = W, height = H, anchors = spec.anchors,
-      kit.card { anchors = { fill = true } }, content }
+      widgets.box { variant = "card", anchors = { fill = true } }, content }
     handle.open, handle.close = function() end, function() end
     handle.is_open = function() return true end
   else
