@@ -16,7 +16,7 @@ fn hyprland_library_reads_the_live_compositor() {
         .execute(
             &examples_script(),
             br#"
-                H = require("lib.integrations.hyprland")
+                H = require("lib.compositor.hyprland")
                 assert(H.start { poll_ms = 10 })
                 live = {}
                 H.version(function(v) live.version = v end)

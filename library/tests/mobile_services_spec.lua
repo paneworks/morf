@@ -1,6 +1,6 @@
 local test=morf.test
 local HOST=[[
-  local db=require("lib.services.dbus_client")
+  local db=require("lib.services.dbus")
   local NM="org.freedesktop.NetworkManager"
   local ROOT="/org/freedesktop/NetworkManager"
   local MM="org.freedesktop.ModemManager1"

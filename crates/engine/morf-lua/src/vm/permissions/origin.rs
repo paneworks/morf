@@ -9,12 +9,19 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 
-/// The module-name prefix of the library's integrations, which are imported
-/// wherever they are installed.
-pub(crate) const INTEGRATIONS: &str = "lib.integrations.";
+/// The module-name prefixes of the library's integrations and compositor
+/// clients, which are imported wherever they are installed.
+pub(crate) const INTEGRATIONS: [&str; 2] = ["lib.integrations.", "lib.compositor."];
 
-/// The integrations' folder under a library root.
-const INTEGRATIONS_DIR: &str = "lib/integrations";
+/// Their folders under a library root.
+const INTEGRATIONS_DIRS: [&str; 2] = ["lib/integrations", "lib/compositor"];
+
+/// Whether `relative`, a path under a library root, is in one of them.
+fn in_integrations(relative: &Path) -> bool {
+    INTEGRATIONS_DIRS
+        .iter()
+        .any(|dir| relative.starts_with(dir))
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Origin {
@@ -126,7 +133,7 @@ impl Origins {
         if let Some(library) = &self.library
             && let Ok(relative) = real.strip_prefix(library)
         {
-            return match relative.starts_with(INTEGRATIONS_DIR) {
+            return match in_integrations(relative) {
                 true => Origin::Imported,
                 false => Origin::FirstParty,
             };
@@ -135,7 +142,7 @@ impl Origins {
             return Origin::Imported;
         };
         let relative = reached.strip_prefix(root).unwrap_or(reached);
-        if !relative.starts_with(INTEGRATIONS_DIR) && self.is_library_copy(real, relative) {
+        if !in_integrations(relative) && self.is_library_copy(real, relative) {
             Origin::FirstParty
         } else {
             Origin::Imported

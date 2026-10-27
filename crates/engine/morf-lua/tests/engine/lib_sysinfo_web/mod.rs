@@ -1,5 +1,6 @@
 //! The pure-Lua libraries in `library/lib` that watch the machine and the
-//! web: sysinfo, weather, github, packages, claude_usage.
+//! web: sysinfo, weather and packages, and impasto's github calendar and
+//! claude usage.
 //!
 //! Each runs inside a real runtime with `library/` as a module root. The
 //! machine is a folder of fake /proc and /sys files, the web is a server on
@@ -11,16 +12,21 @@ use std::time::{Duration, Instant};
 
 use super::*;
 
-fn examples_dir() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../library")
+/// `library/`, and impasto's shell folder for its own modules.
+fn module_roots() -> Vec<std::path::PathBuf> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    vec![
+        root.join("library"),
+        root.join("examples/shells/impasto/shell"),
+    ]
 }
 
-/// Runs `source` with `library/` as a module root and pumps the loop until
+/// Runs `source` with those module roots and pumps the loop until
 /// the `seen` text contains `done` (or the deadline passes). Returns the text.
 /// Any log line -- a handler that raised or ran out of fuel -- fails the test.
 fn run(source: &str, seconds: u64) -> String {
     let mut runtime = Runtime::default();
-    runtime.set_module_roots(vec![examples_dir()]);
+    runtime.set_module_roots(module_roots());
     let source = format!(
         r#"
         local morf = require("morf")

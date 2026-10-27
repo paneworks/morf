@@ -1,4 +1,4 @@
-local validate = require("lib.util.pattern").validate
+local validate = require("lib.shell.auth.pattern").validate
 local function dots(s)
   local out = {}
   for digit in s:gmatch(".") do out[#out+1] = tonumber(digit) end

@@ -1,6 +1,6 @@
 -- impasto's compositor settings against a fake Hyprland: what the input
 -- page, the displays page and the keys page send. The fake is served from
--- this spec (library/lib/testing/fake_hyprland.lua); the session's Hyprland is never reached
+-- this spec (library/lib/testing/hyprland.lua); the session's Hyprland is never reached
 -- (`morf test` removes HYPRLAND_INSTANCE_SIGNATURE, and impasto is pointed
 -- at the fake's runtime directory). Settings and keys.tsv land in the
 -- scratch XDG folders `morf test` sets up.
@@ -8,7 +8,7 @@
 --     morf test --private-bus examples/shells/impasto/tests/impasto_hyprland_spec.lua
 
 local test = morf.test
-local fake_hyprland = require("lib.testing.fake_hyprland")
+local fake_hyprland = require("lib.testing.hyprland")
 
 local fake
 

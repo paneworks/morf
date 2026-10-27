@@ -10,7 +10,7 @@
 -- person with an editor, changes it and only the keys that moved re-run
 -- what follows them.
 --
---   local settings = require("lib.util.settings")
+--   local settings = require("lib.shell.settings")
 --   local config = settings.open {
 --     path = morf.config_path("shell.json"),   -- or anywhere
 --     defaults = { appearance = { rounding = { scale = 1 } }, bar = { persistent = true } },

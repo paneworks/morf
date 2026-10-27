@@ -63,8 +63,8 @@ local io = require("morf.io")
 -- The keyboard. Not a keyboard drawn to look like it — the same file
 -- `examples/demos/text/keyboard.lua` puts in a surface of its own. It cannot have one here
 -- because a kiosk compositor shows a single window, so a login screen's second
--- surface is never seen; drawn into this one it is the same board either way.
-local board = require("lib.util.board")
+-- surface is never seen; drawn into this one it is the same keyboard either way.
+local osk = require("lib.shell.osk")
 
 -- One file, two doors, and the word after the file's `--` says which. `lock`
 -- is the lock screen, and holds the session unless `window` follows, which
@@ -1415,16 +1415,15 @@ place(login_again)
 -- The keyboard.
 --------------------------------------------------------------------------------
 
--- evdev, because that is what the board speaks — it hands over a key and
--- whether it was shifted, and what that means is this screen's business.
-local EVDEV_BACKSPACE, EVDEV_ENTER = 14, 28
-
-local function board_key(code, _shifted, label)
+-- The keyboard hands over what was struck -- text, or a named key -- and
+-- what that means is this screen's business.
+local function key_struck(event)
   wake()
   if working:get() then return end
-  if code == EVDEV_BACKSPACE then
+  local text = event.text or (event.key == "space" and " ") or nil
+  if event.key == "backspace" then
     backspace()
-  elseif code == EVDEV_ENTER then
+  elseif event.key == "enter" then
     if asking:get() then
       confirm()
     elseif chosen_user:get() < 1 then
@@ -1432,41 +1431,32 @@ local function board_key(code, _shifted, label)
     else
       choose_user(chosen_user:get())
     end
-  elseif label and label ~= "" then
+  elseif text and text ~= "" then
     if not asking:get() then
       if chosen_user:get() < 1 then not_listed() else choose_user(chosen_user:get()) end
     end
-    type_character(label)
+    type_character(text)
   end
 end
 
--- Both boards are built, and whichever is wanted is the one that is shown.
--- In this screen's own language: outlined keys on the ink, the face in the
+-- Both keyboards are built, and whichever is wanted is the one that is shown.
+-- In this screen's own language: keys a shade off the ink, the face in the
 -- text colour, the green for a shift that is on.
 local look = {
   panel = function() return theme.ink end,
-  keyface = function() return theme.ink:mix(theme.text, theme.contrast and 0.3 or 0.09) end,
-  edge = function() return theme.edge_hot end,
-  live = function() return theme.accent end,
-  label = function() return theme.text end,
+  key = function() return theme.ink:mix(theme.text, theme.contrast and 0.3 or 0.09) end,
+  key_dim = function() return theme.ink:mix(theme.text, theme.contrast and 0.2 or 0.05) end,
+  accent = function() return theme.accent end,
+  on_accent = function() return theme.ink end,
+  text = function() return theme.text end,
   dim = function() return theme.dim end,
-  down = function() return theme.text end,
+  press = function() return theme.edge_hot end,
   font = MONO,
 }
-local keypad_panel, keypad_height = board.build {
-  width = W,
-  keypad = true,
-  prefix = "greeter.keypad",
-  key = board_key,
-  on_full = function() write(numeric, false) end,
-  look = look,
-}
-local full_panel, full_height = board.build {
-  width = W,
-  prefix = "greeter.keys",
-  key = board_key,
-  look = look,
-}
+local keypad = osk.new { width = W, mode = "numbers", prefix = "greeter.keypad", send = key_struck, look = look }
+local full = osk.new { width = W, mode = "full", prefix = "greeter.keys", send = key_struck, look = look }
+local keypad_panel, keypad_height = keypad.node, keypad.height()
+local full_panel, full_height = full.node, full.height()
 board_height = math.max(keypad_height, full_height)
 
 place(ui.Item {

@@ -1,7 +1,7 @@
 -- The two doors a login screen has, behind one interface: a lock's, asked
 -- through PAM, and a greeter's, asked through greetd.
 --
---   local auth = require("lib.util.auth")
+--   local auth = require("lib.shell.auth")
 --   local door = auth.lock {                -- or auth.greeter { ... }
 --     user = "trim",
 --     on_busy = function(busy) end,         -- a verdict is being waited on

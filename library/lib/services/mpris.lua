@@ -39,7 +39,7 @@
 -- another player, and listing it would show every track twice.
 
 local morf = require("morf")
-local dbus_client = require("lib.services.dbus_client")
+local dbus_client = require("lib.services.dbus")
 local registry = require("lib.services.registry")
 
 local mpris = {}

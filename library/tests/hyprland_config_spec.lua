@@ -1,13 +1,40 @@
--- lib/hyprland_config: what it would send, and what it sends to a fake
+-- lib.compositor.hyprland_config: what it would send, and what it sends to a fake
 -- Hyprland. Never the real one: `morf test` removes the session's
 -- HYPRLAND_INSTANCE_SIGNATURE, and the configuration is pointed at the fake.
 --
 --     morf test library/tests/hyprland_config_spec.lua
 
 local test = morf.test
-local fake_hyprland = require("lib.testing.fake_hyprland")
+local fake_hyprland = require("lib.testing.hyprland")
 
-local ok_lib, config = pcall(require, "lib.integrations.hyprland_config")
+-- The configuration under test: IPC verbs that use hyprland_config and say
+-- what came back.
+local CLIENT = [[
+  local ui = require("morf.ui")
+  local config = require("lib.compositor.hyprland_config")
+  local answers = {}
+  morf.ipc.flavour = function() return tostring(config.known_flavour()) end
+  morf.ipc.push = function()
+    config.apply(function(how)
+      return config.options_plan({ { "input:kb_layout", "str", "us,de" }, { "input:repeat_rate", "int", 30 } }, how)
+    end, function(ok) answers.push = tostring(ok) end)
+    return "sent"
+  end
+  morf.ipc.answer = function(name) return answers[name] or "" end
+  morf.ipc.outputs = function()
+    local out = {}
+    for _, o in ipairs(config.outputs()) do out[#out + 1] = o.name .. ":" .. tostring(o.disabled) .. ":" .. o.mode end
+    table.sort(out)
+    return table.concat(out, " ")
+  end
+  morf.ipc.keyboard = function()
+    local state = require("lib.compositor.hyprland").state
+    return tostring(state.keyboard) .. ":" .. tostring(state.keyboard_layout)
+  end
+  ui.Rect { width = 10, height = 10 }
+]]
+
+local ok_lib, config = pcall(require, "lib.compositor.hyprland_config")
 
 test.describe("hyprland_config plans", function()
   test.it("loads without a Hyprland", function()
@@ -59,7 +86,7 @@ test.describe("hyprland_config plans", function()
 
   test.it("reads a devices answer with a bare none in it", function()
     -- Hyprland 0.56 with a virtual keyboard (wtype, wayvnc) connected.
-    local hyprland = require("lib.integrations.hyprland")
+    local hyprland = require("lib.compositor.hyprland")
     local raw = '{"keyboards": [{"name": "kb", "active_layout_index": 0, "active_keymap": "English (US)", "main": true},'
       .. '\n{"name": "hl-virtual-keyboard-wtype", "active_layout_index": none, "active_keymap": "none", "main": false}],'
       .. ' "switches": [\n\n]}'
@@ -122,8 +149,8 @@ for _, flavour in ipairs { "lua", "hyprlang" } do
     local fake
     test.before_each(function()
       fake = fake_hyprland.new { flavour = flavour }
-      test.load("hyprland_client.lua",
-        { env = { HYPRLAND_INSTANCE_SIGNATURE = fake.signature, XDG_RUNTIME_DIR = fake.runtime } })
+      test.load { source = CLIENT,
+        env = { HYPRLAND_INSTANCE_SIGNATURE = fake.signature, XDG_RUNTIME_DIR = fake.runtime } }
     end)
     test.after_each(function() fake.close() end)
 

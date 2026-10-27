@@ -1,4 +1,4 @@
-//! `library/lib/util/palette.lua`: a desk's colours derived from a picture,
+//! impasto's `shell/services/palette.lua`: a desk's colours derived from a picture,
 //! in pure Lua over `morf.image`, `morf.color`, `morf.fs` and `morf.json`.
 
 use std::path::{Path, PathBuf};
@@ -66,6 +66,7 @@ fn runtime() -> Runtime {
     let mut runtime = Runtime::default();
     runtime.set_module_roots(vec![
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../library"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../examples/shells/impasto/shell"),
     ]);
     runtime
 }
@@ -94,7 +95,7 @@ fn pump(runtime: &mut Runtime, key: &str) -> String {
 }
 
 const PRELUDE: &str = r#"
-    local palette = require("lib.util.palette")
+    local palette = require("services.palette")
     results = {}
     morf.ipc.result = function(key) return results[key] end
     -- Runs `body(p)` in the answer; whatever it returns (or raises) is the

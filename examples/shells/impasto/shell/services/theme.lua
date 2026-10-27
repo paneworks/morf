@@ -1,6 +1,6 @@
 -- The active palette: the wallpaper's own, or one of the fixed schemes.
 --
--- Port of ThemeService.qml over library/lib/util/palette.lua (which does what
+-- Port of ThemeService.qml over services/palette.lua (which does what
 -- theme_manager.py did). "adaptive" derives the palette from whatever
 -- picture is up and derives it again when the picture changes; any other
 -- id is one of the nine fixed schemes. A change blends from the old
@@ -11,7 +11,7 @@
 -- colours. That writes into the user's own dotfiles, so here it happens
 -- only with `writeAppThemes` on, and only into the files it names.
 
-local palette = require("lib.util.palette")
+local palette = require("services.palette")
 local theme = require("theme")
 local settings = require("services.settings")
 local wallpaper = require("services.wallpaper")

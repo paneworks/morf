@@ -6,7 +6,7 @@
 -- days, which is what a panel wants to show next to the clock. A port of
 -- impasto's `claude_usage.py`, reading with `morf.fs` instead of Python.
 --
---   local claude_usage = require("lib.integrations.claude_usage")
+--   local claude_usage = require("services.claude_usage")
 --   local usage = claude_usage.new {}
 --   ui.Text { text = function()
 --     local u = usage:get()

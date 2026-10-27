@@ -1,4 +1,4 @@
-//! `library/lib/integrations/hyprland.lua` against a fake Hyprland.
+//! `library/lib/compositor/hyprland.lua` against a fake Hyprland.
 //!
 //! The library is pure Lua over `morf.socket`, so what needs testing is the
 //! conversation: that it asks the request socket the right questions, reads
@@ -230,7 +230,7 @@ fn wait_for(runtime: &mut Runtime, check: &str) {
 fn start(runtime: &mut Runtime, instance: &Instance) {
     let source = format!(
         r#"
-            H = require("lib.integrations.hyprland")
+            H = require("lib.compositor.hyprland")
             seen = {{ ws = 0, stars = 0, connects = 0, disconnects = 0 }}
             H.on("openwindow", function(address, workspace, class, title)
                 seen.open = {{ address, workspace, class, title }}
@@ -262,7 +262,7 @@ fn hyprland_library_is_harmless_without_hyprland() {
         .execute(
             &examples_script(),
             br#"
-                local H = require("lib.integrations.hyprland")
+                local H = require("lib.compositor.hyprland")
                 assert(H.start { signature = "" } == false)
                 assert(not H.available())
                 local answered = nil

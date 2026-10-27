@@ -1,9 +1,9 @@
--- `library/lib/util/spectrum.lua`: audio bands shaped into visualiser bars.
+-- `library/lib/shell/audio/spectrum.lua`: audio bands shaped into visualiser bars.
 --
 --     morf test library/tests/spectrum_spec.lua
 
 local test = morf.test
-local spectrum = require("lib.util.spectrum")
+local spectrum = require("lib.shell.audio.spectrum")
 
 local function run(filter, bands, frames)
   local bars

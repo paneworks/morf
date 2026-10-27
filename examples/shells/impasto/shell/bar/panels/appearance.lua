@@ -20,7 +20,7 @@ local thumbnails = require("services.thumbnails")
 local kit = require("components.kit")
 local controls = require("components.controls")
 local carousel = require("components.carousel")
-local palette = require("lib.util.palette")
+local palette = require("services.palette")
 
 local C = theme.color
 local fast = function() return theme.behave("fast") end

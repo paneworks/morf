@@ -952,10 +952,27 @@ is everything a theme or shell outside this repo needs to follow.
 
 ## Progress
 
-- [ ] 1. Deletions
-- [ ] 2. Library layout
+- [x] 1. Deletions
+- [x] 2. Library layout
 - [ ] 3. Kit reset
 - [ ] 4. Lua API
 - [ ] 5. Engine edges
 - [ ] 6. Examples
 - [ ] 7. Docs and changelog
+
+Where the branch differs from the plan above:
+- **Step 1:** the editor keeps only the two canvas models it uses
+  (`graph`, `district`) in `examples/apps/editor/canvas.lua`; the gallery
+  keeps its own copy of the canvas samples in `library/tests/gallery/`.
+- **Step 2:**
+  - `util.palette` lands in impasto as `shell/services/palette.lua`, beside
+    the other two, rather than `shell/lib/palette.lua`, which would put a
+    `lib.` module inside a shell.
+  - The Rust tests of the three modules impasto receives are kept and point
+    at impasto's copies: they build PNG fixtures and serve recorded HTTP
+    answers that a spec cannot.
+  - `library/tests/hyprland_client.lua` was a configuration, not a fake: it
+    is inlined into `hyprland_config_spec.lua` instead of becoming
+    `testing.hyprland_client`.
+  - `lib/compositor` is held for approval like `lib/integrations`, so
+    `compositor.hyprland` keeps its permission manifest's meaning.

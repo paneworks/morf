@@ -1,6 +1,6 @@
 -- The service registry: descriptors as data, the generic binder, the
 -- refusal of an unknown name, and teardown that leaves nothing behind,
--- against the shared stand-in for `morf.dbus` (dbus_fake.lua), whose
+-- against the shared stand-in for `morf.dbus` (lib.testing.dbus), whose
 -- tokens close only as methods, like the engine's.
 --
 --     morf test --no-dbus library/tests/registry_spec.lua
@@ -9,7 +9,7 @@ local test = morf.test
 
 local HOST = [[
   local ui = require("morf.ui")
-  local fake = require("tests.dbus_fake")
+  local fake = require("lib.testing.dbus")
   local registry = require("lib.services.registry")
   local PROPS = "org.freedesktop.DBus.Properties"
   local DEMO, ROOT, IFACE, ITEM = "org.example.Demo", "/org/example/Demo", "org.example.Demo",
@@ -94,7 +94,7 @@ local HOST = [[
     local raw = fake.dbus.on_name_owner_changed("system", DEMO, function() end)
     local bare = pcall(raw.close)
     raw:close()
-    local client = require("lib.services.dbus_client").new({ dbus = fake.dbus })
+    local client = require("lib.services.dbus").new({ dbus = fake.dbus })
     local watch = client.watch_name(DEMO, function() end)
     return { bare = bare, closed = watch.close(), again = watch.close(), left = fake.subscription_total() }
   end

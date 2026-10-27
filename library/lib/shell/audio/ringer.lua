@@ -1,7 +1,7 @@
 -- Sound, vibrate or silent: how the machine calls for attention -- a
 -- phone's ring switch, for any shell.
 --
---   local ringer = require("lib.util.ringer")
+--   local ringer = require("lib.shell.audio.ringer")
 --   local ring = ringer.connect { mode = "sound" }  -- where it starts, off a phone
 --   ring.state.mode          -- "sound", "vibrate" or "silent"
 --   ring.modes()             -- the ones this machine has, in order
@@ -15,7 +15,7 @@
 -- notification, say, plays no sound while it is silent.
 
 local morf = require("morf")
-local dbus_client = require("lib.services.dbus_client")
+local dbus_client = require("lib.services.dbus")
 
 local ringer = {}
 

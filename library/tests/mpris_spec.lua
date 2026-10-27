@@ -8,7 +8,7 @@
 local test = morf.test
 
 local HOST = [[
-  local db = require("lib.services.dbus_client")
+  local db = require("lib.services.dbus")
   local PREFIX = "org.mpris.MediaPlayer2."
   local A, B = PREFIX .. "alpha", PREFIX .. "beta"
   local now = 100000

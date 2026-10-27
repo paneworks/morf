@@ -6,8 +6,8 @@
 //! directory tree, first-party when it is the engine's own library (or a
 //! byte-identical copy of one of its files), and imported otherwise: the
 //! user's site folder, `MORF_RUNTIME_PATH` roots, plugin scripts outside
-//! the configuration, and the library's `lib/integrations`, which morf
-//! ships but treats as third-party-shaped code.
+//! the configuration, and the library's `lib/integrations` and
+//! `lib/compositor`, which morf ships but treats as third-party-shaped code.
 //!
 //! Enforcement is load-time only. While an unapproved imported module's top
 //! level runs, every gated API called -- by it or by anything it causes to
@@ -112,7 +112,10 @@ impl ModuleDeclaration {
 
     /// Whether the module is one of the library's integrations.
     pub fn is_integration(&self) -> bool {
-        self.kind == ModuleKind::Module && self.name.starts_with(INTEGRATIONS)
+        self.kind == ModuleKind::Module
+            && INTEGRATIONS
+                .iter()
+                .any(|prefix| self.name.starts_with(prefix))
     }
 
     /// Declared groups outside the known vocabulary.

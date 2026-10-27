@@ -216,7 +216,7 @@ ui.Layout {
 }
 ```
 
-`library/lib/util/align.lua` is exactly that bar.
+`examples/demos/desktop/tray.lua` builds exactly that bar.
 
 ## 4. Lists
 
@@ -536,13 +536,13 @@ ui.reparent(ui.Text {
 
 ### Components
 
-`library/lib/util/component.lua` gives Elm's shape on these pieces: `init(args)`
+`examples/demos/desktop/polkit.lua` gives Elm's shape on these pieces: `init(args)`
 returns the model's table, `view(model, send)` runs once and returns a
 tree of bindings on the model, and `update(model, msg, send)` is the one
 place the model changes. `send(msg)` returns a handler; `send_with(fn)`
 builds the message from the handler's arguments; `dispatch(msg)` delivers
 one from code that is not a handler. A message that is a function runs
-and its return is the message. See `examples/demos/desktop/polkit.lua`.
+and its return is the message.
 
 ### States
 
@@ -1514,7 +1514,7 @@ screen. `examples/demos/sdf/path.lua` has one of each.
 {size=100, segments=72})` supplies the named expressive shapes;
 `shape_curves(shape, segments)` returns normalized cubic coordinates.
 `polygon(vertices, opts)`, `regular(sides, opts)`, `star(points, inner, opts)`
-and `lobes(count, inner, opts)` build custom outlines. `lib.util.m3shapes` wraps these
+and `lobes(count, inner, opts)` build custom outlines. `lib.theme.shapes` wraps these
 operations with the existing `Shape` node and morph animation controls.
 
 `graph_series(values, {width, height, samples, bottom=0, top, closed=false})`

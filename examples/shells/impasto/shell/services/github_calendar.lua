@@ -9,7 +9,7 @@
 -- still reads. With a token the GraphQL API answers the same question in a
 -- documented shape.
 --
---   local github = require("lib.integrations.github")
+--   local github = require("services.github_calendar")
 --   local me = github.new { user = "torvalds" }
 --   ui.Text { text = function()
 --     local calendar = me:get()

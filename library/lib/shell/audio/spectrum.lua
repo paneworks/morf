@@ -3,7 +3,7 @@
 -- The engine handles band resampling, sensitivity, smoothing, gravity and
 -- neighbour spread in Rust. This wrapper owns subscriptions and signals.
 --
---   local spectrum = require("lib.util.spectrum")
+--   local spectrum = require("lib.shell.audio.spectrum")
 --   local vis = spectrum.new { bars = 24 }
 --   for i = 1, 24 do
 --     ui.Rect { width = 6, height = function() return 4 + 60 * (vis.bars:get()[i] or 0) end }

@@ -2,7 +2,7 @@
 -- screen alike. The host places it and says which keyboard it wants; the
 -- keyboard says what was struck.
 --
---   local osk = require("lib.util.osk")
+--   local osk = require("lib.shell.osk")
 --   local kb = osk.new {
 --     width = 900,                    -- laid out across this
 --     mode = "full",                  -- see MODES
@@ -270,6 +270,7 @@ function osk.new(options)
   local function col(name, fallback)
     local v = look[name]
     if v == nil then v = fallback end
+    if type(v) == "string" then v = morf.color(v) end
     return function() if type(v) == "function" then return v() end return v end
   end
   local PANEL = col("panel", morf.color("#101418"))

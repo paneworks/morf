@@ -6,7 +6,7 @@
 local test = morf.test
 
 local HOST = [[
-  local db = require("lib.services.dbus_client")
+  local db = require("lib.services.dbus")
   local NAME = "org.freedesktop.UPower"
   local ROOT = "/org/freedesktop/UPower"
   local DISPLAY = ROOT .. "/devices/DisplayDevice"
@@ -84,7 +84,7 @@ end)
 -- What the module did before it was a descriptor and must keep doing, over
 -- the shared stand-in for `morf.dbus`.
 local BUS_HOST = [[
-  local fake = require("tests.dbus_fake")
+  local fake = require("lib.testing.dbus")
   local U, ROOT = "org.freedesktop.UPower", "/org/freedesktop/UPower"
   local DEV, PROPS = "org.freedesktop.UPower.Device", "org.freedesktop.DBus.Properties"
   local DISPLAY, BAT = ROOT .. "/devices/DisplayDevice", ROOT .. "/devices/battery_BAT0"

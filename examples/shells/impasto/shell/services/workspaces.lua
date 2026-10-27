@@ -15,7 +15,7 @@
 
 local settings = require("services.settings")
 
-local ok_lib, hyprland = pcall(require, "lib.integrations.hyprland")
+local ok_lib, hyprland = pcall(require, "lib.compositor.hyprland")
 if not ok_lib then
   morf.log("warn", "impasto: lib.hyprland did not load: " .. tostring(hyprland))
   hyprland = nil

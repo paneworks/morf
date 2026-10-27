@@ -1,7 +1,7 @@
 -- Unit conversion, as a launcher's calculator reads it: "10ft in m",
 -- "72 f to c", "5 gb in mib", "90 km/h in mph", "3h in min".
 --
---   local units = require("lib.util.units")
+--   local units = require("lib.shell.launcher.units")
 --   local value, unit = units.convert("10ft in m")   -- 3.048, "m"
 --   units.parse("10 ft to m")                        -- { value, from, to }
 --

@@ -1,4 +1,4 @@
--- Material 3 schemes from lib/util/material.lua: one colour, every variant, in
+-- Material 3 schemes from lib/theme/material.lua: one colour, every variant, in
 -- dark and light. A swatch per role that a shell draws with most.
 --
 --   morf render examples/demos/render/material.lua -o material.png --size 1200x900
@@ -8,7 +8,7 @@ morf.surface.height = 956
 morf.surface.anchors = { top = true, left = true }
 
 local ui = require("morf.ui")
-local material = require("lib.util.material")
+local material = require("lib.theme.material")
 
 local source = morf.env("MATERIAL_SOURCE") or "#4a7fb5"
 local ROLES = {

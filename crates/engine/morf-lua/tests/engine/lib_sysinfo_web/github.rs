@@ -52,7 +52,7 @@ fn github_reads_the_contributions_page() {
     let text = run(
         &format!(
             r##"
-            local github = require("lib.integrations.github")
+            local github = require("services.github_calendar")
             local octo = github.new {{ user = "octo", base_url = "{base}", cache_dir = "{cache}",
               today = function() return "2026-01-20" end }}
             local reported = false
@@ -120,7 +120,7 @@ fn github_asks_graphql_with_a_token() {
     let text = run(
         &format!(
             r##"
-            local github = require("lib.integrations.github")
+            local github = require("services.github_calendar")
             local octo = github.new {{ user = "octo", token = "secret", api_url = "{base}/graphql",
               cache_dir = "{cache}", today = function() return "2026-01-20" end }}
             local reported = false

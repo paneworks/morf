@@ -1,6 +1,6 @@
 -- A tray that brings its own watcher.
 --
--- The watcher is `library/lib/services/tray_watcher.lua`, served from this process;
+-- The watcher is `library/lib/services/tray.lua`, served from this process;
 -- the host is the engine's own `morf.status_notifier`, which then finds the
 -- watcher beside it. Two halves that used to need two programs -- on a bare
 -- session the host had nothing to register with and the tray stayed empty.
@@ -10,9 +10,43 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local align = require("lib.util.align")
-local tray_watcher = require("lib.services.tray_watcher")
-local dbusmenu = require("lib.services.dbusmenu")
+local tray_watcher = require("lib.services.tray")
+local dbusmenu = require("lib.services.tray_menu")
+
+-- The bar layout: something at the left, something at the right, and
+-- something in the middle, centred in the whole bar rather than in what the
+-- sides leave, so the clock stays put when the sides grow. `gap` keeps the
+-- sides off the edges.
+local function bar(options)
+  local gap = options.gap or 0
+  options.gap = nil
+  local count = #options
+  options.measure = function(available, children)
+    local width, height = 0, 0
+    for _, child in ipairs(children) do
+      width = width + child.width
+      height = math.max(height, child.height)
+    end
+    if available.width < math.huge then width = available.width end
+    return width + gap * 2, height
+  end
+  options.place = function(bounds, children)
+    local placements = {}
+    for index, child in ipairs(children) do
+      local x
+      if index == 1 and count > 1 then
+        x = gap
+      elseif index == count then
+        x = bounds.width - child.width - gap
+      else
+        x = (bounds.width - child.width) / 2
+      end
+      placements[index] = { x = x, y = (bounds.height - child.height) / 2 }
+    end
+    return placements
+  end
+  return ui.Layout(options)
+end
 
 morf.surface.height = 40
 
@@ -70,10 +104,10 @@ morf.ipc.click = function(id)
 end
 
 -- The watcher's state at the left, the count at the right, the clock in
--- the middle: the bar layout, from `lib/util/align.lua`, filling the surface.
+-- the middle: the bar layout above, filling the surface.
 ui.Rect {
   color = "#101418",
-  align.bar {
+  bar {
     anchors = { fill = true },
     gap = 12,
     ui.Text {

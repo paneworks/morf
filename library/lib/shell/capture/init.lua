@@ -67,7 +67,7 @@ end
 function M.windows(cb)
   local kind=M.kind()
   if kind=="hyprland" then
-    local hypr=require("lib.integrations.hyprland")
+    local hypr=require("lib.compositor.hyprland")
     hypr.json("monitors",function(monitors)
       hypr.json("clients",function(clients) cb(M.windows_from(kind,clients,nil,monitors)) end)
     end)
@@ -132,7 +132,7 @@ function M.binding_plan(binding,previous,flavour)
     unbind=conf(old),new_unbind=conf(keys),bind=conf(keys)..",exec,"..command}
 end
 function M.rebind(binding,previous,include_file,cb)
-  local lib=require("lib.integrations.hyprland_config")
+  local lib=require("lib.compositor.hyprland_config")
   if not lib.available() then cb(false,"Key rebinding requires Hyprland; use your compositor's settings") return end
   lib.flavour(function(flavour)
     local plan,why=M.binding_plan(binding,previous,flavour)
@@ -141,7 +141,7 @@ function M.rebind(binding,previous,include_file,cb)
       local path=M.expand(include_file) local parent=path:match("^(.*)/[^/]+$") if parent then morf.fs.mkdir(parent) end
       local ok,error=morf.fs.write(path,plan.text) if not ok then cb(false,error or "Cannot write binding file") return end
     end
-    local hypr=require("lib.integrations.hyprland")
+    local hypr=require("lib.compositor.hyprland")
     if flavour=="lua" then hypr.eval(plan.text,function(reply,error) cb(reply and reply:match("^%s*ok%s*$")~=nil,error or reply) end)
     else hypr.keyword("unbind",plan.unbind,function()
       hypr.keyword("unbind",plan.new_unbind,function()

@@ -126,7 +126,7 @@ M.windows = {}
 
 local function load_windows()
   M.windows = {}
-  local ok, hyprland = pcall(require, "lib.integrations.hyprland")
+  local ok, hyprland = pcall(require, "lib.compositor.hyprland")
   if not ok or not hyprland.available or not hyprland.available() then return end
   hyprland.json("j/monitors", function(monitors)
     hyprland.json("j/clients", function(clients)

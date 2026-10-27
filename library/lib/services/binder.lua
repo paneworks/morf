@@ -14,7 +14,7 @@
 --   `close()`.
 
 local morf = require("morf")
-local dbus_client = require("lib.services.dbus_client")
+local dbus_client = require("lib.services.dbus")
 
 local binder = {}
 

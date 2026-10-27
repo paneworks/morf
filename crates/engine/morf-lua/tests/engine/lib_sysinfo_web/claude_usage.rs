@@ -54,7 +54,7 @@ fn transcripts(root: &std::path::Path) {
 fn usage_script(root: &std::path::Path, extra: &str) -> String {
     format!(
         r##"
-        local claude_usage = require("lib.integrations.claude_usage")
+        local claude_usage = require("services.claude_usage")
         local now = claude_usage.hour_of("2026-01-20T12:00:00Z") * 3600 + 1800
         local root = "{root}"
         local function make()
@@ -160,7 +160,7 @@ fn claude_usage_asks_for_the_limits_only_when_called() {
     let text = run(
         &format!(
             r##"
-            local claude_usage = require("lib.integrations.claude_usage")
+            local claude_usage = require("services.claude_usage")
             claude_usage.limits({{ credentials = "{root}/.credentials.json", url = "{base}/v1/messages" }},
               function(result)
                 note(tostring(result.available) .. " " .. tostring(result.error ~= nil))

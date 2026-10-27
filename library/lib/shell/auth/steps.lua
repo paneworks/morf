@@ -2,7 +2,7 @@
 -- looking for a face, waiting at the fingerprint reader, asking for the
 -- password, through -- for a shell that wants to show it.
 --
---   local authsteps = require("lib.util.authsteps")
+--   local authsteps = require("lib.shell.auth.steps")
 --   local steps = authsteps.new()
 --   steps.watch()           -- what the markers write, in the runtime dir
 --   morf.ipc["auth-step"] = steps.mark      -- or said over IPC

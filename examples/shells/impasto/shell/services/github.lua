@@ -1,17 +1,16 @@
 -- The GitHub contribution wall, for the desk's GitHub faces.
 --
--- Port of GithubService.qml over `lib.github`, which lands in lua-stdlib
--- separately. Until it does, or with no `githubUser` set, the wall is
--- unavailable and the faces say why. The reading is taken as the library
--- gives it: `weeks` (columns of seven days, Sunday first, each a day with
--- its `level` 0..4, nil outside the range), `total`, `current_streak`, `today`.
+-- Port of GithubService.qml over `services.github_calendar`. With no
+-- `githubUser` set, the wall is unavailable and the faces say why. The
+-- reading is taken as the calendar gives it: `weeks` (columns of seven days,
+-- Sunday first, each a day with its `level` 0..4, nil outside the range),
+-- `total`, `current_streak`, `today`.
 
 local settings = require("services.settings")
 
 local M = {}
 
-local ok, lib = pcall(require, "lib.integrations.github")
-if not ok then lib = nil end
+local lib = require("services.github_calendar")
 
 local handle, handle_user = nil, nil
 local EMPTY = { available = false, weeks = {}, total = 0, streak = 0, today = 0 }
@@ -21,7 +20,6 @@ local function user()
 end
 
 local function source()
-  if not lib then return nil end
   local name = user()
   if name == "" then return nil end
   if handle == nil or handle_user ~= name then

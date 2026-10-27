@@ -5,7 +5,7 @@
 -- was used a lot last year does not outrank what is used every day now.
 -- The store is a small JSON file, written a moment after a launch.
 --
---   local frecency = require("lib.util.frecency")
+--   local frecency = require("lib.shell.launcher.frecency")
 --   local used = frecency.open { path = morf.state_path("launches.json") }
 --   used.record(app.id)                            -- on launch
 --   used.score(app.id)                             -- 0 for never

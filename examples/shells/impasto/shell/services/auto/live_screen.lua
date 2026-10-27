@@ -20,7 +20,7 @@
 
 local state = require("bar.island_state")
 
-local ok_lib, hyprland = pcall(require, "lib.integrations.hyprland")
+local ok_lib, hyprland = pcall(require, "lib.compositor.hyprland")
 if not ok_lib then hyprland = nil end
 
 local M = {}

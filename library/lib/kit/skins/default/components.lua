@@ -722,7 +722,7 @@ return function(theme)
   -- ------------------------------------------------------------ shapes --
 
   local shapes
-  local function m3() shapes = shapes or require("lib.util.m3shapes") return shapes end
+  local function m3() shapes = shapes or require("lib.theme.shapes") return shapes end
 
   function M.shape_path(...) return m3().path(...) end
 

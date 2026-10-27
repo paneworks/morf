@@ -1,7 +1,7 @@
--- Emoji by name: every one lib/util/emoji_data.lua knows (Unicode's own names),
+-- Emoji by name: every one lib/shell/emoji/data.lua knows (Unicode's own names),
 -- searched fuzzily.
 --
---   local emoji = require("lib.util.emoji")
+--   local emoji = require("lib.shell.emoji")
 --   for _, hit in ipairs(emoji.search("party", 20)) do print(hit.char, hit.name) end
 
 local morf = require("morf")
@@ -13,7 +13,7 @@ local all -- { char, name } rows, read on first use
 local function load()
   if all then return all end
   all = {}
-  for i, row in ipairs(require("lib.util.emoji_data")) do
+  for i, row in ipairs(require("lib.shell.emoji.data")) do
     all[i] = { char = row[1], name = row[2] }
   end
   return all

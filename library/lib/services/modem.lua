@@ -16,7 +16,7 @@
 -- available and costs one look at the bus: a laptop is not asked twice.
 
 local morf = require("morf")
-local dbus_client = require("lib.services.dbus_client")
+local dbus_client = require("lib.services.dbus")
 
 local modem = {}
 

@@ -38,7 +38,7 @@
 static const long long cooldowns[] = {30, 60, 300, 900};
 #define LOCK_STRIKES (unsigned)(sizeof(cooldowns) / sizeof(cooldowns[0]) + 1)
 
-/* The same adjacency rule is used by lib.util.pattern at the UI boundary. */
+/* The same adjacency rule is used by lib.shell.auth.pattern at the UI boundary. */
 static const char *invalid_pattern(const char *s) {
     size_t n = strlen(s);
     if (n < 4 || n > 9) return "Connect four to nine dots.";

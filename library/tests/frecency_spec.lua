@@ -1,11 +1,11 @@
--- `library/lib/util/frecency.lua`: launches remembered, decaying, and ranked.
+-- `library/lib/shell/launcher/frecency.lua`: launches remembered, decaying, and ranked.
 --
 --     morf test library/tests/frecency_spec.lua
 
 local test = morf.test
 
 local HOST = [[
-  local frecency = require("lib.util.frecency")
+  local frecency = require("lib.shell.launcher.frecency")
   local clock = 1000000
   local used = frecency.open {
     path = morf.env("XDG_STATE_HOME") .. "/launches.json",

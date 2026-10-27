@@ -7,7 +7,7 @@
 -- variants differ only in how they place the palettes around the source
 -- colour's hue and how much chroma each gets.
 --
---   local material = require("lib.util.material")
+--   local material = require("lib.theme.material")
 --   local s = material.scheme("#4a7fb5", { variant = "tonal_spot", mode = "dark" })
 --   s.primary  s.onPrimary  s.surfaceContainerHigh   -- morf.color values
 --   material.hex(s)                                   -- the same, as "#rrggbb"
@@ -18,7 +18,7 @@
 --
 -- The role names are Material's (primaryContainer, onSurfaceVariant, ...),
 -- which is what configurations written for M3 shells expect. The terminal
--- set and file writers are lib/util/palette.lua's; `material.terminal(s)` makes
+-- set is the one a palette's file writers take; `material.terminal(s)` makes
 -- the sixteen colours from a scheme for them.
 --
 -- The palette rules and the source colour score follow Material Color
@@ -284,7 +284,7 @@ end
 local TERMINAL_HUES = { nil, 25, 145, 95, 265, 330, 200, nil }
 
 --- Sixteen terminal colours and the usual extras from a scheme, in
---- lib/util/palette.lua's `terminal` shape: `color0`..`color15`, `foreground`,
+--- a palette's `terminal` shape: `color0`..`color15`, `foreground`,
 --- `background`, `cursor`, `cursor_text`, `selection`,
 --- `selection_foreground`. The hues are the usual ones, tinted a little
 --- towards the scheme's primary, with the scheme's chroma.

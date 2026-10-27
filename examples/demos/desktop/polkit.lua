@@ -15,7 +15,7 @@
 -- cannot look at the screen. The password is typed into the card and
 -- nowhere else.
 --
--- The card is a component (`library/lib/util/component.lua`): one model with
+-- The card is a component (`component` below): one model with
 -- the fields the card shows, one `update` where every change to it lives,
 -- and a view that is functions of the model. What Escape does is one
 -- branch of one function, not four handlers.
@@ -23,7 +23,49 @@
 local morf = require("morf")
 local ui = require("morf.ui")
 local polkit_agent = require("lib.services.polkit_agent")
-local component = require("lib.util.component")
+
+-- A component: `init(args)` gives the model (a `morf.state`), `update(model,
+-- msg, send)` is the one place it changes, and `view(model, send)` runs once
+-- and returns a tree of functions of the model. `send(msg)` returns a handler
+-- that delivers the message, `send_with(fn)` one that builds it from the
+-- handler's arguments, and `dispatch(msg)` delivers one now. A message that
+-- is a function is a command: it runs, and what it returns is the message.
+local component = {}
+
+--- Defines a component and returns its constructor.
+function component.define(spec)
+  assert(type(spec.init) == "function", "component needs init")
+  assert(type(spec.update) == "function", "component needs update")
+  assert(type(spec.view) == "function", "component needs view")
+  return function(args)
+    local instance = {}
+    local model = morf.state(spec.init(args or {}))
+    local queue, draining = {}, false
+
+    local function dispatch(msg)
+      queue[#queue + 1] = msg
+      if draining then return end
+      draining = true
+      while #queue > 0 do
+        local next = table.remove(queue, 1)
+        if type(next) == "function" then next = next() end
+        if next ~= nil then spec.update(model, next, instance.send) end
+      end
+      draining = false
+    end
+
+    function instance.send(msg)
+      return function() dispatch(msg) end
+    end
+    function instance.send_with(build)
+      return function(...) dispatch(build(...)) end
+    end
+    instance.dispatch = dispatch
+    instance.model = model
+    instance.root = spec.view(model, instance.send, instance)
+    return instance
+  end
+end
 
 local W = 520
 local IDLE_HEIGHT, OPEN_HEIGHT = 1, 196
