@@ -1,5 +1,5 @@
 //! Root-issued, expiring native controller work. No Lua values cross threads.
-use crate::process::native::PeerIdentity;
+use crate::provider::transport::PeerIdentity;
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},

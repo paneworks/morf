@@ -65,7 +65,7 @@ pub enum Turn {
 
 /// One output's windows on a backend.
 pub struct Host {
-    pub(crate) native_contacts: crate::host::provider::handoff::Contacts,
+    pub(crate) native_contacts: crate::provider::shell::handoff::Contacts,
     pub(crate) runtime_generation: u64,
     /// Witnessed the primary surface's configure on this backend generation.
     pub(crate) primary_configured: bool,

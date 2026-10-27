@@ -106,8 +106,8 @@ morf.geometry.shape_path	undocumented: path geometry generators; the guide docum
 morf.geometry.shape_segments	undocumented: path geometry generators; the guide documents ui.Path
 morf.geometry.star	undocumented: path geometry generators; the guide documents ui.Path
 morf.geometry.ticks	undocumented: path geometry generators; the guide documents ui.Path
-morf.greetd.connect	undocumented: greetd client for greeter configurations (docs/LOCK_PROVIDER.md)
-morf.greetd.converse	undocumented: greetd client for greeter configurations (docs/LOCK_PROVIDER.md)
+morf.greetd.connect	undocumented: greetd client for greeter configurations (docs/PREK.md)
+morf.greetd.converse	undocumented: greetd client for greeter configurations (docs/PREK.md)
 morf.image.has_icon	undocumented: icon theme lookups; the guide documents ui.Image sources
 morf.http.get	undocumented: HTTP client; no guide section yet
 morf.http.post	undocumented: HTTP client; no guide section yet
@@ -128,7 +128,7 @@ morf.json.encode	undocumented: JSON helpers beyond decode; no guide section yet
 morf.json.null	undocumented: JSON helpers beyond decode; no guide section yet
 morf.json.object	undocumented: JSON helpers beyond decode; no guide section yet
 morf.launch_time_ms	undocumented: process and path introspection; no guide section yet
-morf.lock.surface	undocumented: session-lock API for lock configurations (docs/LOCK_PROVIDER.md)
+morf.lock.surface	undocumented: session-lock API for lock configurations (docs/PREK.md)
 morf.log	undocumented: Lua logging functions; reading the log is `morf log` (docs/TESTING.md)
 morf.log.debug	undocumented: Lua logging functions; reading the log is `morf log` (docs/TESTING.md)
 morf.log.error	undocumented: Lua logging functions; reading the log is `morf log` (docs/TESTING.md)
@@ -137,20 +137,20 @@ morf.log.warn	undocumented: Lua logging functions; reading the log is `morf log`
 morf.window.menu	undocumented: no guide section yet
 morf.window.on_backdrop_click	undocumented: surface input hooks; no guide section yet
 morf.window.on_keyboard_focus	undocumented: surface input hooks; no guide section yet
-morf.lock.on_state	undocumented: session-lock API for lock configurations (docs/LOCK_PROVIDER.md)
-morf.lock.on_locked	undocumented: session-lock API for lock configurations (docs/LOCK_PROVIDER.md)
+morf.lock.on_state	undocumented: session-lock API for lock configurations (docs/PREK.md)
+morf.lock.on_locked	undocumented: session-lock API for lock configurations (docs/PREK.md)
 morf.operands	undocumented: process and path introspection; no guide section yet
 morf.options	undocumented: process and path introspection; no guide section yet
 morf.output_power	undocumented: output power control; no guide section yet
 morf.output_power.set	undocumented: output power control; no guide section yet
-morf.pam.authenticate	undocumented: PAM conversation for lock and greeter configurations (docs/LOCK_PROVIDER.md)
-morf.pam.session	undocumented: PAM conversation for lock and greeter configurations (docs/LOCK_PROVIDER.md)
+morf.pam.authenticate	undocumented: PAM conversation for lock and greeter configurations (docs/PREK.md)
+morf.pam.session	undocumented: PAM conversation for lock and greeter configurations (docs/PREK.md)
 morf.process_id	undocumented: process and path introspection; no guide section yet
 morf.quit	undocumented: lifecycle and reload hooks; no guide section yet
 morf.screencopy.capture	undocumented: screen capture for capture tooling
 morf.screencopy.capture_window	undocumented: screen capture for capture tooling
 morf.screencopy.release	undocumented: screen capture for capture tooling
-morf.lock.state	undocumented: session-lock API for lock configurations (docs/LOCK_PROVIDER.md)
+morf.lock.state	undocumented: session-lock API for lock configurations (docs/PREK.md)
 morf.shader.define	undocumented: shader programs; the guide documents shader properties on nodes
 morf.shader.data	undocumented: shader programs; the guide documents shader properties on nodes
 morf.shell_id	undocumented: process and path introspection; no guide section yet
@@ -210,6 +210,6 @@ ui.Inset	undocumented: constructor with no guide section yet
 +morf.surface.subpixel_text	dynamic: surface property served through __index in api/window/layer.rs
 +morf.surface.width	dynamic: surface property served through __index in api/window/layer.rs
 +morf.toplevels.model	dynamic: list model served through __index in api/desktop/toplevels.rs
-morf.lock	undocumented: session-lock API for lock configurations (docs/LOCK_PROVIDER.md)
+morf.lock	undocumented: session-lock API for lock configurations (docs/PREK.md)
 morf.encoding	undocumented: base64, URL encoding, digests and UUIDs; no guide section yet
 morf.shader	undocumented: shader programs; the guide documents shader properties on nodes

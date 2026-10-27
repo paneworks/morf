@@ -1,6 +1,6 @@
 //! Native shell connection evidence. This reports connection/configuration
 //! lifetime, never Lua-declared geometry, authentication or action authority.
-use crate::process::native::{Endpoint, SocketPath, birth, peer, server};
+use crate::provider::transport::{Endpoint, SocketPath, birth, peer, server};
 mod controls;
 pub(crate) mod handoff;
 mod rendered;

@@ -79,7 +79,7 @@ fn drive_surface(
     let loading = Instant::now();
     let runtime_directory =
         std::env::var_os("XDG_RUNTIME_DIR").ok_or("XDG_RUNTIME_DIR is unset")?;
-    let gate = crate::host::provider::handoff::Gate::open_at(Path::new(&runtime_directory), &name)
+    let gate = crate::provider::shell::handoff::Gate::open_at(Path::new(&runtime_directory), &name)
         .map_err(|error| error.to_string())?;
     let recognizer_policy = gate.clone();
     runtime
@@ -192,13 +192,13 @@ fn drive_surface(
 fn native_shell_provider(
     client: &LayerClient,
     name: &str,
-    gate: std::sync::Arc<crate::host::provider::handoff::Gate>,
-) -> Option<crate::host::provider::Provider> {
+    gate: std::sync::Arc<crate::provider::shell::handoff::Gate>,
+) -> Option<crate::provider::shell::Provider> {
     let output = client.own_output()?.name?;
     if output != name {
         return None;
     }
-    match crate::host::provider::Provider::bind_with_gate(
+    match crate::provider::shell::Provider::bind_with_gate(
         client.connection().backend().poll_fd(),
         &output,
         gate,

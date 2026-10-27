@@ -1,5 +1,5 @@
 //! Peer credentials, ownership fences and payload checks for controller work.
-use crate::process::native::{PeerIdentity, birth};
+use crate::provider::transport::{PeerIdentity, birth};
 use serde_json::Value;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 

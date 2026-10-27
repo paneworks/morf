@@ -156,7 +156,7 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
     let ipc = crate::lock::ipc::LockIpc::bind(path)?;
     let client = LayerClient::connect_lock().map_err(|error| error.to_string())?;
     let provider =
-        match crate::lock::provider::Provider::bind(client.connection().backend().poll_fd()) {
+        match crate::provider::lock::Provider::bind(client.connection().backend().poll_fd()) {
             Ok(provider) => Some(provider),
             Err(error) => {
                 runtime.warn(format!("native lock provider: {error}"));

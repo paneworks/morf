@@ -7,7 +7,6 @@ mod desktop_tests;
 pub mod events;
 pub mod layers;
 pub mod popups;
-pub mod provider;
 pub mod reload_band;
 pub mod run;
 pub mod surfaces;

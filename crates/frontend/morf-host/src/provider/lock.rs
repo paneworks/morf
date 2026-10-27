@@ -9,9 +9,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::process::native::{Endpoint, PeerIdentity, SocketPath, birth, peer, server};
+use crate::provider::transport::{Endpoint, PeerIdentity, SocketPath, birth, peer, server};
 #[cfg(test)]
-use crate::process::native::{MAX_PEERS, MAX_REQUEST};
+use crate::provider::transport::{MAX_PEERS, MAX_REQUEST};
 
 const RELEASE_WAIT: Duration = Duration::from_secs(2);
 

@@ -17,3 +17,4 @@ pub mod input;
 pub mod lock;
 pub mod paint;
 pub mod process;
+pub mod provider;
