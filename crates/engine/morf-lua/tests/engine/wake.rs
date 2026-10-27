@@ -13,31 +13,6 @@ fn runtime_with(source: &str) -> Runtime {
 }
 
 #[test]
-fn a_format_says_how_often_its_text_can_change() {
-    assert_eq!(ClockPrecision::of_format("%H:%M"), ClockPrecision::Minutes);
-    assert_eq!(
-        ClockPrecision::of_format("%-I:%M %p"),
-        ClockPrecision::Minutes
-    );
-    assert_eq!(ClockPrecision::of_format("%R"), ClockPrecision::Minutes);
-    assert_eq!(
-        ClockPrecision::of_format("%H:%M:%S"),
-        ClockPrecision::Seconds
-    );
-    assert_eq!(ClockPrecision::of_format("%T"), ClockPrecision::Seconds);
-    assert_eq!(ClockPrecision::of_format("%A %d %B"), ClockPrecision::Hours);
-    assert_eq!(ClockPrecision::of_format("%Y-%m-%d"), ClockPrecision::Hours);
-    assert_eq!(ClockPrecision::of_format("%H h"), ClockPrecision::Hours);
-    assert_eq!(
-        ClockPrecision::of_format("no time at all"),
-        ClockPrecision::Hours
-    );
-    // Something this does not know is taken as the finest there is.
-    assert_eq!(ClockPrecision::of_format("%H %K"), ClockPrecision::Seconds);
-    assert_eq!(ClockPrecision::of_format("%.3f"), ClockPrecision::Seconds);
-}
-
-#[test]
 fn the_clock_turns_over_within_its_grain() {
     for (precision, most) in [
         (ClockPrecision::Seconds, Duration::from_millis(1_002)),
@@ -70,7 +45,7 @@ fn the_clock_is_read_at_the_grain_the_bindings_show() {
     let seconds = runtime_with(
         r#"
         local ui = require("morf.ui")
-        ui.Text { text = function() return morf.clock:get() end }
+        ui.Text { text = function() return morf.time.clock:get() end }
         "#,
     );
     assert_eq!(seconds.clock_precision(), Some(ClockPrecision::Seconds));
@@ -78,28 +53,15 @@ fn the_clock_is_read_at_the_grain_the_bindings_show() {
     let minutes = runtime_with(
         r#"
         local ui = require("morf.ui")
-        ui.Text { text = function() return morf.minute_clock:get() end }
+        ui.Text { text = function() return morf.time.minute_clock:get() end }
         "#,
     );
     assert_eq!(minutes.clock_precision(), Some(ClockPrecision::Minutes));
 
-    // A clock made at seconds, formatted with no seconds in it.
-    let formatted = runtime_with(
-        r#"
-        local ui = require("morf.ui")
-        local core = require("morf.core")
-        local clock = core.system_clock()
-        ui.Text { text = function() return clock:format("%H:%M") end }
-        "#,
-    );
-    assert_eq!(formatted.clock_precision(), Some(ClockPrecision::Minutes));
-
     let hours = runtime_with(
         r#"
         local ui = require("morf.ui")
-        local core = require("morf.core")
-        local clock = core.system_clock { precision = "hours" }
-        ui.Text { text = function() return clock:format("%A") end }
+        ui.Text { text = function() return morf.time.hour_clock:get() end }
         "#,
     );
     assert_eq!(hours.clock_precision(), Some(ClockPrecision::Hours));
@@ -108,10 +70,8 @@ fn the_clock_is_read_at_the_grain_the_bindings_show() {
     let both = runtime_with(
         r#"
         local ui = require("morf.ui")
-        local core = require("morf.core")
-        local clock = core.system_clock { precision = "seconds" }
-        ui.Text { text = function() return clock:format("%A") end }
-        ui.Text { text = function() return clock:format("%S") end }
+        ui.Text { text = function() return morf.time.hour_clock:get() end }
+        ui.Text { text = function() return morf.time.clock:get() end }
         "#,
     );
     assert_eq!(both.clock_precision(), Some(ClockPrecision::Seconds));
@@ -122,7 +82,7 @@ fn a_timer_is_a_deadline_the_loop_sleeps_until() {
     let mut runtime = runtime_with(
         r#"
         local fired = 0
-        morf.timer(150, function() fired = fired + 1 end, true)
+        morf.time.timer(150, function() fired = fired + 1 end, true)
         morf.ipc.fired = function() return fired end
         "#,
     );

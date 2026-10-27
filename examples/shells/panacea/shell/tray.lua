@@ -17,13 +17,13 @@ local tray = {}
 tray.items = morf.list_model({})
 tray.count = morf.signal("panacea.tray.count", 0)
 
-local watcher_ok, tray_watcher = pcall(require, "lib.services.tray_watcher")
+local watcher_ok, tray_watcher = pcall(require, "lib.services.tray")
 if watcher_ok then
   local served = tray_watcher.serve and tray_watcher.serve()
   tray.watcher = served
 end
 
-local menus_ok, dbusmenu = pcall(require, "lib.services.dbusmenu")
+local menus_ok, dbusmenu = pcall(require, "lib.services.tray_menu")
 
 local subscribed = pcall(morf.status_notifier.subscribe, function(items)
   local rows = {}
@@ -59,8 +59,8 @@ local function open_menu(row)
   local menu = dbusmenu.for_item(row.service .. row.path)
   if not menu then return activate(row) end
   local ok, entries = pcall(menu.entries)
-  if ok and type(entries) == "table" and morf.menu then
-    pcall(morf.menu, entries)
+  if ok and type(entries) == "table" and morf.window.menu then
+    pcall(morf.window.menu, entries)
   end
 end
 

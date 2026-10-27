@@ -71,8 +71,6 @@ pub(crate) enum ViewKind {
 
 pub(crate) use morf_runtime::reactive::Effect as LuaEffect;
 
-pub(crate) use morf_runtime::retention::RetainCallbacks;
-
 pub(crate) use morf_runtime::reactive::{ClaimInput, ClaimSink, EffectSink, PropertySink};
 
 #[cfg(test)]
@@ -122,7 +120,7 @@ pub(crate) struct ReactiveState {
     toplevels: Option<crate::api::desktop::toplevels::ToplevelHost>,
     /// udev monitors, tray hosts and `morf.http` requests in flight.
     feeds: Feeds,
-    /// `morf.spawn` children and `morf.connect` connections.
+    /// `morf.process.spawn` children and `morf.socket.connect` connections.
     io: crate::api::io::io::IoHub,
     /// `morf.fs.watch` watches.
     watches: crate::api::io::watch::WatchHub,

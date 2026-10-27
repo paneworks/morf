@@ -448,7 +448,7 @@ local function write(next)
   sync_keys()
   if not saving then
     saving = true
-    morf.timer(120, function()
+    morf.time.timer(120, function()
       saving = false
       settings.set("centreBlocks", blocks)
     end, false)

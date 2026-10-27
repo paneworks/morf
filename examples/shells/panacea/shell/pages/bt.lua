@@ -60,7 +60,7 @@ function page.on_close()
   page.scan(false)
 end
 
-morf.timer(3000, function()
+morf.time.timer(3000, function()
   if page.scanning:get() then page.refresh() end
 end, true)
 
@@ -86,11 +86,11 @@ function page.build(island)
       active = function() return row.connected end,
       on_click = function()
         system.bluetooth_connect(row.path, not row.connected)
-        morf.timer(2000, page.refresh, false)
+        morf.time.timer(2000, page.refresh, false)
       end,
       right = row.paired and kit.cross(function()
         system.bluetooth_forget(row.path)
-        morf.timer(600, page.refresh, false)
+        morf.time.timer(600, page.refresh, false)
       end) or nil,
     }
   end
@@ -105,7 +105,7 @@ function page.build(island)
       on = function() return state.bluetooth.powered end,
       set = function(on)
         system.set_bluetooth_power(on)
-        morf.timer(800, page.refresh, false)
+        morf.time.timer(800, page.refresh, false)
       end,
     },
     kit.section("Devices", function() return page.devices:len() > 0 end),

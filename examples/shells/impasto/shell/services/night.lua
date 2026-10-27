@@ -102,7 +102,7 @@ local function stop()
     pcall(handle.kill, handle, "TERM")
     handle = nil
   elseif pid then
-    pcall(morf.kill, pid, "TERM")
+    pcall(morf.process.kill, pid, "TERM")
   end
   M.running:set(false)
   return true
@@ -112,12 +112,12 @@ local retune_timer = nil
 --- The running hyprsunset to the setting's temperature, over its socket.
 local function retune()
   if retune_timer then retune_timer:cancel() end
-  retune_timer = morf.timer(120, function()
+  retune_timer = morf.time.timer(120, function()
     retune_timer = nil
     local path = socket_path()
     if not path or not alive_pid() then return end
     act.run("warm the screen to " .. kelvin() .. " K", function()
-      morf.request_socket(path, "temperature " .. kelvin(), function(_, err)
+      morf.socket.request(path, "temperature " .. kelvin(), function(_, err)
         if err then morf.log("warn", "impasto: hyprsunset did not answer: " .. tostring(err)) end
       end, { timeout_ms = 2000 })
       return true
@@ -149,7 +149,7 @@ end
 -- At login the setting is put back, once, by the live screen -- which is
 -- decided a moment after the shell starts, so this follows it.
 local restored = false
-morf.timer(1200, function()
+morf.time.timer(1200, function()
   if alive_pid() then
     restored = true
     M.running:set(true)
@@ -159,7 +159,7 @@ morf.timer(1200, function()
     if restored or not live.here() then return end
     restored = true
     if settings.nightLight and M.available() then
-      morf.timer(1, function()
+      morf.time.timer(1, function()
         if not alive_pid() then act.run("restore the night light", start) end
       end, false)
     end

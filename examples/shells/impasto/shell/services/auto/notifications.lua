@@ -8,5 +8,5 @@ local notifications = require("services.notifications")
 local function follow(primary)
   if primary then notifications.start() end
 end
-follow(morf.primary())
-morf.on_primary(follow)
+follow(morf.window.primary())
+morf.window.on_primary(follow)

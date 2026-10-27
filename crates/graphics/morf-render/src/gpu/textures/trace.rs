@@ -12,8 +12,7 @@ pub(super) struct ImageTrace<'a> {
 impl<'a> ImageTrace<'a> {
     pub(super) fn start(source: &'a str, command: usize) -> Self {
         static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        let on =
-            *ON.get_or_init(|| std::env::var("MORF_FRAME_LOG").is_ok_and(|value| value == "2"));
+        let on = *ON.get_or_init(|| morf_value::env::flags("MORF_PROFILE").has("render_split"));
         let started = on.then(Instant::now);
         Self {
             started,
@@ -44,9 +43,8 @@ impl Drop for ImageTrace<'_> {
         let total = started.elapsed().as_secs_f64() * 1000.0;
         static THRESHOLD: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
         let threshold = *THRESHOLD.get_or_init(|| {
-            std::env::var("MORF_RENDER_SPLIT_MS")
-                .ok()
-                .and_then(|value| value.parse::<f64>().ok())
+            morf_value::env::flags("MORF_PROFILE")
+                .parsed::<f64>("render_split")
                 .filter(|value| value.is_finite() && *value >= 0.0)
                 .unwrap_or(50.0)
         });

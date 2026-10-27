@@ -6,7 +6,7 @@
 //! name only one connection can own (a notification server, a tray watcher),
 //! a history file only one writer should keep. The host says which runtime
 //! is primary -- exactly one at a time -- and the configuration hears it
-//! through `morf.primary()` (tracked) and `morf.on_primary(fn(is_primary))`.
+//! through `morf.window.primary()` (tracked) and `morf.window.on_primary(fn(is_primary))`.
 //!
 //! When the duty moves, the runtime giving it up gives its bus names back
 //! before the next one is told ([`Runtime::release_bus_names`], which every
@@ -22,8 +22,8 @@ impl Runtime {
         self.reactive.borrow().session().is_primary()
     }
 
-    /// Makes this runtime the primary one, or not: `morf.primary()` follows
-    /// and the `morf.on_primary` callbacks hear the new value, once per
+    /// Makes this runtime the primary one, or not: `morf.window.primary()` follows
+    /// and the `morf.window.on_primary` callbacks hear the new value, once per
     /// change. Returns whether anything changed.
     ///
     /// Set before the configuration runs, it is simply what the configuration

@@ -75,7 +75,7 @@ function M.start(options)
     local handler = options.on_change
     if handler then
       -- Out of the effect, which only reads.
-      morf.timer(1, function() handler(closed) end, false)
+      morf.time.timer(1, function() handler(closed) end, false)
     end
   end)
 end

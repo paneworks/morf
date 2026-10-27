@@ -39,7 +39,7 @@ local ticking = false
 local function tick()
   if ticking then return end
   ticking = true
-  morf.timer(60000, function() minute:set(minute:get() + 1) end, true)
+  morf.time.timer(60000, function() minute:set(minute:get() + 1) end, true)
 end
 
 function M.day_key(seconds) return T.format("%Y-%m-%d", seconds) end
@@ -136,7 +136,7 @@ local function write()
   revision:set(revision:get() + 1)
   if not saving then
     saving = true
-    morf.timer(120, save, false)
+    morf.time.timer(120, save, false)
   end
 end
 
@@ -484,7 +484,7 @@ function M.open(key, from_board)
     -- so the sheet is built afresh for the new one.
     M.leave()
     direct:set(not from_board)
-    morf.timer(30, function() opened:set(want) end, false)
+    morf.time.timer(30, function() opened:set(want) end, false)
     return
   end
   opened:set(want)

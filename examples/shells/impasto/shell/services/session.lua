@@ -60,7 +60,7 @@ local function suspend_when_locked()
   local mine = suspend_generation
   local waited = 0
   local timer
-  timer = morf.timer(100, function()
+  timer = morf.time.timer(100, function()
     if mine ~= suspend_generation then timer:cancel() return end
     waited = waited + 100
     if lock and lock.secure() then
@@ -136,7 +136,7 @@ local runners = {
         morf.log("warn", "impasto: logind is not reachable; not logging out")
       end
     end
-    local ok, hyprland = pcall(require, "lib.integrations.hyprland")
+    local ok, hyprland = pcall(require, "lib.compositor.hyprland")
     if ok and hyprland and hyprland.available and hyprland.available() then
       local sent = hyprland.dispatch("exit", nil, function(answered)
         if not answered then terminate() end

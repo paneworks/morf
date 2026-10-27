@@ -44,8 +44,7 @@ impl OutputDepth {
 
     /// `MORF_DEPTH`: `10` asks for deep output; anything else is eight.
     pub fn from_env() -> Self {
-        std::env::var("MORF_DEPTH")
-            .ok()
+        morf_value::env::var("MORF_DEPTH")
             .and_then(|value| Self::parse(&value))
             .unwrap_or_default()
     }

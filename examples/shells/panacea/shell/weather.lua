@@ -5,7 +5,6 @@
 -- days of highs and lows. `weatherUnits` picks Celsius or Fahrenheit.
 
 local morf = require("morf")
-local io = require("morf.io")
 local proc = require("proc")
 local config = require("config")
 
@@ -62,7 +61,7 @@ local function clock(text)
 end
 
 local function parse(text)
-  local ok, data = pcall(io.json.decode, text)
+  local ok, data = pcall(morf.json.decode, text)
   if not ok or type(data) ~= "table" then return false end
   local current = (data.current_condition or {})[1]
   if type(current) ~= "table" then return false end
@@ -75,7 +74,7 @@ local function parse(text)
   state.wind = wind
   local description = ((current.weatherDesc or {})[1] or {}).value or ""
   state.description = description
-  local hour = tonumber(require("theme").clock:format("%H")) or 12
+  local hour = tonumber(require("theme").clock.format("%H")) or 12
   state.glyph = glyph_for(current.weatherCode, hour >= 6 and hour < 19)
 
   local days = {}
@@ -128,11 +127,11 @@ function weather.refresh()
         state.error = "No weather right now"
         return
       end
-      state.updated = require("theme").clock:format("%H:%M")
+      state.updated = require("theme").clock.format("%H:%M")
     end)
 end
 
 weather.refresh()
-morf.timer(30 * 60 * 1000, weather.refresh, true)
+morf.time.timer(30 * 60 * 1000, weather.refresh, true)
 
 return weather

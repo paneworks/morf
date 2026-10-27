@@ -139,11 +139,7 @@ fn default_kit_config() -> Result<PathBuf, String> {
         .map_err(|e| e.to_string())?
         .join("x");
     let mut roots: Vec<PathBuf> = morf_lua::project_library(&here).into_iter().collect();
-    roots.extend(
-        std::env::var_os("MORF_RUNTIME_PATH")
-            .into_iter()
-            .flat_map(|value| std::env::split_paths(&value).collect::<Vec<_>>()),
-    );
+    roots.extend(morf_value::env::paths("MORF_RUNTIME_PATH"));
     let data = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")));

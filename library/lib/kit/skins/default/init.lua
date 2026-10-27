@@ -1,7 +1,6 @@
--- The default kit: a complete, Adwaita-like (GNOME HIG) kit, so an
--- application needs no theme. Every function of the contract
--- (lib.kit.contract), a skin for every archetype, and the shared display
--- widgets, domain instruments and composites drawn through them.
+-- The default kit: a complete Adwaita-like (GNOME HIG) theme, so an
+-- application needs none of its own. Its tokens (contract.lua, `tokens`)
+-- and a skin for every archetype, display widget and editor archetype.
 --
 --     local default = require("lib.kit.skins.default")
 --     package.loaded.kit = default.make { variant = "dark" }   -- or "light", "high_contrast"
@@ -15,10 +14,19 @@
 -- "default"), `use` (false: define the skins without switching to them;
 -- `kit.use()` switches later). `M.kit` is the default instance, made the
 -- first time it is read.
+--
+-- The skins are assembled from one file per concern below, each a
+-- function of `(S, theme, draw)` that adds skins to `S`; `draw` is the skin's
+-- own drawing helpers, shared between the files and given to no one else.
 local morf = require("morf")
 local tokens = require("lib.kit.skins.default.tokens")
+local contract = require("lib.kit.contract")
 
 local M = { tokens = tokens, VARIANTS = tokens.VARIANTS }
+
+-- In order: the helpers the later files draw with come first.
+local FILES = { "text", "containers", "display", "press", "range", "plane", "selection", "popup", "text_field",
+  "scroll", "collection", "disclosure", "drag", "navigation", "shell", "composites", "canvas", "dock" }
 
 local converted = {}
 --- A variant's palette as morf colours.
@@ -55,9 +63,9 @@ function M.make(options)
   local theme = {
     variant = fixed, reduced = reduced,
     size = tokens.size, font = options.font or tokens.font, mono = tokens.mono, icon_font = tokens.icon_font,
-    radius = tokens.radius, ROUNDING = tokens.ROUNDING, PAD = tokens.PAD, GAP = tokens.GAP,
+    radius = tokens.radius, PAD = tokens.PAD, GAP = tokens.GAP, type = tokens.type,
     control_height = tokens.control_height, ease = tokens.ease, duration = tokens.duration(reduced),
-    surfaces = tokens.surfaces,
+    motion = tokens.motion(reduced),
   }
   if fixed then
     local p = M.palette(fixed)
@@ -66,32 +74,21 @@ function M.make(options)
     theme.P = function() return M.palette(M.preferred()) end
   end
 
-  local kit = require("lib.kit.skins.default.components")(theme)
-  kit.skins = require("lib.kit.skins.default.skins")(theme, kit)
-  require("lib.kit.display").install(kit, require("lib.kit.skins.default.display_style")(theme, kit))
-  kit.theme, kit.tokens = theme, tokens
-  kit.variant = fixed or "auto"
-  kit.widgets = require("lib.kit.widgets")
+  local S, draw = {}, {}
+  for _, file in ipairs(FILES) do require("lib.kit.skins.default." .. file)(S, theme, draw) end
+  local press = {}
+  for _, entry in ipairs(contract.archetypes.Press.widgets) do press[#press + 1] = entry.name end
+  require("lib.kit.archetypes.press").fade(S, press, 0.5)
 
-  --- A pressable area as a kit Press `widget` (the MouseArea a layout
-  --- builds a row or a tile from); `settings` are the Press's own.
-  function kit.press_area(widget, props, settings, archetype)
-    local s, node, children = { widget = widget }, {}, {}
-    for key, value in pairs(props or {}) do
-      if type(key) == "number" then children[key] = value
-      elseif type(key) == "string" and key:match("^on_") then s[key] = value
-      else node[key] = value end
-    end
-    for key, value in pairs(settings or {}) do s[key] = value end
-    if node.enabled ~= nil then s.enabled = node.enabled end
-    return (require("lib.kit.control").make(archetype or "Press", widget, s, { props = node, children = children }))
+  -- The contract's tokens: each colour a binding of the live palette.
+  local colors = {}
+  for _, name in ipairs(contract.tokens.colors) do
+    colors[name] = function() return theme.P()[name] end
   end
-
-  --- Names a node for a screen reader, and returns it.
-  function kit.named(node, name)
-    node.accessible_name = name
-    return node
-  end
+  local kit = {
+    skins = S, theme = theme, variant = fixed or "auto",
+    tokens = { colors = colors, type = tokens.type, shape = tokens.shape, motion = theme.motion },
+  }
 
   local name = options.name or "default"
   --- Makes this kit's skins the ones every control draws with.

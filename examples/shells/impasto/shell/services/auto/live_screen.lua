@@ -20,7 +20,7 @@
 
 local state = require("bar.island_state")
 
-local ok_lib, hyprland = pcall(require, "lib.integrations.hyprland")
+local ok_lib, hyprland = pcall(require, "lib.compositor.hyprland")
 if not ok_lib then hyprland = nil end
 
 local M = {}
@@ -112,7 +112,7 @@ function M.claim()
   if not path then return end
   local request = morf.json.encode { op = "call", target = "live_claim", args = { own } } .. "\n"
   local connection
-  connection = morf.connect {
+  connection = morf.socket.connect {
     path = path,
     connect_timeout_ms = 1000,
     on_connect = function() connection:send(request) end,

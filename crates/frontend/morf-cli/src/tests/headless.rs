@@ -34,7 +34,7 @@ const COUNTER: &str = r#"
     morf.ipc.clicks = function() return clicks end
     morf.ipc.ticks = function() return ticks end
     morf.ipc.typed = function() return typed end
-    morf.timer(250, function() ticks = ticks + 1 end)
+    morf.time.timer(250, function() ticks = ticks + 1 end)
     ui.Item {
         anchors = { fill = true },
         ui.MouseArea {
@@ -131,7 +131,7 @@ fn window_surfaces_are_listed_with_their_sizes() {
         local ui = require("morf.ui")
         local window = require("morf.window")
         ui.Item {}
-        window.floating { root = ui.Item {}, width = 300, height = 200, title = "Settings",
+        window.toplevel { root = ui.Item {}, width = 300, height = 200, title = "Settings",
                           visible = true }
         window.layer { root = ui.Item {}, namespace = "dock", anchors = { bottom = true },
                        width = 400, height = 50, visible = false }
@@ -272,7 +272,7 @@ fn a_spec_runs_its_tests_one_at_a_time() {
             test.source([[
               local out = ""
               morf.ipc.out = function() return out end
-              morf.run({ "definitely-not-a-program" }, function(r) out = r.stdout end)
+              morf.process.run({ "definitely-not-a-program" }, function(r) out = r.stdout end)
               morf.ui.Item {}
             ]])
             test.settle()

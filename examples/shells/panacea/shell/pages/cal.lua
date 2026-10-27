@@ -11,10 +11,10 @@ local C = theme.color
 
 local page = {}
 
-page.title = function() return theme.clock:format("%A") end
+page.title = function() return theme.clock.format("%A") end
 page.icon = "󰃭"
 page.subtitle = function()
-  local line = theme.clock:format(config.clockDateFmt .. " %Y")
+  local line = theme.clock.format(config.clockDateFmt .. " %Y")
   if config.weatherLocation ~= "" then
     local ok, weather = pcall(require, "weather")
     if ok and weather.state.temperature ~= "" then
@@ -55,7 +55,7 @@ local function fill()
 end
 
 local function sync()
-  local now = theme.clock:snapshot()
+  local now = morf.time.date()
   if calendar.today ~= now.day or calendar.today_month ~= now.month then
     calendar.today, calendar.today_month, calendar.today_year = now.day, now.month, now.year
     calendar.year, calendar.month = now.year, now.month
@@ -63,12 +63,12 @@ local function sync()
   end
 end
 sync()
-morf.timer(60000, sync, true)
+morf.time.timer(60000, sync, true)
 
 local slide = morf.signal("panacea.cal.slide", 0)
 local function shift(by)
   slide:set(by * S(40))
-  morf.timer(16, function() slide:set(0) end, false)
+  morf.time.timer(16, function() slide:set(0) end, false)
   local month, year = calendar.month + by, calendar.year
   if month < 1 then month, year = 12, year - 1 end
   if month > 12 then month, year = 1, year + 1 end

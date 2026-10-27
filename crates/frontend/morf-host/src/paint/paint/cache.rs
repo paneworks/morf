@@ -105,7 +105,7 @@ impl std::ops::Deref for CachedLayout {
 /// has moved; otherwise that layout brought up to date, redoing only the
 /// parts of the tree that moved ([`morf_layout::Layout::update_with`]); and
 /// a whole pass when there is nothing to start from, the scale changed, or
-/// `MORF_LAYOUT_FULL=1` asks for one every time (to compare the two).
+/// `MORF_DEBUG=layout_full` asks for one every time (to compare the two).
 pub fn layout_for(
     runtime: &mut Runtime,
     cache: Option<&mut CachedLayout>,
@@ -149,11 +149,9 @@ pub fn layout_for(
     Ok((layout, true))
 }
 
-/// `MORF_LAYOUT_FULL=1`: lay every changed frame out whole, as before
+/// `MORF_DEBUG=layout_full`: lay every changed frame out whole, as before
 /// layouts were brought up to date piecemeal. For measuring the difference.
 fn full_layout_wanted() -> bool {
     static WANTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *WANTED.get_or_init(|| {
-        std::env::var_os("MORF_LAYOUT_FULL").is_some_and(|value| !value.is_empty() && value != "0")
-    })
+    *WANTED.get_or_init(|| morf_value::env::debug("layout_full"))
 }

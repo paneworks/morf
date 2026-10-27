@@ -142,8 +142,8 @@ end
 -- then. Drawn inline, the board is that surface, and losing the keyboard is
 -- the click elsewhere. A window.layer surface reports no focus of its own,
 -- so a click on another application's surface is not heard.
-if morf.on_keyboard_focus then
-  morf.on_keyboard_focus(function(active)
+if morf.window.on_keyboard_focus then
+  morf.window.on_keyboard_focus(function(active)
     if not desk.editing:get() then return end
     if inline_mode and not active then desk.edit(false)
     elseif not inline_mode and active then desk.edit(false) end

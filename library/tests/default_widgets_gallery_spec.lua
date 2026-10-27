@@ -1,10 +1,13 @@
--- The default kit's widget gallery: every widget of every archetype the
--- contract requires, drawn by the default kit (library/lib/kit/skins/
--- default) from its sample (library/lib/kit/samples/<archetype>.lua), in
--- each of its three variants. KIT_WIDGETS="Range Plane" draws only those.
+-- The default kit's widget gallery: every widget of the contract -- the
+-- archetypes', the display widgets, the composites, the shell group and
+-- the editor group -- drawn by the default kit (library/lib/kit/skins/
+-- default) from its sample (library/tests/gallery/<group>.lua), with
+-- every variant, in each of the kit's three variants. A cell passes when
+-- everything visible it draws stays inside it and nothing logs an error.
+-- GALLERY="Press display" draws only those groups.
 --
 --     morf test --no-dbus library/tests/default_widgets_gallery_spec.lua
---     KIT_WIDGETS=Canvas KIT_GALLERY_SNAPSHOTS=1 nixVulkanIntel morf test --no-dbus --snapshots DIR \
+--     GALLERY=Canvas KIT_GALLERY_SNAPSHOTS=1 nixVulkanIntel morf test --no-dbus --snapshots DIR \
 --       library/tests/default_widgets_gallery_spec.lua
 
 local test = morf.test
@@ -14,7 +17,7 @@ local SOURCE = [[
   morf.surface.width, morf.surface.height = 1920, 1080
   local kit = require("lib.kit.skins.default").make { variant = env("MORF_KIT_VARIANT") or "light" }
   package.loaded.kit = kit
-]] .. require("lib.kit.samples").SOURCE
+]] .. require("gallery").SOURCE
 
 --- Visible nodes inside a gallery cell that reach outside it.
 local function spills()
@@ -73,14 +76,16 @@ local function spills()
 end
 
 for _, variant in ipairs { "light", "dark", "high_contrast" } do
-  test.it(("the default kit (%s) draws every archetype widget inside its cell"):format(variant), function()
+  test.it(("the default kit (%s) draws every contract widget inside its cell"):format(variant), function()
     test.load { source = SOURCE, size = { 1920, 1080 },
-      env = { MORF_KIT_VARIANT = variant, KIT_WIDGETS = env("KIT_WIDGETS") or "" } }
+      env = { MORF_KIT_VARIANT = variant, GALLERY = env("GALLERY") or "" } }
     test.settle(1500)
     test.eq(test.ipc("missing"), "", "widgets with no gallery sample")
     local problems = spills()
     test.eq(#problems, 0, table.concat(problems, "\n"))
-    test.eq(#test.logs("error"), 0, "errors were logged")
+    local errors = {}
+    for _, e in ipairs(test.logs("error")) do errors[#errors + 1] = tostring(e.message or e.text or e) end
+    test.eq(#errors, 0, "errors were logged:\n" .. table.concat(errors, "\n"))
     if env("KIT_GALLERY_SNAPSHOTS") then test.snapshot("widgets-default-" .. variant .. ".png") end
   end)
 end

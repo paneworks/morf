@@ -16,7 +16,7 @@ impl Runtime {
     /// Whether anything is in motion, so a loop standing in for the
     /// compositor's frame callbacks knows whether to keep ticking.
     /// What is animating right now, one line each (`path.property`, marked
-    /// when it loops forever), at most `max`: for `MORF_WAKE_LOG`, which asks
+    /// when it loops forever), at most `max`: for `MORF_LOG=wake`, which asks
     /// what keeps an otherwise idle shell drawing frames.
     pub fn motion_report(&self, max: usize) -> Vec<String> {
         self.reactive.borrow().motion_report(max)
@@ -24,7 +24,7 @@ impl Runtime {
 
     /// What changed for layout under `root` since the layout at revision
     /// `since`: the nodes stamped since, one line each, at most `max`, and
-    /// how many there were. For `MORF_FRAME_LOG=2`, when a layout is slow.
+    /// how many there were. For `MORF_PROFILE=frame_split`, when a layout is slow.
     pub fn layout_report(&self, root: NodeHandle, since: u64, max: usize) -> (usize, Vec<String>) {
         self.reactive.borrow().layout_report(root, since, max)
     }

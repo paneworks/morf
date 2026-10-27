@@ -79,7 +79,7 @@ fn drive_surface(
     let loading = Instant::now();
     let runtime_directory =
         std::env::var_os("XDG_RUNTIME_DIR").ok_or("XDG_RUNTIME_DIR is unset")?;
-    let gate = crate::host::provider::handoff::Gate::open_at(Path::new(&runtime_directory), &name)
+    let gate = crate::provider::shell::handoff::Gate::open_at(Path::new(&runtime_directory), &name)
         .map_err(|error| error.to_string())?;
     let recognizer_policy = gate.clone();
     runtime
@@ -192,13 +192,13 @@ fn drive_surface(
 fn native_shell_provider(
     client: &LayerClient,
     name: &str,
-    gate: std::sync::Arc<crate::host::provider::handoff::Gate>,
-) -> Option<crate::host::provider::Provider> {
+    gate: std::sync::Arc<crate::provider::shell::handoff::Gate>,
+) -> Option<crate::provider::shell::Provider> {
     let output = client.own_output()?.name?;
     if output != name {
         return None;
     }
-    match crate::host::provider::Provider::bind_with_gate(
+    match crate::provider::shell::Provider::bind_with_gate(
         client.connection().backend().poll_fd(),
         &output,
         gate,
@@ -213,16 +213,15 @@ fn native_shell_provider(
 
 /// Says, on stderr, when one stage of the loop held the output longer than a
 /// person notices: a configuration that blocks in a handler, a layout that
-/// takes a quarter second. Silent for anything quicker; `MORF_SLOW_MS` sets
+/// takes a quarter second. Silent for anything quicker; `MORF_PROFILE=slow` sets
 /// the threshold (default 150). Under `MORF_PROFILE`, a slow stage also says
 /// whose work filled it, the costliest first; either way what the profiler
 /// gathered is dropped here, so the next stage starts clean.
 pub fn slow(name: &str, what: &str, since: Instant) {
     static THRESHOLD: std::sync::OnceLock<u128> = std::sync::OnceLock::new();
     let threshold = *THRESHOLD.get_or_init(|| {
-        std::env::var("MORF_SLOW_MS")
-            .ok()
-            .and_then(|value| value.parse().ok())
+        morf_value::env::flags("MORF_PROFILE")
+            .parsed("slow")
             .unwrap_or(150)
     });
     let took = since.elapsed().as_millis();

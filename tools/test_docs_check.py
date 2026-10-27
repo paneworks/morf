@@ -180,21 +180,19 @@ class Fragments(unittest.TestCase):
         touch, sh = shutil.which("touch"), shutil.which("sh")
         outside = f"""
 local mark, touch = "{mark}", "{touch}"
-morf.run({{ "{sh}", "-c", touch .. " " .. mark .. "run" }}, function() end)
-morf.spawn {{ command = {{ touch, mark .. "spawn" }} }}
-morf.exec_detached({{ touch, mark .. "detached" }})
-morf.io.run({{ touch, mark .. "io-run" }}, function() end)
-require("morf").io.spawn {{ command = {{ touch, mark .. "required" }} }}
-package.loaded.morf.core.exec_detached({{ touch, mark .. "core" }})
+morf.process.run({{ "{sh}", "-c", touch .. " " .. mark .. "run" }}, function() end)
+morf.process.spawn {{ command = {{ touch, mark .. "spawn" }} }}
+morf.process.detach({{ touch, mark .. "detached" }})
+require("morf.process").run({{ touch, mark .. "ns-run" }}, function() end)
+require("morf").process.spawn {{ command = {{ touch, mark .. "required" }} }}
 ui.Terminal {{ command = {{ touch, mark .. "terminal" }}, width = 80, height = 40 }}
 morf.fs.write(mark .. "fs-write", "x")
-morf.fs.append(mark .. "fs-append", "x")
+morf.fs.write(mark .. "fs-append", "x", {{ append = true }})
 morf.fs.mkdir(mark .. "fs-mkdir")
-morf.json.write_file(mark .. "json", {{ a = 1 }})
 morf.http.get("http://127.0.0.1:{port}/", function() end)
-morf.connect {{ host = "127.0.0.1", port = {port}, on_line = function() end }}
-morf.connect {{ path = "{cls.unix_path}", on_line = function() end }}
-morf.request_socket("{cls.unix_path}", "ping", function() end)
+morf.socket.connect {{ host = "127.0.0.1", port = {port}, on_line = function() end }}
+morf.socket.connect {{ path = "{cls.unix_path}", on_line = function() end }}
+morf.socket.request("{cls.unix_path}", "ping", function() end)
 morf.dbus.call_async("session", "org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames")
 ui.Rect {{ width = 10, height = 10 }}
 """
@@ -253,20 +251,20 @@ ui.Rect {{ width = 10, height = 10 }}
             with self.assertRaises(socket.timeout):
                 server.accept()
         stubbed = [call for name, call in self.blocked if name == "docs/A.md:70"]
-        for call in ("process: morf.run", "process: morf.spawn", "process: morf.exec_detached",
-                     "process: morf.ui.Terminal", "write: morf.fs.write", "write: morf.fs.append",
-                     "write: morf.fs.mkdir", "write: morf.json.write_file",
-                     "network: morf.http.get", "network: morf.connect",
-                     "network: morf.request_socket", "network: morf.dbus.call_async"):
+        for call in ("process: morf.process.run", "process: morf.process.spawn",
+                     "process: morf.process.detach", "process: morf.ui.Terminal",
+                     "write: morf.fs.write", "write: morf.fs.mkdir",
+                     "network: morf.http.get", "network: morf.socket.connect",
+                     "network: morf.socket.request", "network: morf.dbus.call_async"):
             self.assertIn(call, stubbed)
-        self.assertEqual(len(stubbed), 16, stubbed)
+        self.assertEqual(len(stubbed), 14, stubbed)
 
 
 @unittest.skipUnless(BINARY, "needs a built morf (cargo build -p morf-cli)")
 class CompleteConfigurations(unittest.TestCase):
     def test_a_complete_configuration_runs_sandboxed_through_morf_check(self):
         work = WORK / "configs"
-        good = 'morf.surface.namespace = "x"\nmorf.spawn { command = { "true" } }\nui.Rect { width = 4 }'
+        good = 'morf.surface.namespace = "x"\nmorf.process.spawn { command = { "true" } }\nui.Rect { width = 4 }'
         bad = 'morf.surface.namespace = "x"\nui.Rect { width = 4 }\nlocal n = nil\nn.call()'
         blocks = {"docs/B.md": [(5, good, None), (15, bad, None), (25, "syntax error here", "elided")]}
         with contextlib.redirect_stdout(io.StringIO()):

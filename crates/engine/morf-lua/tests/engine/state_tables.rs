@@ -52,7 +52,7 @@ fn a_state_table_is_read_by_bindings_and_written_field_by_field() {
 }
 
 #[test]
-fn ui_each_follows_a_state_list() {
+fn a_repeater_follows_a_state_list() {
     let mut runtime = Runtime::default();
     runtime
         .execute(
@@ -61,9 +61,9 @@ fn ui_each_follows_a_state_list() {
                 local morf = require("morf")
                 local ui = require("morf.ui")
                 local model = morf.state { rows = { { id = "a", label = "A" }, { id = "b", label = "B" } } }
-                ui.each(model.rows, function(row)
+                ui.Repeater { model = model.rows, as = "column", delegate = function(row)
                     return ui.Text { text = row.label }
-                end, { as = "column" })
+                end }
                 morf.ipc.shuffle = function()
                     model.rows = { { id = "b", label = "B" }, { id = "c", label = "C" } }
                 end

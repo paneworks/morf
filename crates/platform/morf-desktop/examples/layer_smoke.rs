@@ -156,22 +156,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .collect::<Vec<_>>()
                     .join(",");
                 println!(
-                    "{}x{} at {}/120, screens [{}], workspaces [{}], idle {}, inhibit {}, shortcuts {}, power {}, clipboard {}, keyboard {}, input-method {}, text-input {}, capture {}, backdrop-blur {}, windows {}, frame {} ms, {} ({:?})",
+                    "{}x{} at {}/120, screens [{}], idle {}, inhibit {}, shortcuts {}, power {}, clipboard {}, keyboard {}, input-method {}, text-input {}, capture {}, backdrop-blur {}, windows {}, frame {} ms, {} ({:?})",
                     client.primary_logical_size().0,
                     client.primary_logical_size().1,
                     client.primary_scale_120(),
                     screens,
-                    desktop
-                        .workspaces()
-                        .iter()
-                        .map(|workspace| format!(
-                            "{}{}@{}",
-                            workspace.name,
-                            if workspace.active { "*" } else { "" },
-                            workspace.output
-                        ))
-                        .collect::<Vec<_>>()
-                        .join(","),
                     idle_notify,
                     idle_inhibit,
                     shortcuts_inhibit,

@@ -44,9 +44,9 @@ local function start()
   if started then return end
   started = true
   -- Out of the binding that asked: sampling writes the signal it reads.
-  morf.timer(1, function()
+  morf.time.timer(1, function()
     M.sample()
-    morf.timer(M.POLL_MS, function() M.sample() end, true)
+    morf.time.timer(M.POLL_MS, function() M.sample() end, true)
   end, false)
 end
 

@@ -1,6 +1,6 @@
 //! A lock screen built once per output.
 //!
-//! `morf.lock_surface(function(screen) return ui.Rect { ... } end)` hands the
+//! `morf.lock.surface(function(screen) return ui.Rect { ... } end)` hands the
 //! lock loop a builder instead of one tree. The loop calls it for each output
 //! it locks, with that output's description and the size the compositor gave
 //! its lock surface, and draws what it returns there. Each output then has a

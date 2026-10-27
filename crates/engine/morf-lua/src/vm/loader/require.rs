@@ -1,4 +1,4 @@
-//! `require`: the native modules, then `package.loaded`, then the runtime
+//! `require`: `morf` and its namespaces, then `package.loaded`, then the runtime
 //! path. Each module's top level runs inside the permission gate's scope
 //! for it, held back when it is an unapproved imported module.
 
@@ -15,7 +15,6 @@ use crate::vm::types::Limits;
 
 pub(crate) struct Require {
     pub(crate) morf: StashedTable,
-    pub(crate) ui: StashedTable,
     pub(crate) loaded: StashedTable,
     pub(crate) state: Rc<StateCell<ReactiveState>>,
     pub(crate) roots: Rc<RefCell<Vec<PathBuf>>>,
@@ -38,9 +37,15 @@ pub(crate) fn install_require<'gc>(ctx: Context<'gc>, require: Require) {
                 ),
                 None => error,
             };
+            // `require("morf.<namespace>")` is `morf.<namespace>`.
+            let namespace = name
+                .strip_prefix("morf.")
+                .filter(|rest| !rest.contains('.'))
+                .map(|rest| ctx.fetch(&require.morf).get_value(ctx, rest))
+                .filter(|value| matches!(value, LuaValue::Table(_)));
             match name.as_str() {
                 "morf" => stack.replace(ctx, ctx.fetch(&require.morf)),
-                "morf.ui" => stack.replace(ctx, ctx.fetch(&require.ui)),
+                _ if namespace.is_some() => stack.replace(ctx, namespace),
                 _ => {
                     let loaded = ctx.fetch(&require.loaded);
                     let key = ctx.intern(name.as_bytes());

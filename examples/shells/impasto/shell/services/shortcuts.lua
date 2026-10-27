@@ -27,9 +27,9 @@
 
 local M = {}
 
-local ok_lib, hyprland = pcall(require, "lib.integrations.hyprland")
+local ok_lib, hyprland = pcall(require, "lib.compositor.hyprland")
 if not ok_lib then hyprland = nil end
-local ok_config, config = pcall(require, "lib.integrations.hyprland_config")
+local ok_config, config = pcall(require, "lib.compositor.hyprland_config")
 if not ok_config then config = nil end
 local settings = require("services.settings")
 local act = require("services.act")
@@ -536,14 +536,14 @@ function M.start()
     if seen == nil then
       seen = text
       -- Once the settings and the bind list are in.
-      morf.timer(2000, write_keys, false)
+      morf.time.timer(2000, write_keys, false)
       return
     end
     if text == seen then return end
     seen = text
-    morf.timer(1, write_keys, false)
+    morf.time.timer(1, write_keys, false)
   end)
-  hyprland.on("configreloaded", function() morf.timer(400, M.load, false) end)
+  hyprland.on("configreloaded", function() morf.time.timer(400, M.load, false) end)
   M.load()
 end
 

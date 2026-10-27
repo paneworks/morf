@@ -67,7 +67,7 @@ return function(values)
           end
           armed:set(action)
           local mine = disarm_generation
-          morf.timer(3000, function()
+          morf.time.timer(3000, function()
             if mine == disarm_generation then armed:set("") end
           end, false)
         end,

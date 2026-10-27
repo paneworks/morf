@@ -130,7 +130,7 @@ local account_path
 
 local function bus()
   if client then return client end
-  local ok, dbus_client = pcall(require, "lib.services.dbus_client")
+  local ok, dbus_client = pcall(require, "lib.services.dbus")
   if ok then client = dbus_client.new { bus = "system" } end
   return client
 end
@@ -147,7 +147,7 @@ local function find_account(done)
     end)
   if not sent then done(nil) end
 end
-morf.timer(800, function()
+morf.time.timer(800, function()
   find_account(function(path) s.accounts:set(path ~= nil) end)
 end, false)
 
@@ -173,7 +173,7 @@ function M.set_name(text)
     return
   end
   if name_timer then name_timer:cancel() end
-  name_timer = morf.timer(800, function()
+  name_timer = morf.time.timer(800, function()
     name_timer = nil
     s.busy:set("name")
     local act = require("services.act")

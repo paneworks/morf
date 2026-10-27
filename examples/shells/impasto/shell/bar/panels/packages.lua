@@ -81,7 +81,7 @@ local watching = false
 local field
 morf.effect("impasto.packages.lifecycle", function()
   local open = island.state.open_panel() == "packages"
-  morf.timer(1, function()
+  morf.time.timer(1, function()
     if open and not watching then
       watching = true
       updates.subscribe()

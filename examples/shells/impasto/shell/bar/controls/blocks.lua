@@ -126,7 +126,7 @@ M.register("clock", function(o)
         horizontal_alignment = "center" },
       kit.text {
         text = function()
-          morf.hour_clock:get()
+          morf.time.hour_clock:get()
           return morf.time.format((wide or tall) and "%A %-d %B" or "%a %-d %b")
         end,
         size = tall and theme.size.medium or theme.size.small, color = C.textMuted,
@@ -166,7 +166,7 @@ M.register("appearance", function(o)
   -- accent and type (AppearanceCard.qml, ThemeService.adaptiveSwatches).
   local palette_colors = function()
     local id = themes.active_id:get()
-    for _, preset in ipairs(require("lib.util.palette").presets) do
+    for _, preset in ipairs(require("services.palette").presets) do
       if preset.id == id and preset.swatches then return preset.swatches end
     end
     return { C.background(), C.surface(), C.accent(), C.text() }

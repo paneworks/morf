@@ -34,7 +34,7 @@ local function push_models()
 end
 
 local function stamp()
-  local now = require("bar").clock:format("%H:%M")
+  local now = require("bar").clock.format("%H:%M")
   return now
 end
 
@@ -75,7 +75,7 @@ local server, why = notifications.serve {
           -- while the entry stays listed until it is cleared.
           local linger = config.notificationDisplayTime
           if entry.urgency >= 2 then linger = linger * 3 end
-          morf.timer(linger, function() drop_popup(row.id) end, false)
+          morf.time.timer(linger, function() drop_popup(row.id) end, false)
         end
       end
     end
@@ -115,7 +115,7 @@ end
 
 --- Sends one from the shell itself, without going over the bus.
 function notify.local_notice(app, summary, body, glyph)
-  local id = -(#history + 1) - math.floor(morf.elapsed_timer():elapsed_ms())
+  local id = -(#history + 1) - math.floor(morf.time.elapsed():elapsed_ms())
   local row = {
     id = id, app = app, icon = "", glyph = glyph, summary = summary, body = body or "",
     urgency = 1, time = stamp(), actions = {},
@@ -123,7 +123,7 @@ function notify.local_notice(app, summary, body, glyph)
   table.insert(history, 1, row)
   table.insert(popups, 1, row)
   while #popups > 4 do table.remove(popups) end
-  morf.timer(config.notificationDisplayTime, function() drop_popup(id) end, false)
+  morf.time.timer(config.notificationDisplayTime, function() drop_popup(id) end, false)
   push_models()
 end
 

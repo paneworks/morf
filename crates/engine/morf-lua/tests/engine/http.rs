@@ -234,8 +234,8 @@ fn a_malformed_call_raises() {
             assert(not pcall(morf.http.request, { url = "http://x", timeout_ms = -1 }))
             assert(not pcall(morf.http.request, { url = "http://x", on_done = 3 }))
             assert(not pcall(morf.http.get, "http://x", 5))
-            assert(morf.http.url_encode("a b/\xC3\xA9") == "a%20b%2F%C3%A9")
-            assert(morf.http.url_decode("a%20b+c") == "a b c")
+            assert(morf.encoding.url_encode("a b/\xC3\xA9") == "a%20b%2F%C3%A9")
+            assert(morf.encoding.url_decode("a%20b+c", { plus = true }) == "a b c")
             "#,
         )
         .unwrap();

@@ -15,12 +15,12 @@ local M = {}
 -- Bindings run once as they start; flashing then would pop an OSD every
 -- time the shell starts, so nothing is sent until this is armed.
 local armed = false
-morf.timer(600, function() armed = true end, false)
+morf.time.timer(600, function() armed = true end, false)
 
 -- A device connecting reports its own volume, which is not the user asking
 -- to see it. Ignored for as long as the switch takes.
 local suppressed_until = 0
-local elapsed = morf.elapsed_timer()
+local elapsed = morf.time.elapsed()
 
 function M.suppress_audio()
   suppressed_until = elapsed:elapsed_ms() + 2000
@@ -45,7 +45,7 @@ local function volume_changed()
   if not armed or elapsed:elapsed_ms() < suppressed_until then return end
   volume_generation = volume_generation + 1
   local mine = volume_generation
-  morf.timer(DEBOUNCE, function()
+  morf.time.timer(DEBOUNCE, function()
     if mine ~= volume_generation then return end
     -- The volume detail's own slider already shows it.
     if open_detail() == "volume" then return end
@@ -74,7 +74,7 @@ morf.effect("impasto.osd.brightness", function()
   if count == 0 or not armed then return end
   brightness_generation = brightness_generation + 1
   local mine = brightness_generation
-  morf.timer(DEBOUNCE, function()
+  morf.time.timer(DEBOUNCE, function()
     if mine ~= brightness_generation then return end
     if open_detail() == "brightness" then return end
     local display = brightness.display(brightness.adjusted_display:get()) or brightness.current()

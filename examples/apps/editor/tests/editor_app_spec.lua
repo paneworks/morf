@@ -14,7 +14,7 @@ local function env(name) local v = morf.env(name) if v == false or v == "" then 
 local serial = 0
 local STATE
 local function load(again)
-  if not again then serial = serial + 1 STATE = morf.state_path("editor-test-" .. serial .. ".json") end
+  if not again then serial = serial + 1 STATE = morf.paths.state("editor-test-" .. serial .. ".json") end
   test.load("../app.lua", { size = { 1600, 1000 }, env = { EDITOR_STATE = STATE } })
   test.settle(1500)
 end

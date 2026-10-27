@@ -9,7 +9,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
 
 local W, H = 760, 260
 morf.surface.width = W
@@ -25,7 +24,7 @@ local theme = morf.theme {
   muted = "#6a8389",
 }
 
-local elapsed = core.elapsed_timer()
+local elapsed = morf.time.elapsed()
 -- Progress runs 0 to 1 and back, so the indicators have something to report.
 local progress = morf.signal("loaders.progress", 0)
 

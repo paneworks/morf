@@ -13,7 +13,7 @@ local settings = require("services.settings")
 local wallpaper = require("services.wallpaper")
 local theme_service = require("services.theme")
 local thumbnails = require("services.thumbnails")
-local palette = require("lib.util.palette")
+local palette = require("services.palette")
 local kit = require("components.kit")
 local controls = require("components.controls")
 local setting = require("components.setting")
@@ -278,7 +278,7 @@ function M.transition_picture(kind)
       end,
     }
   end
-  morf.timer(1, run, false)
+  morf.time.timer(1, run, false)
   return node
 end
 
@@ -334,7 +334,7 @@ function M.window_motion(preset)
       { pause = 1300 },
     }
   end
-  morf.timer(1, pass, false)
+  morf.time.timer(1, pass, false)
   return screen
 end
 

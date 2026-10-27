@@ -108,9 +108,8 @@ fn lua_reload_requests_are_coalesced_and_consumed() {
         .execute(
             "reload-request.lua",
             br#"
-                local core = require("morf.core")
-                core.reload(false)
-                core.reload(true)
+                morf.reload(false)
+                morf.reload(true)
             "#,
         )
         .unwrap();
@@ -130,9 +129,8 @@ fn a_reload_of_this_output_alone_gives_way_to_one_of_every_output() {
         .execute(
             "reload-output.lua",
             br#"
-                local core = require("morf.core")
-                core.reload { output = true }
-                morf.ipc.again = function() core.reload { output = true } core.reload() end
+                morf.reload { output = true }
+                morf.ipc.again = function() morf.reload { output = true } morf.reload() end
             "#,
         )
         .unwrap();
@@ -148,82 +146,4 @@ fn a_reload_of_this_output_alone_gives_way_to_one_of_every_output() {
         Some(ReloadRequest::default())
     );
     assert!(runtime.execute("bad.lua", b"morf.reload(3)").is_err());
-}
-
-#[test]
-fn persistent_properties_reload_as_one_typed_scope() {
-    let source = br#"
-        local state = morf.persistent("launcher", { visible = false, page = 1 })
-        morf.ipc["state.set"] = function()
-            state.visible = true
-            state.page = 4
-        end
-        morf.ipc["state.get"] = function()
-            return state.visible, state.page, state.loaded, state.reloaded
-        end
-    "#;
-    let mut first = Runtime::default();
-    first.execute("persistent.lua", source).unwrap();
-    assert_eq!(
-        first.call_ipc("state.get", &[]).unwrap(),
-        [
-            IpcValue::Boolean(false),
-            IpcValue::Integer(1),
-            IpcValue::Boolean(true),
-            IpcValue::Boolean(false),
-        ]
-    );
-    first.call_ipc("state.set", &[]).unwrap();
-
-    let mut second = Runtime::default();
-    second.restore_reloadable_state(first.reloadable_state());
-    second.execute("persistent.lua", source).unwrap();
-    assert_eq!(
-        second.call_ipc("state.get", &[]).unwrap(),
-        [
-            IpcValue::Boolean(true),
-            IpcValue::Integer(4),
-            IpcValue::Boolean(true),
-            IpcValue::Boolean(true),
-        ]
-    );
-}
-
-#[test]
-fn reload_scopes_isolate_repeated_local_ids() {
-    let source = br#"
-        local left = morf.scope("screen.left")
-        local right = morf.scope("screen.right")
-        local left_open = left:reloadable("open", false)
-        local right_open = right:reloadable("open", true)
-        local state = left:persistent("panel", { page = 2 })
-        morf.ipc["scope.get"] = function()
-            return left_open:get(), right_open:get(), state.page,
-                left:id("open"), right:id("open")
-        end
-    "#;
-    let mut runtime = Runtime::default();
-    runtime.execute("scopes.lua", source).unwrap();
-    assert_eq!(
-        runtime.call_ipc("scope.get", &[]).unwrap(),
-        [
-            IpcValue::Boolean(false),
-            IpcValue::Boolean(true),
-            IpcValue::Integer(2),
-            IpcValue::String("screen.left.open".into()),
-            IpcValue::String("screen.right.open".into()),
-        ]
-    );
-    assert_eq!(
-        runtime
-            .reloadable_state()
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>(),
-        [
-            "screen.left.open".to_owned(),
-            "screen.left.panel.page".to_owned(),
-            "screen.right.open".to_owned(),
-        ]
-    );
 }

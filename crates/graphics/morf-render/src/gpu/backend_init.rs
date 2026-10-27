@@ -14,14 +14,13 @@ use device::{SharedDevice, device_for, shared_instance};
 pub use device::{lose_devices, opened_device_count};
 
 /// How many buffers a surface presents through at most
-/// (`MORF_PRESENT_BUFFERS` overrides it). A compositor holds the buffer it
+/// (`MORF_PRESENT=buffers` overrides it). A compositor holds the buffer it
 /// shows, the one committed after it, and -- until the GPU work that read it
 /// has finished -- the one before; on a busy GPU that one lingers. A fourth
 /// leaves one to draw into.
 fn ring_buffers() -> usize {
-    std::env::var("MORF_PRESENT_BUFFERS")
-        .ok()
-        .and_then(|value| value.parse().ok())
+    morf_value::env::flags("MORF_PRESENT")
+        .parsed("buffers")
         .filter(|count| (1..=8).contains(count))
         .unwrap_or(4)
 }
@@ -56,7 +55,7 @@ impl WgpuBackend {
         T: HasWindowHandle + HasDisplayHandle + Send + Sync + 'static,
     {
         let instance = shared_instance();
-        let wanted = std::env::var("MORF_PRESENT").map_or(true, |value| value != "swapchain");
+        let wanted = !morf_value::env::flags("MORF_PRESENT").has("swapchain");
         let linked: Result<(), String> = match sink {
             Ok(sink) if wanted => {
                 let mut backend = Self::initialize(instance.clone(), None, width, height).await?;
@@ -76,7 +75,7 @@ impl WgpuBackend {
             Err(error) => Err(error),
         };
         if let Err(error) = linked
-            && std::env::var_os("MORF_GPU_LOG").is_some()
+            && morf_value::env::log("gpu")
         {
             eprintln!("morf: gpu: presenting through the swapchain: {error}");
         }
@@ -115,9 +114,9 @@ impl WgpuBackend {
         let shared = device_for(&instance, surface.as_ref()).await?;
         let device_ready = started.elapsed();
         let backend = Self::build(shared, surface, width, height)?;
-        // `MORF_GPU_LOG=1`: what bringing a backend up cost, and how much of
+        // `MORF_LOG=gpu`: what bringing a backend up cost, and how much of
         // it was the device.
-        if std::env::var_os("MORF_GPU_LOG").is_some() {
+        if morf_value::env::log("gpu") {
             eprintln!(
                 "morf: gpu: backend {}x{} ready in {:.1} ms; device {} in {:.1} ms",
                 width,

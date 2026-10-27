@@ -15,7 +15,7 @@
 
 local settings = require("services.settings")
 
-local ok_lib, hyprland = pcall(require, "lib.integrations.hyprland")
+local ok_lib, hyprland = pcall(require, "lib.compositor.hyprland")
 if not ok_lib then
   morf.log("warn", "impasto: lib.hyprland did not load: " .. tostring(hyprland))
   hyprland = nil
@@ -46,7 +46,7 @@ local function refresh_soon()
   pending = true
   -- After the library's own refetch: it drains once per poll tick (30 ms)
   -- and the answer comes back on the next.
-  morf.timer(90, function()
+  morf.time.timer(90, function()
     pending = false
     refresh()
   end, false)

@@ -7,7 +7,7 @@
 //! `morf.surface.outputless = true` is run here instead, once, in a runtime
 //! with no surface: `morf.screens` is empty, nothing it declares is mapped,
 //! and timers, IPC, D-Bus, file watches, processes and the compositor's
-//! non-surface services (idle, clipboard, output power, gamma, toplevels)
+//! non-surface services (idle, clipboard, output power, toplevels)
 //! work as ever. It holds a Wayland connection of its own and hears an output
 //! arrive on it; the supervisor then stops it and starts the per-output
 //! runtimes afresh, handing them what it kept with `morf.reloadable`.
@@ -194,9 +194,6 @@ fn drive_outputless(
                 })?;
                 if let Some(desktop) = desktop.as_deref_mut() {
                     refresh_idle_timeouts(runtime, desktop);
-                    if desktop.capabilities().gamma_control {
-                        let _ = desktop.reset_gamma(None);
-                    }
                 }
             }
         }
@@ -212,10 +209,6 @@ fn drive_outputless(
             tx.send(SupervisorMessage::Quit)
                 .map_err(|_| "output supervisor stopped".to_owned())?;
             return Ok(());
-        }
-        if let Some(enabled) = runtime.take_watch_files_change() {
-            tx.send(SupervisorMessage::WatchFiles(enabled))
-                .map_err(|_| "output supervisor stopped".to_owned())?;
         }
         // Declared and left unmapped: nothing here draws, so what a surface
         // change or a removed node would tell a renderer is dropped.

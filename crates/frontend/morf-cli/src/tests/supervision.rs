@@ -62,7 +62,7 @@ fn successful_reload_carries_opt_in_state() {
     let source = br#"
             local value = morf.reloadable("counter", 0)
             local completed = false
-            morf.on_reload_completed(function() completed = true end)
+            morf.on_reload(function(ok) completed = ok end)
             morf.ipc["counter.set"] = function(next) value:set(next) end
             morf.ipc["counter.get"] = function() return value:get() end
             morf.ipc["reload.completed"] = function() return completed end
@@ -158,7 +158,7 @@ fn failed_reload_keeps_the_previous_runtime() {
             "shell.lua",
             br#"
                     local failure = ""
-                    morf.on_reload_failed(function(error) failure = error end)
+                    morf.on_reload(function(ok, error) failure = error or "" return true end)
                     morf.ipc.value = function() return 7 end
                     morf.ipc["reload.failure"] = function() return failure end
                     morf.ui.Item {}

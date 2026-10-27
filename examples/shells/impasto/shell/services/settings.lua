@@ -285,7 +285,7 @@ function M.set(key, value)
   revisions[key]:set(revisions[key]:get() + 1)
   if not saving then
     saving = true
-    morf.timer(250, save, false)
+    morf.time.timer(250, save, false)
   end
 end
 

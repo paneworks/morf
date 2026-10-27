@@ -14,11 +14,10 @@ test.describe("desktop protocols with no compositor", function()
       morf.ipc.answer = function() return answer end
       morf.ipc.ask = function()
         for _ = 1, 40 do
-          morf.workspace.activate("1")
-          morf.toplevel.close("x")
+          morf.toplevels.close("x")
           morf.output_power.set("off")
         end
-        return #morf.workspaces + #morf.windows
+        return #morf.windows
       end
     ]] }
   end)

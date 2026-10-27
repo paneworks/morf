@@ -53,7 +53,7 @@ function M.pick(after)
   s.busy:set(true)
   local _, _, name = screen()
   local path = fs.join(fs.dir("runtime") or "/tmp", "impasto-pick-" .. morf.time.now_ms() .. ".png")
-  morf.timer(math.max(1, after or 1), function()
+  morf.time.timer(math.max(1, after or 1), function()
     local queued = pcall(morf.screencopy.save, {
       path = path, output = name,
       on_done = function(done, info)

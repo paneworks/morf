@@ -44,11 +44,11 @@ S.clock = {}
 --- The time now, as `morf.time.date` fields; a binding follows the minute
 --- (the second with `clockShowsSeconds`).
 function S.clock.now()
-  if settings.clockShowsSeconds then morf.clock:get() else morf.minute_clock:get() end
+  if settings.clockShowsSeconds then morf.time.clock:get() else morf.time.minute_clock:get() end
   return morf.time.date()
 end
 function S.clock.format(pattern)
-  if pattern:find("%%[STr]") then morf.clock:get() else morf.minute_clock:get() end
+  if pattern:find("%%[STr]") then morf.time.clock:get() else morf.time.minute_clock:get() end
   return morf.time.format(pattern)
 end
 --- The clock's own format, with seconds when the setting says.
@@ -357,7 +357,7 @@ local function own_left()
   if own.left:get() > 0 then return own.left:get() end
   local ends = own.ends:get()
   if ends == 0 then return 0 end
-  morf.clock:get()
+  morf.time.clock:get()
   return math.max(0, ends - morf.time.now_ms())
 end
 function S.timer.running()
@@ -391,7 +391,7 @@ function S.timer.start(ms, label)
   own.label:set(label or "")
   own.ends:set(morf.time.now_ms() + ms)
   local mine = own.ends:get()
-  morf.timer(ms, function()
+  morf.time.timer(ms, function()
     if own.ends:get() == mine then own.ends:set(0) end
   end, false)
 end
@@ -402,7 +402,7 @@ function S.timer.toggle()
     own.left:set(0)
     own.ends:set(morf.time.now_ms() + left)
     local mine = own.ends:get()
-    morf.timer(left, function() if own.ends:get() == mine then own.ends:set(0) end end, false)
+    morf.time.timer(left, function() if own.ends:get() == mine then own.ends:set(0) end end, false)
   elseif own.ends:get() > 0 then
     own.left:set(own_left())
     own.ends:set(0)

@@ -179,7 +179,7 @@ function M.record(id, score)
   touched()
   if not saving then
     saving = true
-    morf.timer(120, save, false)
+    morf.time.timer(120, save, false)
   end
   if better then
     for _, listener in ipairs(M.on_new_best) do listener(id, score) end

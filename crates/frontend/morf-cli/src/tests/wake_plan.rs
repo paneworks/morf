@@ -44,7 +44,7 @@ fn the_clock_wakes_the_loop_at_the_grain_it_is_read() {
     let seconds = runtime_with(
         r#"
         local ui = require("morf.ui")
-        ui.Text { text = function() return morf.clock:get() end }
+        ui.Text { text = function() return morf.time.clock:get() end }
         "#,
     );
     let sleep = Sleep::plan(&seconds, false, None);
@@ -57,8 +57,7 @@ fn the_clock_wakes_the_loop_at_the_grain_it_is_read() {
     let minutes = runtime_with(
         r#"
         local ui = require("morf.ui")
-        local clock = require("morf.core").system_clock { precision = "minutes" }
-        ui.Text { text = function() return clock:format("%H:%M") end }
+        ui.Text { text = function() return morf.time.minute_clock:get() end }
         "#,
     );
     let sleep = Sleep::plan(&minutes, false, None);
@@ -74,8 +73,8 @@ fn the_earliest_deadline_wins() {
     let runtime = runtime_with(
         r#"
         local ui = require("morf.ui")
-        ui.Text { text = function() return morf.clock:get() end }
-        morf.timer(5, function() end, true)
+        ui.Text { text = function() return morf.time.clock:get() end }
+        morf.time.timer(5, function() end, true)
         "#,
     );
     let sleep = Sleep::plan(&runtime, false, None);

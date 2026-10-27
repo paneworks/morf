@@ -1,5 +1,5 @@
 -- lib.kit.widgets on the Press and Range archetypes, with a plain skin:
--- toggles, an exclusive group the arrows walk, a slider driven by the
+-- a switch, a radio group the arrows walk, a scale driven by the
 -- pointer, the keys and the wheel, auto-repeat, and keys a control does
 -- not use going on to what is around it.
 --
@@ -28,15 +28,16 @@ local HOST = [[
   ui.Item { width = 600, height = 300,
     on_key_pressed = function(_, _, _, _, name) parent_keys = parent_keys + 1 note("parent:" .. tostring(name)) end,
     w.switch { id = "sw", x = 10, y = 10, on_toggled = function(on) note("switch:" .. tostring(on)) end },
-    w.radio { id = "r1", x = 10, y = 60, group = "g", checked = true, on_toggled = function(on) note("r1:" .. tostring(on)) end },
-    w.radio { id = "r2", x = 40, y = 60, group = "g", on_toggled = function(on) note("r2:" .. tostring(on)) end },
-    w.radio { id = "r3", x = 70, y = 60, group = "g", enabled = false },
-    w.slider { id = "sl", x = 10, y = 120, width = 120, height = 20, step = 0.1,
+    w.check_button { id = "r1", x = 10, y = 60, group = "g", checked = true, on_toggled = function(on) note("r1:" .. tostring(on)) end },
+    w.check_button { id = "r2", x = 40, y = 60, group = "g", on_toggled = function(on) note("r2:" .. tostring(on)) end },
+    w.check_button { id = "r3", x = 70, y = 60, group = "g", enabled = false },
+    w.scale { id = "sl", x = 10, y = 120, width = 120, height = 20, step = 0.1,
       value = function() return level:get() end,
       on_moved = function(v) level:set(v) note(("moved:%.3f"):format(v)) end, on_pressed = function(x) note("pressed:" .. tostring(x)) end },
-    w.repeat_button { id = "rep", x = 200, y = 10, width = 40, height = 40, repeat_delay = 300, repeat_interval = 100,
+    w.button { id = "rep", x = 200, y = 10, width = 40, height = 40, auto_repeat = true, repeat_delay = 300,
+      repeat_interval = 100,
       on_clicked = function() note("rep") end, on_released = function() note("rel") end, on_pressed = function() note("prs") end },
-    w.push { id = "push", x = 260, y = 10, width = 60, height = 30, on_clicked = function() note("push") end },
+    w.button { id = "push", x = 260, y = 10, width = 60, height = 30, on_clicked = function() note("push") end },
   }
   morf.ipc.log = function() local s = table.concat(log, ","); log = {}; return s end
   morf.ipc.level = function() return level:get() end
@@ -72,7 +73,7 @@ test.it("an exclusive group keeps one checked and the arrows walk it", function(
   test.eq(focused, "r1")
 end)
 
-test.it("a slider follows the pointer, the keys and the wheel", function()
+test.it("a scale follows the pointer, the keys and the wheel", function()
   load()
   local slider = test.get("sl")
   -- 30 px into its 100 px track, which starts 10 px in.

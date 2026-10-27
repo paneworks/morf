@@ -55,7 +55,7 @@ local function retract_later()
   retract_generation = retract_generation + 1
   local mine = retract_generation
   -- After a moment, so moving from a tab to its peek is not leaving.
-  morf.timer(320, function()
+  morf.time.timer(320, function()
     if mine == retract_generation and hover_count <= 0 then
       D.revealed:set(false)
       D.peeked:set("")

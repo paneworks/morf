@@ -49,20 +49,14 @@ fn engine_modules_are_preloaded_by_rust() {
             "native-modules.lua",
             br#"
                 local morf = require("morf")
-                local core = require("morf.core")
-                local ui = require("morf.ui")
-                local io = require("morf.io")
-                local window = require("morf.window")
                 assert(package.loaded["morf"] == morf)
-                assert(package.loaded["morf.core"] == core)
-                assert(package.loaded["morf.ui"] == ui)
-                assert(package.loaded["morf.io"] == io)
-                assert(package.loaded["morf.window"] == window)
-                assert(type(ui.Item) == "function")
-                assert(core.signal == morf.signal)
-                assert(io.process == morf.process)
-                assert(io.dbus == nil)
-                assert(window.layer_surface == morf.surface)
+                assert(require("morf.ui") == morf.ui)
+                assert(require("morf.window") == morf.window)
+                assert(require("morf.process") == morf.process)
+                assert(type(morf.ui.Item) == "function")
+                assert(not pcall(require, "morf.core"))
+                assert(not pcall(require, "morf.io"))
+                assert(morf.window.layer_surface == nil)
             "#,
         )
         .unwrap();
@@ -186,7 +180,7 @@ fn general_window_models_validate_popup_and_floating_state() {
                     updates_enabled = false,
                 }
                 local floating_root = ui.Item {}
-                local floating = window.floating {
+                local floating = window.toplevel {
                     root = floating_root,
                     width = 800,
                     height = 600,
@@ -292,10 +286,10 @@ fn window_models_keep_multiple_surfaces_independent() {
             br#"
                 local ui = require("morf.ui")
                 local window = require("morf.window")
-                local first = window.floating {
+                local first = window.toplevel {
                   root = ui.Item {}, visible = true, title = "one"
                 }
-                local second = window.floating {
+                local second = window.toplevel {
                   root = ui.Item {}, visible = true, title = "two", parent = first
                 }
                 local popup = window.popup {

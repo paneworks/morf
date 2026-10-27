@@ -1,6 +1,6 @@
 -- Claude Code usage for the current five-hour block and the last seven days.
 --
--- Port of ClaudeService.qml over `lib.claude_usage`. Token and message
+-- Port of ClaudeService.qml over `services.claude_usage`. Token and message
 -- counts come from the transcripts on disk, where every assistant turn
 -- records its usage. Percentages come only from the account: the API's
 -- `anthropic-ratelimit-unified-*` headers, the figures `/usage` shows,
@@ -20,8 +20,7 @@ local M = {}
 M.POLL_MS = 120000
 M.LIMITS_MS = 600000
 
-local ok, lib = pcall(require, "lib.integrations.claude_usage")
-if not ok then lib = nil end
+local lib = require("services.claude_usage")
 
 local handle = nil
 local EMPTY = { available = false }
@@ -40,7 +39,6 @@ local limits = {
 M.limits = limits
 
 local function reader()
-  if not lib then return nil end
   if handle == nil then
     local okn, made = pcall(lib.new, { interval = M.POLL_MS })
     handle = okn and made or false
@@ -48,7 +46,7 @@ local function reader()
   return handle or nil
 end
 
---- The transcripts' reading, as `lib.claude_usage` gives it.
+--- The transcripts' reading, as `services.claude_usage` gives it.
 function M.now()
   local r = reader()
   if not r then return EMPTY end
@@ -100,7 +98,7 @@ end
 --- between polls.
 function M.remaining()
   if nothing() then return 0 end
-  morf.minute_clock:get()
+  morf.time.minute_clock:get()
   return math.max(0, M.block_ends() * 1000 - morf.time.now_ms())
 end
 
@@ -184,7 +182,7 @@ end
 
 local asking = false
 function M.ask_limits()
-  if not lib or not lib.limits or asking then return end
+  if asking then return end
   if act.dry then
     morf.log("info", "impasto: dry run, not asking the Claude API for the account's limits")
     return
@@ -219,7 +217,7 @@ function M.subscribe()
   if watchers == 1 then
     M.refresh()
     M.ask_limits()
-    limits_poller = morf.timer(M.LIMITS_MS, M.ask_limits, true)
+    limits_poller = morf.time.timer(M.LIMITS_MS, M.ask_limits, true)
   end
 end
 function M.release()

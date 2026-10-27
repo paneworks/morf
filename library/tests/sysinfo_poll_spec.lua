@@ -19,7 +19,7 @@ local SOURCE=[[
     return real_list(path,...)
   end
   fs.read_async=function(paths,callback,limit)
-    morf.timer(1,function()
+    morf.time.timer(1,function()
       local values={} for i,path in ipairs(paths) do values[i]=fs.read(path,limit) or false end
       callback(true,values)
     end,false)
@@ -28,7 +28,7 @@ local SOURCE=[[
   local sys=require("lib.services.sysinfo")
   sys.sources.temperatures:refresh()
   sys.sources.cpu:refresh()
-  morf.timer(4,function() heartbeat=heartbeat+1 readings_at_beat=reads end,false)
+  morf.time.timer(4,function() heartbeat=heartbeat+1 readings_at_beat=reads end,false)
   morf.ipc.state=function()
     return {reads=reads,heartbeat=heartbeat,at_beat=readings_at_beat,
       value=sys.sources.temperatures.value.cpu,history=sys.history("temperature"),
@@ -83,7 +83,7 @@ test.it("a large diskstats table leaves input turns while it is parsed",function
     for i=1,256 do rows[i]=" 7 "..i.." loop"..i.." 1 0 10 0 1 0 20 0 0 1 0 0 0 0 0 0 0" end
     local fs=morf.fs
     fs.read_async=function(paths,callback)
-      morf.timer(1,function() callback(true,{table.concat(rows,"\n")}) end,false)
+      morf.time.timer(1,function() callback(true,{table.concat(rows,"\n")}) end,false)
       return true
     end
     fs.lines=function() return {} end
@@ -91,7 +91,7 @@ test.it("a large diskstats table leaves input turns while it is parsed",function
     local sys=require("lib.services.sysinfo")
     local completed_at_beat
     sys.sources.drives:refresh()
-    morf.timer(4,function() completed_at_beat=sys.sources.drives.samples > 0 end,false)
+    morf.time.timer(4,function() completed_at_beat=sys.sources.drives.samples > 0 end,false)
     morf.ipc.state=function() return {early=completed_at_beat,samples=sys.sources.drives.samples,error=sys.sources.drives.error} end
     require("morf.ui").Item{width=1,height=1}
   ]]})

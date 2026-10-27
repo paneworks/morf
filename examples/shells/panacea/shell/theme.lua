@@ -6,7 +6,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
 local config = require("config")
 
 local theme = {}
@@ -57,16 +56,15 @@ end
 -- in ~/.cache/lule/colors.json as `special.background`, `.foreground`,
 -- `.cursor` and sixteen `colors`. The cursor is the accent. Panacea's own
 -- settings apply when there is no cache, or when `themeId` is "panacea".
-local io = require("morf.io")
 local lule = nil
 do
-  local cache = core.env("XDG_CACHE_HOME") or (config.home .. "/.cache")
+  local cache = morf.env("XDG_CACHE_HOME") or (config.home .. "/.cache")
   for _, path in ipairs { cache .. "/lule/colors.json", config.home .. "/.lule/wal/colors.json" } do
-    local ok, handle = pcall(io.file, path)
+    local ok, handle = pcall(morf.fs.file, path)
     if ok and handle then
       local read, text = pcall(handle.read, handle)
       if read and type(text) == "string" and text ~= "" then
-        local decoded, values = pcall(io.json.decode, text)
+        local decoded, values = pcall(morf.json.decode, text)
         if decoded and type(values) == "table" and type(values.special) == "table" then
           lule = values
           lule.path = path
@@ -126,7 +124,7 @@ local C = theme.color
 -- ------------------------------------------------------------------- fonts --
 
 local installed = {}
-for _, name in ipairs(morf.font_families()) do installed[name] = true end
+for _, name in ipairs(morf.text.families()) do installed[name] = true end
 
 --- The first of `wanted` that is installed, else `fallback`.
 local function first_installed(wanted, fallback)
@@ -148,7 +146,7 @@ theme.icon_font = first_installed({
   "Symbols Nerd Font", "Iosevka NF",
 }, theme.font)
 
-theme.clock = core.system_clock { precision = "seconds" }
+theme.clock = require("lib.util.clock")
 
 -- ------------------------------------------------------------------ motion --
 
@@ -491,7 +489,7 @@ local mounted_count = 0
 -- its own that wakes every output's loop each time it fires, and fifty of
 -- them at 24ms were a quarter of a core doing nothing.
 local ticking = {}
-morf.timer(24, function()
+morf.time.timer(24, function()
   for _, tick in ipairs(ticking) do tick() end
 end, true)
 
@@ -503,7 +501,7 @@ end
 function theme.mounted(shown, delay)
   mounted_count = mounted_count + 1
   local mounted = morf.signal("panacea.mounted." .. mounted_count, shown:get())
-  local clock = morf.elapsed_timer()
+  local clock = morf.time.elapsed()
   local going = false
   theme.tick(function()
     local want = shown:get()

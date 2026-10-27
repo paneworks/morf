@@ -10,19 +10,19 @@ local HOST = [[
   local ui = require("morf.ui")
   local skin = require("lib.kit.skin")
   local w = require("lib.kit.widgets")
-  local disclosure = require("lib.kit.disclosure")
+  local disclosure = require("lib.kit.archetypes.disclosure")
   skin.define("plain", { skins = {} })
   skin.use("plain")
   local log = {}
   local level = morf.signal("test.a11y.level", 0.5)
   local tab = morf.signal("test.a11y.tab", 1)
   ui.Item { width = 600, height = 400,
-    w.push { id = "push", x = 10, y = 10, width = 80, height = 30, label = "Apply",
+    w.button { id = "push", x = 10, y = 10, width = 80, height = 30, label = "Apply",
       on_clicked = function() log[#log + 1] = "push" end },
     w.switch { id = "sw", x = 100, y = 10, width = 50, height = 30, accessible_name = "Wi-Fi" },
-    w.slider { id = "sl", x = 10, y = 60, width = 200, height = 20, step = 0.1, accessible_name = "Volume",
+    w.scale { id = "sl", x = 10, y = 60, width = 200, height = 20, step = 0.1, accessible_name = "Volume",
       value = function() return level:get() end, on_moved = function(v) level:set(v) end },
-    w.tabs { id = "tabs", x = 10, y = 100, width = 300, height = 30, items = { "One", "Two", "Three" },
+    w.view_switcher { id = "tabs", x = 10, y = 100, width = 300, height = 30, items = { "One", "Two", "Three" },
       current = function() return tab:get() end, on_current_changed = function(i) tab:set(i) end },
     disclosure.make("expander", { id = "more", x = 10, y = 150, width = 200, title = "More",
       content = ui.Rect { width = 200, height = 40 } }),

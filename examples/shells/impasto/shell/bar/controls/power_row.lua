@@ -39,7 +39,7 @@ function M.run(id)
   if id == "reboot" then return act.run("restarting", login.reboot) end
   if id == "shutdown" then return act.run("shutting down", login.power_off) end
   if id == "logout" then
-    local ok, hyprland = pcall(require, "lib.integrations.hyprland")
+    local ok, hyprland = pcall(require, "lib.compositor.hyprland")
     if ok and hyprland.available and hyprland.available() then
       return act.run("logging out", hyprland.dispatch, "exit", "")
     end
@@ -94,7 +94,7 @@ function M.build(on_ran)
           armed:set(action.id)
           generation = generation + 1
           local mine = generation
-          morf.timer(3000, function() if mine == generation then armed:set("") end end, false)
+          morf.time.timer(3000, function() if mine == generation then armed:set("") end end, false)
         end,
       },
     }

@@ -24,7 +24,7 @@ fn per_output_runtime() -> Runtime {
             br##"
                 local ui = require("morf.ui")
                 morf.surface.session_lock = true
-                morf.lock_surface(function(screen)
+                morf.lock.surface(function(screen)
                     return ui.Rect {
                         width = screen.width, height = screen.height, color = "#000000",
                         ui.Item {
@@ -146,7 +146,7 @@ fn a_builder_and_a_root_of_its_own_is_refused() {
             "lock-both.lua",
             br##"
                 local ui = require("morf.ui")
-                morf.lock_surface(function() return ui.Rect { color = "#000000" } end)
+                morf.lock.surface(function() return ui.Rect { color = "#000000" } end)
                 ui.Rect { color = "#000000" }
             "##,
         )
@@ -162,7 +162,7 @@ fn a_builder_that_returns_no_rect_is_refused_and_leaves_nothing() {
             "lock-item.lua",
             br#"
                 local ui = require("morf.ui")
-                morf.lock_surface(function() return ui.Item {} end)
+                morf.lock.surface(function() return ui.Item {} end)
             "#,
         )
         .unwrap();

@@ -95,7 +95,7 @@ impl Runtime {
         self.bump_screens_revision(screens);
     }
 
-    /// Moves `morf.screens_revision()` when the output list changed, and
+    /// Moves `morf.window.screens_revision()` when the output list changed, and
     /// runs what follows it.
     fn bump_screens_revision(&mut self, screens: &[Screen]) {
         {

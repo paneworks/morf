@@ -15,8 +15,7 @@ local ui = require("morf.ui")
 -- A floating panel rather than a full screen, so it sits over the corner of
 -- the desktop and leaves the terminal you launched it from visible. Set
 -- MORF_GALLERY_FULL=1 to have it take the whole output instead.
-local core = require("morf.core")
-local FULL = core.env("MORF_GALLERY_FULL") == "1"
+local FULL = morf.env("MORF_GALLERY_FULL") == "1"
 
 local screen = morf.screens[1]
 local SW = (screen and screen.width) or 1280
@@ -43,7 +42,7 @@ local theme = morf.theme {
 --------------------------------------------------------------------------------
 -- Matrices. Rotation could only be written by expanding the arithmetic by hand.
 --------------------------------------------------------------------------------
-morf.shader("rotor", {
+morf.shader.define("rotor", {
   params = { blades = 6.0 },
   fragment = [[
     function fragment(uv, time, resolution, coverage, blades)
@@ -64,7 +63,7 @@ morf.shader("rotor", {
 -- Integers and bitwise. A real hash, and therefore real noise: the constants
 -- below need thirty-two bits and an f32 has twenty-four of mantissa.
 --------------------------------------------------------------------------------
-morf.shader("static", {
+morf.shader.define("static", {
   fragment = [[
     function hash(seed)
       local h = seed * u32(747796405) + u32(2891336453)
@@ -88,7 +87,7 @@ morf.shader("static", {
 -- Arrays and a switch. A palette is a Lua list; the band choice is an if chain
 -- the emitter recognises as a jump table.
 --------------------------------------------------------------------------------
-morf.shader("bands", {
+morf.shader.define("bands", {
   fragment = [[
     function fragment(uv, time, resolution, coverage)
       local ramp = {
@@ -124,7 +123,7 @@ morf.shader("bands", {
 -- configuration's could not, so a shader drawing its own shape had no way to
 -- soften it at the resolution it was actually drawn at.
 --------------------------------------------------------------------------------
-morf.shader("crisp", {
+morf.shader.define("crisp", {
   kind = "surface",
   fragment = [[
     function fragment(uv, time, resolution)
@@ -146,7 +145,7 @@ morf.shader("crisp", {
 -- A data block and a vertex displacement. The bars are numbers the config
 -- pushes each tick; the whole panel sways because its corners are moved.
 --------------------------------------------------------------------------------
-morf.shader("levels", {
+morf.shader.define("levels", {
   data = { bars = 24 },
   vertex = [[
     function vertex(corner, size, time)
@@ -169,7 +168,7 @@ morf.shader("levels", {
 --------------------------------------------------------------------------------
 -- Records and helpers. Two lights, each a named record, shaded by one function.
 --------------------------------------------------------------------------------
-morf.shader("lights", {
+morf.shader.define("lights", {
   fragment = [[
     function shade(light, at)
       local fall = 1.0 - clamp(length(at) * light.reach, 0.0, 1.0)
@@ -266,7 +265,7 @@ children[#children + 1] = ui.Timer {
       values[slot] = 0.18 + (math.sin(a) * 0.5 + 0.5) * 0.72
     end
     for _, node in ipairs(level_nodes) do
-      morf.shader_data(node, "bars", values)
+      morf.shader.data(node, "bars", values)
     end
   end,
 }

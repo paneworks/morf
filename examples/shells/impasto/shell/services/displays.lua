@@ -297,7 +297,7 @@ local function send(what, rules)
   -- Bringing an output up is a burst of events; nothing more is pushed
   -- until they settle, and the read after sees where things landed.
   if settling then settling:cancel() end
-  settling = morf.timer(600, function()
+  settling = morf.time.timer(600, function()
     settling = nil
     disturbed = true
     if hyprland and hyprland.refresh then hyprland.refresh() end
@@ -378,7 +378,7 @@ local function read()
   if disturbed then
     disturbed = false
     -- The workspaces answer follows the monitors'.
-    morf.timer(300, rescue, false)
+    morf.time.timer(300, rescue, false)
   end
 end
 
@@ -410,10 +410,10 @@ end
 
 function M.start()
   if config ~= nil then return end
-  local ok, lib = pcall(require, "lib.integrations.hyprland_config")
+  local ok, lib = pcall(require, "lib.compositor.hyprland_config")
   config = ok and lib or false
   if not config or not config.available() then return end
-  hyprland = require("lib.integrations.hyprland")
+  hyprland = require("lib.compositor.hyprland")
   hyprland.on("refreshed", function(kind) if kind == "monitors" then read() end end)
   for _, name in ipairs { "configreloaded", "monitoradded", "monitoraddedv2", "monitorremoved", "monitorremovedv2" } do
     hyprland.on(name, function() disturbed = true end)
@@ -427,7 +427,7 @@ function M.start()
     if first then first = false return end
     if pending then pending:cancel() end
     -- Long enough that a slider dragged is one push when it rests.
-    pending = morf.timer(400, function() pending = nil M.apply_profile() end, false)
+    pending = morf.time.timer(400, function() pending = nil M.apply_profile() end, false)
   end)
   monitors = config.outputs()
   seen_signature = signature(monitors)

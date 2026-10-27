@@ -25,7 +25,7 @@ local PAINT = {
   { key = "blue", x = 800, y = 225, rotation = 6 },
 }
 
-local PICTURE = morf.fs.join(morf.shell_dir(), "art", "palette-board.png")
+local PICTURE = morf.fs.join(morf.paths.shell(), "art", "palette-board.png")
 local have_picture = morf.fs.is_file(PICTURE)
 
 --- `size` in pixels (64).

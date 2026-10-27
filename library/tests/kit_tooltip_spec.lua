@@ -1,4 +1,4 @@
--- lib.kit.popup.tooltip on a plain node and on a MouseArea: the tip opens
+-- lib.kit.archetypes.popup.tooltip on a plain node and on a MouseArea: the tip opens
 -- after the pointer rests on its target and closes when it leaves.
 --
 --     morf test library/tests/kit_tooltip_spec.lua
@@ -8,7 +8,7 @@ local test = morf.test
 local HOST = [[
   local ui = require("morf.ui")
   local skin = require("lib.kit.skin")
-  local popup = require("lib.kit.popup")
+  local popup = require("lib.kit.archetypes.popup")
   skin.define("plain", { skins = {
     Popup = function() return { background = ui.Rect { anchors = { fill = true }, color = "#202020" } } end,
   } })

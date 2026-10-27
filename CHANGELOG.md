@@ -1,5 +1,55 @@
 # Changelog
 
+## [0.6.0] - 2026-10-27
+
+### <!-- 2 -->🚜 Refactor
+
+- Delete the eva-only modules
+- Drop the eva submodule
+- Move prek providers into one module
+- Read the environment through one parser
+- Drop platform code with no caller
+- Delete workspaces and gamma
+- Delete archives
+- Port to the namespaced API
+- Port to the namespaced API
+- Move bindings into namespaces
+- Port apps to the new kit
+- Port composites to adwaita names
+- Split the default skin by concern
+- Rebuild the contract on adwaita
+- Drop five archetypes
+- Reorganize modules by kind
+- Drop domain, catalogue and lib samples
+- Delete m3shapes_paths
+
+### <!-- 3 -->📚 Documentation
+
+- Drop the removed plot functions
+- Record the eva-only deletions
+- Record step 7
+- Document util.clock
+- Read the plan against the contract
+- Add the 0.6 migration table
+- Index the API by namespace
+- Record step 6
+- Record step 5
+- Document the namespaced API
+- Regenerate the widgets chapter
+- Add the slimdown, adwaita and inventory plans
+
+### <!-- 6 -->🧪 Testing
+
+- Port engine tests to the new API
+- Rewrite specs and gallery for adwaita
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- Pin actions/cache to v5.1.0
+- Pin actions/checkout to v5.1.0
+- Move eva to its flick tests
+- Move eva to its v0.5.0 pin
+
 ## [0.5.0] - 2026-10-19
 
 ### <!-- 0 -->⛰️  Features

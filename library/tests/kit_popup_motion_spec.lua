@@ -1,4 +1,4 @@
--- lib.kit.popup's motion, from a theme's `popup_motion`: the default kit's
+-- lib.kit.archetypes.popup's motion, from a theme's `popup_motion`: the default kit's
 -- menu, bottom sheet, toast and dialog coming in from the pose they rest in
 -- while shut and going back to it as ghosts, sampled on the virtual clock --
 -- opened, closed, turned back mid-flight and taken back while leaving --
@@ -34,40 +34,40 @@ local DEFAULT = [[
   local under = ui.MouseArea { id = "under", x = 0, y = 50, width = 800, height = 550,
     on_clicked = function() note("under") end }
   local root = ui.Item { width = 800, height = 600, under }
-  local menu = w.menu { id = "menu", width = 160,
+  local menu = w.popover_menu { id = "menu", width = 160,
     items = { { label = "Copy", on_clicked = function() note("copy") end },
               { label = "Paste", on_clicked = function() note("paste") end } },
     on_opened = function() note("opened") end,
     on_closed = function(reason) note("closed:" .. reason) end }
   local sheet = w.bottom_sheet { id = "sheet", root = root, width = 400, height = 200, text = "Sheet" }
-  local toast = w.toast { id = "toast", root = root, width = 200, height = 40, text = "Saved" }
+  local toast = require("lib.kit.archetypes.popup").make("toast", { id = "toast", root = root, width = 200, height = 40, text = "Saved" })
   local dialog = w.dialog { id = "dialog", root = root, width = 320, height = 160, title = "Discard?",
     buttons = { { label = "Cancel" }, { label = "Discard" } },
     on_closed = function(reason) note("dialog:" .. reason) end }
-  opener = w.push { id = "opener", x = 20, y = 20, width = 100, height = 30, label = "Menu",
+  opener = w.button { id = "opener", x = 20, y = 20, width = 100, height = 30, label = "Menu",
     on_clicked = function() menu.toggle(opener) end }
   ui.reparent(opener, root)
   popups = { menu = menu, sheet = sheet, toast = toast, dialog = dialog }
 ]] .. POSE
-
--- A theme with only `popup_motion`: linear tweens, a 100 ms linger, and an
+-- A theme whose skin has a `popup_motion`: linear tweens, a 100 ms linger,
+-- and an open pose that follows a signal.
 -- open pose that follows a signal.
 local OWN = [[
   local ui = require("morf.ui")
   local skin = require("lib.kit.skin")
-  skin.define("plain", { skins = {
-    Popup = function() return { background = ui.Rect { anchors = { fill = true }, color = "#202020" } } end,
-  } })
-  skin.use("plain")
   local offset = morf.signal("own.offset", 0)
   local linear = { duration = 100, easing = "linear" }
-  package.loaded.kit = { popup_motion = function(widget, spec, state)
-    return { linger = 100, behavior = { translate_x = linear, opacity = linear },
-      transform_origin_x = 0,
-      translate_x = function() if state.open() then return offset:get() end return -40 end,
-      opacity = function() return state.open() and 1 or 0 end }
-  end }
-  local popup = require("lib.kit.popup")
+  skin.define("plain", { skins = {
+    Popup = function() return { background = ui.Rect { anchors = { fill = true }, color = "#202020" } } end,
+    popup_motion = function(widget, spec, state)
+      return { linger = 100, behavior = { translate_x = linear, opacity = linear },
+        transform_origin_x = 0,
+        translate_x = function() if state.open() then return offset:get() end return -40 end,
+        opacity = function() return state.open() and 1 or 0 end }
+    end,
+  } })
+  skin.use("plain")
+  local popup = require("lib.kit.archetypes.popup")
   local root = ui.Item { width = 400, height = 300 }
   local log, opener = {}, nil
   local popups = {

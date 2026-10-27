@@ -347,10 +347,6 @@ pub fn read_link(path: &Path) -> io::Result<PathBuf> {
     fs::read_link(path)
 }
 
-pub fn realpath(path: &Path) -> io::Result<PathBuf> {
-    fs::canonicalize(path)
-}
-
 /// Free and total bytes of the filesystem holding `path`.
 pub fn disk_usage(path: &Path) -> io::Result<(u64, u64, u64)> {
     let stat = rustix::fs::statvfs(path).map_err(io::Error::from)?;

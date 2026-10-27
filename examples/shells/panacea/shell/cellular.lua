@@ -61,7 +61,7 @@ end
 
 if manager then
   poll()
-  morf.timer(10000, poll, true)
+  morf.time.timer(10000, poll, true)
 end
 
 --- The bars glyph for the quality now.

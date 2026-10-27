@@ -3,7 +3,7 @@
 //!
 //! One runtime -- not one per output -- whose own surface is nothing the
 //! person sees: the configuration's windows are its interface
-//! (`morf.window.floating`, through `lib.kit.app`), and the process ends
+//! (`morf.window.toplevel`, through `lib.kit.app`), and the process ends
 //! when the last of them closes. The configuration finds out it is an app
 //! from `morf.capabilities().app` (and the `MORF_APP` environment).
 
@@ -21,5 +21,5 @@ pub fn enter() {
 
 /// Whether this process runs an application.
 pub fn is_app() -> bool {
-    APP.load(Ordering::SeqCst) || std::env::var_os("MORF_APP").is_some()
+    APP.load(Ordering::SeqCst) || morf_value::env::var("MORF_APP").is_some()
 }

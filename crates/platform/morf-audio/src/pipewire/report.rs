@@ -72,7 +72,7 @@ impl Session {
                         node.latency.saturating_sub(ANALYSIS_LAG)
                     }),
             };
-            if std::env::var_os("MORF_AUDIO_LOG").is_some() {
+            if morf_value::env::log("audio") {
                 eprintln!(
                     "morf: audio: monitor {} holds {} ms (default {:?} = node {:?})",
                     monitor.id,

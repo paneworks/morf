@@ -95,7 +95,7 @@ function M.of(path, w, h, blur)
     queued[key] = true
     fs.mkdir(M.dir, { parents = true })
     waiting[#waiting + 1] = { key = key, source = path, output = output, w = w, h = h, blur = blur }
-    morf.timer(1, pump, false)
+    morf.time.timer(1, pump, false)
   end
   return ""
 end

@@ -1,8 +1,8 @@
-//! `morf.spawn`, `morf.run`, `morf.connect`, `morf.request_socket`:
+//! `morf.process.spawn`, `morf.process.run`, `morf.socket.connect`, `morf.socket.request`:
 //! processes and sockets whose output arrives as callbacks.
 //!
 //! ```lua
-//! local child = morf.spawn {
+//! local child = morf.process.spawn {
 //!     command = { "pactl", "subscribe" },   -- argv; never a shell
 //!     env = { LANG = "C" },                  -- added to what is inherited
 //!     clear_env = false,                     -- start from nothing instead
@@ -20,11 +20,11 @@
 //! child:write("data")  child:close_stdin()  child:kill("TERM")
 //! child:pid()  child:running()  child:close()  -- close: no more callbacks
 //!
-//! morf.run({ "git", "status", "--short" }, { cwd = dir }, function(result)
+//! morf.process.run({ "git", "status", "--short" }, { cwd = dir }, function(result)
 //!     -- result: ok, code, signal, stdout, stderr, timed_out, truncated, error
 //! end)
 //!
-//! local conn = morf.connect {
+//! local conn = morf.socket.connect {
 //!     path = "/run/user/1000/some.sock",      -- or host = "127.0.0.1", port = 7000
 //!     on_line = function(line) end,          -- or on_data = function(chunk) end
 //!     on_connect = function() end,
@@ -33,7 +33,7 @@
 //! }
 //! conn:send("hello\n")  conn:connected()  conn:close()
 //!
-//! morf.request_socket(path, "j/monitors", function(reply, err) end,
+//! morf.socket.request(path, "j/monitors", function(reply, err) end,
 //!     { timeout_ms = 5000, max_bytes = 8 * 1024 * 1024 })
 //! ```
 //!
@@ -84,8 +84,8 @@ type Kind = morf_io::IoKind<Handler>;
 /// A child or a connection as Lua holds it.
 struct IoToken(IoLink);
 
-/// Installs `morf.spawn`, `morf.run`, `morf.connect` and
-/// `morf.request_socket`.
+/// Installs `morf.process.spawn`, `morf.process.run`, `morf.socket.connect` and
+/// `morf.socket.request`.
 pub(crate) fn install_io_api<'gc>(
     ctx: Context<'gc>,
     state: Rc<StateCell<ReactiveState>>,
@@ -166,7 +166,13 @@ pub(crate) fn install_io_api<'gc>(
 
     let spawn_starter = Rc::clone(&starter);
     let spawn = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        gate!(ctx, &spawn_starter.state, stack, "run", "morf.spawn");
+        gate!(
+            ctx,
+            &spawn_starter.state,
+            stack,
+            "run",
+            "morf.process.spawn"
+        );
         let options: Table = stack.consume(ctx)?;
         let command = match options.get_value(ctx, "command") {
             LuaValue::Table(command) => command,
@@ -196,11 +202,11 @@ pub(crate) fn install_io_api<'gc>(
         }
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "spawn", spawn);
+    crate::api::namespace::table(ctx, morf, "process").set_field(ctx, "spawn", spawn);
 
     let run_starter = Rc::clone(&starter);
     let run = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        gate!(ctx, &run_starter.state, stack, "run", "morf.run");
+        gate!(ctx, &run_starter.state, stack, "run", "morf.process.run");
         let (command, options, callback): (Table, LuaValue, LuaValue) = stack.consume(ctx)?;
         let (options, callback) = match (options, callback) {
             (LuaValue::Function(Function::Closure(callback)), LuaValue::Nil) => {
@@ -236,14 +242,14 @@ pub(crate) fn install_io_api<'gc>(
         }
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "run", run);
-    // `morf.kill(pid, signal)`: a signal to a process morf did not start
+    crate::api::namespace::table(ctx, morf, "process").set_field(ctx, "run", run);
+    // `morf.process.kill(pid, signal)`: a signal to a process morf did not start
     // (or no longer holds the handle of) -- a recorder left running by an
     // earlier shell. The default is TERM. Process groups (pid <= 0) and init
     // are refused. Returns true, or false and the reason.
     let kill_state = Rc::clone(&starter.state);
     let kill_pid = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        gate!(ctx, &kill_state, stack, "run", "morf.kill");
+        gate!(ctx, &kill_state, stack, "run", "morf.process.kill");
         let (pid, signal): (i64, LuaValue) = stack.consume(ctx)?;
         let pid = morf_io::signalable_pid(pid).map_err(HostError::from)?;
         let signal = signal_of(signal)?;
@@ -253,11 +259,17 @@ pub(crate) fn install_io_api<'gc>(
         }
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "kill", kill_pid);
+    crate::api::namespace::table(ctx, morf, "process").set_field(ctx, "kill", kill_pid);
 
     let connect_starter = Rc::clone(&starter);
     let connect = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        gate!(ctx, &connect_starter.state, stack, "socket", "morf.connect");
+        gate!(
+            ctx,
+            &connect_starter.state,
+            stack,
+            "socket",
+            "morf.socket.connect"
+        );
         let options: Table = stack.consume(ctx)?;
         let endpoint = endpoint_of(ctx, options)?;
         let on_line = optional_closure(ctx, options, "on_line").map_err(HostError::from)?;
@@ -281,10 +293,10 @@ pub(crate) fn install_io_api<'gc>(
         stack.replace(ctx, connect_starter.connect(ctx, connect, kind)?);
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "connect", connect);
+    crate::api::namespace::table(ctx, morf, "socket").set_field(ctx, "connect", connect);
 
     let request = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        gate!(ctx, &starter.state, stack, "socket", "morf.request_socket");
+        gate!(ctx, &starter.state, stack, "socket", "morf.socket.request");
         let (path, data, callback, options): (luna::String, luna::String, LuaValue, LuaValue) =
             stack.consume(ctx)?;
         let callback = match callback {
@@ -317,7 +329,7 @@ pub(crate) fn install_io_api<'gc>(
         stack.replace(ctx, starter.connect(ctx, connect, kind)?);
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "request_socket", request);
+    crate::api::namespace::table(ctx, morf, "socket").set_field(ctx, "request", request);
 }
 
 struct Starter {

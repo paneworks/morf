@@ -66,7 +66,7 @@ pub(crate) fn install_process_api<'gc>(
         ctx,
         &state,
         "run",
-        "morf.process",
+        "morf.process.open",
         move |ctx, _, mut stack| {
             let (program, args): (String, Table) = stack.consume(ctx)?;
             let args = table_string_array(ctx, args, 64).map_err(HostError::from)?;
@@ -83,7 +83,7 @@ pub(crate) fn install_process_api<'gc>(
             Ok(CallbackReturn::Return)
         },
     );
-    morf.set_field(ctx, "process", process);
+    crate::api::namespace::table(ctx, morf, "process").set_field(ctx, "open", process);
 
     let process_view_start = gated(
         ctx,
@@ -292,7 +292,7 @@ pub(crate) fn install_process_api<'gc>(
         ctx,
         &state,
         "run",
-        "morf.process_view",
+        "morf.process.view",
         move |ctx, _, mut stack| {
             let options: Table = stack.consume(ctx)?;
             let command = match options.get_value(ctx, "command") {
@@ -355,7 +355,7 @@ pub(crate) fn install_process_api<'gc>(
             Ok(CallbackReturn::Return)
         },
     );
-    morf.set_field(ctx, "process_view", process_view);
+    crate::api::namespace::table(ctx, morf, "process").set_field(ctx, "view", process_view);
 }
 
 /// A child's event as `{ kind, data }` or `{ kind = "exit", success, code }`.

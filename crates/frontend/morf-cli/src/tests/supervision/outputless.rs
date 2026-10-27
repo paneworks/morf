@@ -28,7 +28,7 @@ const SHELL: &str = r#"
     morf.ipc.screens = function() return #morf.screens end
     morf.ipc.outputless = function() return morf.capabilities.outputless == true end
     local ticks = 0
-    morf.timer(5, function() ticks = ticks + 1 end, true)
+    morf.time.timer(5, function() ticks = ticks + 1 end, true)
     morf.ipc.ticks = function() return ticks end
     if #morf.screens > 0 then morf.ui.Item {} end
 "#;
@@ -397,7 +397,7 @@ fn going_dark_hands_over_what_the_primary_output_kept() {
     // B, not primary, stops after A in name order, and used to leave its
     // own for the outputless runtime.
     let source = format!(
-        "{SHELL}\n morf.ipc.mine = function() if morf.primary() then count:set(10) end end"
+        "{SHELL}\n morf.ipc.mine = function() if morf.window.primary() then count:set(10) end end"
     );
     let handover = Handover::default();
     let (tx, _rx) = mpsc::channel();

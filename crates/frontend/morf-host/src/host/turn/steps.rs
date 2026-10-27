@@ -64,7 +64,7 @@ pub(super) fn is_input(event: &Event) -> bool {
 }
 
 impl Host {
-    /// `morf.clock`, when the second turned over since the last turn.
+    /// `morf.time.clock`, when the second turned over since the last turn.
     pub(super) fn update_clock(&mut self, runtime: &mut Runtime) -> Result<bool, String> {
         let next_clock = clock_text();
         if next_clock == self.clock {
@@ -112,12 +112,6 @@ impl Host {
             // this thread paints nothing more of a shell that is leaving.
             links.tx.send(SupervisorMessage::Quit).map_err(stopped)?;
             return Ok(Some(Turn::Stop));
-        }
-        if let Some(enabled) = runtime.take_watch_files_change() {
-            links
-                .tx
-                .send(SupervisorMessage::WatchFiles(enabled))
-                .map_err(stopped)?;
         }
         Ok(None)
     }

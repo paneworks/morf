@@ -220,7 +220,7 @@ pub fn paint_layer(
             .iter()
             .map(|rect| u64::from(rect.width) * u64::from(rect.height))
             .sum();
-        // With `MORF_FRAME_LOG=2`, where: the node that keeps a shell drawing
+        // With `MORF_PROFILE=frame_split`, where: the node that keeps a shell drawing
         // is found from the rectangle it repaints.
         let rects = if split.on {
             let listed = damage

@@ -122,7 +122,7 @@ end
 local function tend()
   local want = s.running:get() and not s.paused:get()
   if want and not ticker then
-    ticker = morf.timer(250, tick, true)
+    ticker = morf.time.timer(250, tick, true)
   elseif not want and ticker then
     ticker:cancel()
     ticker = nil

@@ -27,9 +27,7 @@ local theme = morf.theme {
 
 -- One clock, read every frame. The orbits are plain trigonometry; the engine
 -- only ever sees `x` and `y` being assigned.
-local clock = morf.core and nil
-local core = require("morf.core")
-local elapsed = core.elapsed_timer()
+local elapsed = morf.time.elapsed()
 
 -- Each blob carries its own fill. A composition is one surface but not one
 -- colour: the fills cross-fade with exactly the weight the smooth union uses,

@@ -7,30 +7,6 @@ use std::time::Duration;
 use super::*;
 
 #[test]
-fn xkb_facade_builds_osk_layout_tables() {
-    let mut runtime = Runtime::default();
-    runtime
-        .execute(
-            "xkb.lua",
-            br#"
-                local keymap = morf.xkb.compile { layout = "us" }
-                assert(string.find(keymap.source, "xkb_keymap", 1, true))
-                local found = false
-                for _, key in ipairs(keymap.keys) do
-                    if key.name == "AC01" then
-                        assert(key.evdev_code == 30)
-                        assert(key.layouts[1][1][1].text == "a")
-                        assert(key.layouts[1][2][1].text == "A")
-                        found = true
-                    end
-                end
-                assert(found)
-            "#,
-        )
-        .unwrap();
-}
-
-#[test]
 fn input_method_bridges_context_and_edits() {
     let mut runtime = Runtime::default();
     runtime
@@ -39,7 +15,6 @@ fn input_method_bridges_context_and_edits() {
             br#"
                 local active = morf.signal("input.active", false)
                 morf.input_method.subscribe(function(value) active:set(value) end)
-                morf.input_method.preedit("hel", 3, 3)
                 morf.input_method.commit("hello")
                 morf.input_method.delete(1, 2)
                 morf.ipc["input.active"] = function() return active:get() end
@@ -51,11 +26,6 @@ fn input_method_bridges_context_and_edits() {
     assert_eq!(
         runtime.take_input_method_requests(),
         [
-            InputMethodRequest::Preedit {
-                text: "hel".to_owned(),
-                begin: 3,
-                end: 3,
-            },
             InputMethodRequest::Commit("hello".to_owned()),
             InputMethodRequest::Delete {
                 before: 1,
@@ -68,105 +38,6 @@ fn input_method_bridges_context_and_edits() {
         runtime.call_ipc("input.active", &[]).unwrap(),
         [IpcValue::Boolean(true)]
     );
-}
-
-#[test]
-fn text_input_bridges_state_and_edit_batches() {
-    let mut runtime = Runtime::default();
-    runtime
-        .execute(
-            "text-input.lua",
-            br#"
-                local committed = morf.signal("text.committed", "")
-                morf.text_input.subscribe(function(_, _, _, _, text)
-                    if text then committed:set(text) end
-                end)
-                morf.text_input.surrounding("draft", 5, 5)
-                morf.text_input.content_type(3, 0)
-                morf.text_input.cursor_rect(10, 20, 2, 18)
-                morf.ipc["text.get"] = function() return committed:get() end
-            "#,
-        )
-        .unwrap();
-
-    assert!(runtime.take_text_input_enable_request());
-    assert_eq!(runtime.take_text_input_requests().len(), 3);
-    assert!(runtime.dispatch_text_input(true, None, 0, 0, Some("done".to_owned()), 0, 0, 1,));
-    assert_eq!(
-        runtime.call_ipc("text.get", &[]).unwrap(),
-        [IpcValue::String("done".to_owned())]
-    );
-}
-
-#[test]
-fn variants_builds_the_current_screen_instance() {
-    let mut runtime = Runtime::for_screen(
-        Limits::default(),
-        Screen {
-            id: 12,
-            name: "DP-1".to_owned(),
-            make: "Example".to_owned(),
-            model: "Panel".to_owned(),
-            description: Some("Example Panel".to_owned()),
-            position: Some((10, 20)),
-            width: Some(1920),
-            height: Some(1080),
-            physical_size: Some((600, 340)),
-            pixels: None,
-            scale: 2,
-            transform: "normal".to_owned(),
-        },
-    );
-    runtime
-        .execute(
-            "variants.lua",
-            br#"
-                local morf = require("morf")
-                local ui = require("morf.ui")
-                local instances = morf.variants(morf.screens, function(screen)
-                    assert(screen.id == 12)
-                    assert(screen.make == "Example")
-                    assert(screen.model == "Panel")
-                    assert(screen.description == "Example Panel")
-                    assert(screen.x == 10 and screen.y == 20)
-                    assert(screen.physical_width_mm == 600)
-                    assert(screen.physical_height_mm == 340)
-                    assert(screen.device_pixel_ratio == 2)
-                    assert(screen.physical_pixel_density > 160)
-                    assert(screen.logical_pixel_density > 80)
-                    assert(screen.orientation == "landscape")
-                    assert(screen.primary_orientation == "landscape")
-                    assert(screen.transform == "normal")
-                    return ui.Text { text = screen.name, width = screen.width }
-                end)
-                assert(#instances == 1)
-            "#,
-        )
-        .unwrap();
-    let node = runtime.scene().roots()[0];
-    assert_eq!(runtime.scene().string_value(node, "text").unwrap(), "DP-1");
-    assert_eq!(runtime.scene().number(node, "width").unwrap(), 1920.0);
-}
-
-#[test]
-fn variants_builds_every_model_instance() {
-    let mut runtime = Runtime::default();
-    runtime
-        .execute(
-            "variants-all.lua",
-            br#"
-                local morf = require("morf")
-                local ui = require("morf.ui")
-                local instances = morf.variants({ "a", "b", "c" }, function(value)
-                    return ui.Text { text = value }
-                end)
-                assert(#instances == 3)
-            "#,
-        )
-        .unwrap();
-    let scene = runtime.scene();
-    assert_eq!(scene.roots().len(), 3);
-    assert_eq!(scene.string_value(scene.roots()[2], "text").unwrap(), "c");
 }
 
 #[test]

@@ -45,7 +45,7 @@ pub struct Engine {
     logs: crate::log::Log,
     /// The session lock, the primary duty and the output list's revision.
     session: crate::session::Session,
-    /// `morf.clock` and its coarser grains.
+    /// `morf.time.clock` and its coarser grains.
     clocks: crate::wake::Clocks,
     /// The node tree the configuration built.
     scene: Scene,
@@ -99,7 +99,7 @@ impl Engine {
         let (clocks, clock_values) = crate::wake::Clocks::new(&mut graph);
         let initial_lock =
             IpcValue::String(crate::session::SessionLockState::Unlocked.name().to_owned());
-        let session_lock = graph.signal("morf.session_lock", initial_lock.clone());
+        let session_lock = graph.signal("morf.lock.state", initial_lock.clone());
         let mut reactive = crate::reactive::Reactive::new(graph);
         for (signal, value) in clock_values {
             reactive.adopt(signal, value);

@@ -21,7 +21,7 @@ pub fn handle_ipc(
             // (`morf.screens[1]` names the one each instance draws). The
             // reply is the first output's that answered with something, so
             // an instance that stayed quiet does not hide the one that spoke.
-            if target == TEST_WAKES && std::env::var_os("MORF_TEST_HOOKS").is_some() {
+            if target == TEST_WAKES && morf_value::env::var("MORF_TEST_HOOKS").is_some() {
                 return IpcReply::success(
                     morf_io::wake_counts()
                         .into_iter()
@@ -152,7 +152,7 @@ const TEST_DEVICE_LOST: &str = "@device-lost";
 const TEST_WAKES: &str = "@wakes";
 
 fn test_panic_here(screen: Option<&Screen>, args: &[morf_lua::IpcValue]) -> bool {
-    if std::env::var_os("MORF_TEST_HOOKS").is_none() {
+    if morf_value::env::var("MORF_TEST_HOOKS").is_none() {
         return false;
     }
     match args.first() {
@@ -167,8 +167,7 @@ pub struct WorkerUpdate {
     pub reset_input: bool,
     pub refresh_idle: bool,
     pub recreate_surface: bool,
-    /// A new configuration replaced the old one: what the old one set on
-    /// the outputs (their gamma) goes with it.
+    /// A new configuration replaced the old one.
     pub reloaded: bool,
     /// The runtime a reload replaced. Tearing a large one down takes tens
     /// of milliseconds, which a host spends after the new one's first

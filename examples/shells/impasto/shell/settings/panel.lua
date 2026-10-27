@@ -160,7 +160,7 @@ do
     local now = tr.language()
     if now == seen then return end
     seen = now
-    morf.timer(1, function()
+    morf.time.timer(1, function()
       -- A page's module translates some of its text while it loads (its
       -- option lists); loaded again, it does so in the new language.
       for name in pairs(package.loaded) do
@@ -170,7 +170,7 @@ do
         end
       end
       s.relabel:set(true)
-      morf.timer(1, function() s.relabel:set(false) end, false)
+      morf.time.timer(1, function() s.relabel:set(false) end, false)
     end, false)
   end)
 end
@@ -413,7 +413,7 @@ function M.build(close)
         local t0 = morf.time.now_ms()
         local ok, built = pcall(function()
           if (morf.env("IMPASTO_SETTINGS_TIMING") or "") ~= "" then
-            morf.timer(1, function()
+            morf.time.timer(1, function()
               morf.log("warn", "settings timing: " .. entry.id .. " built and laid out in "
                 .. (morf.time.now_ms() - t0) .. " ms")
             end, false)

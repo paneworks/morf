@@ -39,7 +39,7 @@
 -- another player, and listing it would show every track twice.
 
 local morf = require("morf")
-local dbus_client = require("lib.services.dbus_client")
+local dbus_client = require("lib.services.dbus")
 local registry = require("lib.services.registry")
 
 local mpris = {}
@@ -137,7 +137,7 @@ local function bind(media)
   local timeout = options.timeout_ms or 5000
   local clock = options.clock
   if not clock then
-    local elapsed = morf.elapsed_timer()
+    local elapsed = morf.time.elapsed()
     clock = function() return elapsed:elapsed_ms() end
   end
   local state = media.state

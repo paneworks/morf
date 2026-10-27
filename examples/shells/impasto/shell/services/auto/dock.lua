@@ -82,7 +82,7 @@ morf.effect("impasto.dock.surface", function()
   if not window then
     if not pending[edge] then
       pending[edge] = true
-      morf.timer(1, function()
+      morf.time.timer(1, function()
         pending[edge] = nil
         surface_for(edge)
         -- Opened by the effect, which the new surface's reads re-run.

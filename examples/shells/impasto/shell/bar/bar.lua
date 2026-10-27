@@ -247,7 +247,7 @@ local function live_zone(side, width_signal)
     revision = revision + 1
     if revision > 1 then
       local key = revision
-      morf.timer(1, function() model:replace({ { key = key } }, "key") end, false)
+      morf.time.timer(1, function() model:replace({ { key = key } }, "key") end, false)
     end
   end)
   return ui.Repeater {

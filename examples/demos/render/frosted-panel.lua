@@ -27,7 +27,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
 
 local screen = morf.screens[1]
 local SW = (screen and screen.width) or 1280
@@ -58,7 +57,7 @@ local theme = morf.theme {
 -- blurred backdrop — it is composited underneath us and we have no read of it —
 -- so this is a *surface* shader: it owns its own coverage, decides its own
 -- alpha, and everything it leaves transparent is where the blur shows through.
-morf.shader("glass", {
+morf.shader.define("glass", {
   kind = "surface",
   params = {
     -- How milky the glass is. This is the number that decides how much of the

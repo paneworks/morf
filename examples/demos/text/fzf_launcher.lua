@@ -31,7 +31,7 @@ local accent = "#ff9e64"
 
 -- Every application a menu would show, one per line: its id, then what fzf
 -- shows and matches (the name, and the comment dimmed after it).
-local entries = morf.desktop_entries()
+local entries = morf.apps.entries()
 local lines, by_id = {}, {}
 for _, app in ipairs(entries:applications()) do
   if not app.no_display and app.name ~= "" and not by_id[app.id] then

@@ -27,7 +27,7 @@ local bar = require("bar.bar")
 local kit = require("components.kit")
 local workspaces = require("services.workspaces")
 
-local ok_lib, hyprland = pcall(require, "lib.integrations.hyprland")
+local ok_lib, hyprland = pcall(require, "lib.compositor.hyprland")
 if not ok_lib then hyprland = nil end
 
 local C = theme.color
@@ -160,7 +160,7 @@ local function build(_, options)
     local want = most()
     if want == count then return end
     count = want
-    morf.timer(1, function() model:replace(rows(), "id") end, false)
+    morf.time.timer(1, function() model:replace(rows(), "id") end, false)
   end, { owner = node })
   return node
 end

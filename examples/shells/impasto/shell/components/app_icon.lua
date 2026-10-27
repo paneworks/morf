@@ -33,10 +33,10 @@ local cache = {}
 local function lookup(name)
   if name == "" then return nil end
   if M.theme then
-    local ok, found = pcall(morf.has_icon, name, M.theme)
+    local ok, found = pcall(morf.image.has_icon, name, M.theme)
     if ok and found then return { name = name, theme = M.theme } end
   end
-  local ok, found = pcall(morf.has_icon, name)
+  local ok, found = pcall(morf.image.has_icon, name)
   if ok and found then return { name = name, theme = "hicolor" } end
   for _, ext in ipairs { ".svg", ".png", ".xpm" } do
     local path = "/usr/share/pixmaps/" .. name .. ext

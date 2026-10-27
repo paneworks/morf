@@ -343,49 +343,40 @@ impl Runtime {
             .take_reload_request()
     }
 
-    pub fn take_watch_files_change(&mut self) -> Option<bool> {
-        self.reactive
-            .borrow_mut()
-            .lifecycle_mut()
-            .take_watch_files_change()
-    }
-
     /// Whether the configuration has asked the shell to stop.
     pub fn quit_requested(&self) -> bool {
         self.reactive.borrow().lifecycle().quit_requested()
     }
 
-    /// Tells every `on_reload_completed` handler; whether one returned
-    /// without an error.
-    pub fn dispatch_reload_completed(&mut self) -> bool {
-        self.dispatch_reload_callbacks(true, None, 0).1 > 0
+    /// Tells every `on_reload` handler that a reload worked.
+    pub fn dispatch_reload_completed(&mut self) {
+        self.dispatch_reload_callbacks(None, 0);
     }
 
-    /// Tells every `on_reload_failed` handler; whether one returned
-    /// without an error.
+    /// Tells every `on_reload` handler that a reload failed; whether one
+    /// took the failure.
     pub fn dispatch_reload_failed(&mut self, error: String) -> bool {
-        self.dispatch_reload_callbacks(false, Some(error), 0).1 > 0
+        self.dispatch_reload_callbacks(Some(error), 0).1 > 0
     }
 
-    /// Runs the reload handlers from the `skip`th on. Returns how many are
-    /// registered, and how many of those run returned without an error.
+    /// Runs the reload handlers from the `skip`th on with `(ok, err)`.
+    /// Returns how many are registered, and how many of those run took a
+    /// failure: returned true without an error.
     pub(crate) fn dispatch_reload_callbacks(
         &mut self,
-        completed: bool,
         error: Option<String>,
         skip: usize,
     ) -> (usize, usize) {
-        let callbacks = self
-            .reactive
-            .borrow()
-            .lifecycle()
-            .reload_callbacks(completed);
-        let args = error.map(IpcValue::String).into_iter().collect::<Vec<_>>();
+        let callbacks = self.reactive.borrow().lifecycle().reload_callbacks();
+        let mut args = vec![IpcValue::Boolean(error.is_none())];
+        args.extend(error.map(IpcValue::String));
         let mut succeeded = 0;
         for callback in callbacks.iter().skip(skip) {
-            match self.run_handler(|ctx, limits| execute_handler_args(ctx, callback, &args, limits))
+            match self
+                .run_handler(|ctx, limits| execute_handler_answer(ctx, callback, &args, limits))
             {
-                Ok(_) => succeeded += 1,
+                Ok(true) => succeeded += 1,
+                Ok(false) => {}
                 Err(message) => self
                     .reactive
                     .borrow_mut()

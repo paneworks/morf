@@ -203,7 +203,7 @@ fn sysinfo_reads_a_fake_machine() {
                 assert(processes.by_memory[1].name == "quiet one", processes.by_memory[1].name)
                 assert(processes.by_memory[1].memory == 100 * 4096)
                 assert(processes.by_cpu[2].cpu == 0)
-                morf.timer(1, function()
+                morf.time.timer(1, function()
                   assert(sysinfo.sources.processes:running())
                   -- Ten more jiffies for "busy (x)" out of 800 more in all.
                   fs.write(base .. "/proc/34/stat",
@@ -243,12 +243,12 @@ fn sysinfo_polls_only_while_read() {
             assert(not memory:running())
             -- A read from a handler, not a binding: nothing reads it again,
             -- so after a couple of samples the timer stops by itself.
-            morf.timer(1, function()
+            morf.time.timer(1, function()
               sysinfo.memory()
               assert(memory:running())
             end, false)
             local watch
-            watch = morf.timer(10, function()
+            watch = morf.time.timer(10, function()
               if memory.samples >= 2 and not memory:running() then
                 watch:cancel()
                 note("idle after " .. memory.samples)
@@ -288,7 +288,7 @@ fn sysinfo_reads_this_machine() {
           local failed = sysinfo.sources.processes.error
           if (processes.count > 0 or failed) and not reported then
             reported = true
-            morf.timer(1, function()
+            morf.time.timer(1, function()
               note(failed or ("processes " .. processes.count))
               note("done")
             end, false)

@@ -6,7 +6,7 @@
 //!
 //! - PQ (ST 2084) over BT.2020, for a ten-bit buffer: linear sRGB light is
 //!   taken to BT.2020 primaries, SDR white placed at the reference white
-//!   (203 cd/m² unless `MORF_HDR_WHITE` says otherwise), and PQ-encoded;
+//!   (203 cd/m² unless `MORF_HDR=white=N` says otherwise), and PQ-encoded;
 //! - scRGB, for a half-float buffer, where the compositor takes extended
 //!   linear: linear sRGB light as it is, 1.0 being SDR white.
 //!
@@ -49,23 +49,19 @@ impl Default for HdrRequest {
 }
 
 impl HdrRequest {
-    /// `MORF_HDR=1` (or `pq`) asks; `MORF_HDR_WHITE=N` puts SDR white at N cd/m²
-    /// (80 to 1000).
+    /// `MORF_HDR=1` (or `on`, or `pq`) asks; `white=N` beside it puts SDR
+    /// white at N cd/m² (80 to 1000): `MORF_HDR=pq,white=300`.
     pub fn from_env() -> Self {
-        let read = |name| std::env::var(name).ok();
-        Self::parse(
-            read("MORF_HDR").as_deref(),
-            read("MORF_HDR_WHITE").as_deref(),
-        )
+        Self::parse(&morf_value::env::flags("MORF_HDR"))
     }
 
-    pub fn parse(hdr: Option<&str>, white: Option<&str>) -> Self {
-        let hdr = hdr.map(str::trim);
+    pub fn parse(flags: &morf_value::env::Flags) -> Self {
+        let pq = flags.has("pq");
         Self {
-            enabled: matches!(hdr, Some("1" | "true" | "on" | "pq")),
-            prefer_pq: hdr == Some("pq"),
-            reference_white: white
-                .and_then(|white| white.trim().parse::<u32>().ok())
+            enabled: pq || flags.has("1") || flags.has("true") || flags.has("on"),
+            prefer_pq: pq,
+            reference_white: flags
+                .parsed::<u32>("white")
                 .map_or(DEFAULT_REFERENCE_WHITE, |white| white.clamp(80, 1000)),
         }
     }
@@ -247,18 +243,16 @@ mod tests {
 
     #[test]
     fn the_request_reads_on_and_a_white() {
-        assert!(!HdrRequest::parse(None, None).enabled);
-        assert!(HdrRequest::parse(Some("1"), None).enabled);
-        assert!(!HdrRequest::parse(Some("0"), None).enabled);
-        assert!(!HdrRequest::parse(Some("1"), None).prefer_pq);
-        let pq = HdrRequest::parse(Some("pq"), None);
+        let parse = |text| HdrRequest::parse(&morf_value::env::Flags::parse(text));
+        assert!(!parse("").enabled);
+        assert!(parse("1").enabled);
+        assert!(!parse("0").enabled);
+        assert!(!parse("1").prefer_pq);
+        let pq = parse("pq");
         assert!(pq.enabled && pq.prefer_pq);
-        assert_eq!(
-            HdrRequest::parse(Some("1"), Some("300")).reference_white,
-            300
-        );
-        assert_eq!(HdrRequest::parse(Some("1"), Some("5")).reference_white, 80);
-        assert_eq!(HdrRequest::parse(Some("1"), Some("x")).reference_white, 203);
+        assert_eq!(parse("1,white=300").reference_white, 300);
+        assert_eq!(parse("1,white=5").reference_white, 80);
+        assert_eq!(parse("1,white=x").reference_white, 203);
     }
 
     #[test]

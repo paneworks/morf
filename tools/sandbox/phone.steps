@@ -17,7 +17,7 @@ run() {
   [ -n "${S:-}" ] && kill "$S" 2>/dev/null
   sleep 1
   cd "$REPO"
-  ( env MORF_DENSITY_LOG=1 EVA_STYLE="${STYLE:-tsugumori}" EVA_DRY_RUN=1 IMPASTO_DRY_RUN=1 nixVulkanIntel "$REPO/target/release/morf" "$@"
+  ( env MORF_LOG=density EVA_STYLE="${STYLE:-tsugumori}" EVA_DRY_RUN=1 IMPASTO_DRY_RUN=1 nixVulkanIntel "$REPO/target/release/morf" "$@"
     echo "morf exited: $?" ) > "$OUT/shell.log" 2>&1 &
   S=$!
 }

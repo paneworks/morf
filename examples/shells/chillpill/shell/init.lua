@@ -24,7 +24,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
 local config = require("config")
 local theme = require("theme")
 local proc = require("proc")
@@ -56,7 +55,7 @@ local TOP = bar.zone() - S(config.pillBottomMargin) + S(14)
 
 -- Which panel is open. One at a time, as in the original: opening the
 -- dashboard closes the control center.
-local panel = morf.signal("chillpill.panel", core.env("CHILLPILL_OPEN") or "")
+local panel = morf.signal("chillpill.panel", morf.env("CHILLPILL_OPEN") or "")
 
 local sync_panels
 
@@ -91,7 +90,7 @@ function sync_panels()
   dashboard.shown:set(panel:get() == "dashboard")
 end
 sync_panels()
-morf.timer(50, sync_panels, true)
+morf.time.timer(50, sync_panels, true)
 
 -- --------------------------------------------------------------------- IPC --
 
@@ -138,7 +137,7 @@ morf.ipc.osd = here(function(kind, message) osd.show(kind or "volume", message) 
 
 -- `CHILLPILL_ONLY=bar|control|notify|osd` draws one part, for a look at
 -- it off-screen with frame_bench.
-local only = core.env("CHILLPILL_ONLY") or ""
+local only = morf.env("CHILLPILL_ONLY") or ""
 local function part(name, build, ...)
   if only ~= "" and only ~= name then return ui.Item { width = 1, height = 1 } end
   return build(...)
@@ -266,7 +265,7 @@ end
 if config.bandwidthAlertMB > 0 then
   local base = system.state.traffic.rx
   local said = false
-  morf.timer(10000, function()
+  morf.time.timer(10000, function()
     if said then return end
     local used = (system.state.traffic.rx - base) / 1024 / 1024
     if used >= config.bandwidthAlertMB then

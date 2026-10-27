@@ -112,7 +112,7 @@ pub fn run(
     let (width, height) = (size.width, size.height);
     let (mut engine, mut computed, shaders) = renderer(runtime, root, size, config);
     // Twice: the second frame is incremental and reuses an effect layer's
-    // target; `FRAME_BENCH_GPU_FRAMES` draws more, for `MORF_GPU_WAIT=1`.
+    // target; `FRAME_BENCH_GPU_FRAMES` draws more, for `MORF_LOG=gpu_wait`.
     let frames: usize =
         std::env::var("FRAME_BENCH_GPU_FRAMES").map_or(2, |value| value.parse().unwrap_or(2));
     for _ in 0..frames.max(2) {

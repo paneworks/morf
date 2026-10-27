@@ -117,7 +117,7 @@ fn a_parentless_popup_anchors_to_the_shells_own_layer() {
                     local ui = require("morf.ui")
                     local window = require("morf.window")
                     ui.Item {}
-                    local dialog = window.floating { root = ui.Item {} }
+                    local dialog = window.toplevel { root = ui.Item {} }
                     window.popup { root = ui.Item {}, parent = dialog }
                     window.popup { root = ui.Item {} }
                 "#,

@@ -36,7 +36,7 @@
 -- this does not register; devices that pair without one ("just works") pair.
 
 local morf = require("morf")
-local dbus_client = require("lib.services.dbus_client")
+local dbus_client = require("lib.services.dbus")
 
 local bluez = {}
 
@@ -197,7 +197,7 @@ function bluez.connect(options)
 
     -- A scan in progress is when strangers move; see the header.
     if state.discovering and not poll then
-      poll = morf.timer(options.discovery_poll_ms or 2000, function()
+      poll = morf.time.timer(options.discovery_poll_ms or 2000, function()
         if not state.discovering then
           poll:cancel()
           poll = nil

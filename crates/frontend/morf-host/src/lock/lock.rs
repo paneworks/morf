@@ -97,7 +97,7 @@ pub enum WorkerCommand {
     /// runtime it ran it with and becomes the lock.
     BecomeLock,
     /// This worker's runtime is now the primary one, or no longer is
-    /// (`morf.primary()`).
+    /// (`morf.window.primary()`).
     Primary(bool),
 }
 
@@ -109,7 +109,6 @@ pub enum SupervisorMessage {
         /// Only this output's runtime, when one is named.
         output: Option<String>,
     },
-    WatchFiles(bool),
     /// The configuration asked the shell to stop.
     Quit,
     /// Ask the compositor which outputs it has, and run a worker on each:
@@ -157,7 +156,7 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
     let ipc = crate::lock::ipc::LockIpc::bind(path)?;
     let client = LayerClient::connect_lock().map_err(|error| error.to_string())?;
     let provider =
-        match crate::lock::provider::Provider::bind(client.connection().backend().poll_fd()) {
+        match crate::provider::lock::Provider::bind(client.connection().backend().poll_fd()) {
             Ok(provider) => Some(provider),
             Err(error) => {
                 runtime.warn(format!("native lock provider: {error}"));

@@ -115,7 +115,7 @@ pub(crate) fn install_fs_api<'gc>(
     morf: Table<'gc>,
     state: std::rc::Rc<crate::runtime::state::StateCell<crate::runtime::state::ReactiveState>>,
 ) {
-    let fs = Table::new(&ctx);
+    let fs = crate::api::namespace::table(ctx, morf, "fs");
     let change_state = std::rc::Rc::clone(&state);
 
     // `read_async({ path, ... }, function(ok, contents) end)`: the files are
@@ -213,7 +213,6 @@ pub(crate) fn install_fs_api<'gc>(
         ("exists", ops::PathTest::Exists),
         ("is_dir", ops::PathTest::Dir),
         ("is_file", ops::PathTest::File),
-        ("is_link", ops::PathTest::Link),
     ] {
         fs.set_field(
             ctx,

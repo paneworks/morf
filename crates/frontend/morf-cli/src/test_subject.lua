@@ -1,6 +1,6 @@
 -- The configuration side of `morf test`, run before the configuration in
 -- its own runtime. It stands in for two things a spec needs to control:
--- what `morf.run` answers (`test.stub_run`), and what `morf.env` reads
+-- what `morf.process.run` answers (`test.stub_run`), and what `morf.env` reads
 -- (`test.load(path, { env = ... })`). Everything else is the real engine.
 --
 -- `__MORF_TEST_DATA__` is replaced with `{ stubs = {...}, env = {...} }` as
@@ -11,7 +11,7 @@ local stubs = data.stubs or {}
 local env = data.env or {}
 local runs = {}
 
-local real_run = morf.run
+local real_run = morf.process.run
 local real_env = morf.env
 
 local function stub_for(argv)
@@ -36,7 +36,7 @@ local function run(argv, ...)
   -- Answered on a later turn of the loop, as a real run is: a spec sees it
   -- after `test.advance` or `test.settle`, never inside the call.
   local done = false
-  morf.timer(1, function()
+  morf.time.timer(1, function()
     done = true
     if callback then callback(result) end
   end, false)
@@ -84,7 +84,7 @@ local function waiting()
   end
 end
 
-local real_request = morf.request_socket
+local real_request = morf.socket.request
 local function request_socket(path, data, callback, options)
   local finish = waiting()
   local ok, handle = pcall(real_request, path, data, function(...)
@@ -95,7 +95,7 @@ local function request_socket(path, data, callback, options)
   return counted(handle, finish)
 end
 
-local real_connect = morf.connect
+local real_connect = morf.socket.connect
 local function connect(options)
   if type(options) ~= "table" then return real_connect(options) end
   local given, finish = {}, waiting()
@@ -123,19 +123,10 @@ local function connect(options)
   return counted(handle, finish)
 end
 
-morf.run = run
+morf.process.run = run
 morf.env = read_env
-morf.request_socket = request_socket
-morf.connect = connect
-for _, module in ipairs { "morf.io", "morf.core" } do
-  local loaded = package.loaded[module]
-  if type(loaded) == "table" then
-    if loaded.run ~= nil then loaded.run = run end
-    if loaded.env ~= nil then loaded.env = read_env end
-    if loaded.request_socket ~= nil then loaded.request_socket = request_socket end
-    if loaded.connect ~= nil then loaded.connect = connect end
-  end
-end
+morf.socket.request = request_socket
+morf.socket.connect = connect
 morf.ipc["__morf_test.io"] = function() return outside end
 
 morf.ipc["__morf_test.runs"] = function() return runs end

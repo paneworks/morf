@@ -152,11 +152,11 @@ fn shared_devices() -> &'static std::sync::Mutex<Vec<SharedDevice>> {
     DEVICES.get_or_init(|| std::sync::Mutex::new(Vec::new()))
 }
 
-/// `MORF_GPU_SHARED=0`: every backend opens a device of its own, as before
+/// `MORF_DEBUG=gpu_unshared`: every backend opens a device of its own, as before
 /// devices were shared. For measuring the difference.
 fn sharing_wanted() -> bool {
     static WANTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *WANTED.get_or_init(|| std::env::var("MORF_GPU_SHARED").map_or(true, |value| value != "0"))
+    *WANTED.get_or_init(|| !morf_value::env::debug("gpu_unshared"))
 }
 
 /// How many devices this process has opened, for tests and diagnostics.
@@ -256,7 +256,7 @@ pub(super) async fn open_device(
     // Subpixel text blends each channel by its own coverage, which takes
     // a second fragment output to the blend unit. Asked for only where
     // the adapter has it; without it text stays greyscale.
-    let lcd_supported = std::env::var_os("MORF_NO_DUAL_SOURCE").is_none()
+    let lcd_supported = !morf_value::env::debug("no_dual_source")
         && adapter
             .features()
             .contains(wgpu::Features::DUAL_SOURCE_BLENDING);

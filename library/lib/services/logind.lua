@@ -32,7 +32,7 @@
 -- without privileges. It is re-read when udev reports a backlight change.
 
 local morf = require("morf")
-local dbus_client = require("lib.services.dbus_client")
+local dbus_client = require("lib.services.dbus")
 
 local logind = {}
 

@@ -1,13 +1,15 @@
--- Skins: how a theme draws the archetypes (crates/morf-kit).
+-- Skins: how a theme draws the archetypes (crates/engine/morf-kit) and
+-- the display widgets.
 --
--- A theme defines skins by widget name -- `Button`, `Slider`, or the bare
--- archetype's name, `Control` -- each either a function of the control's
+-- A theme defines skins by widget name -- `button`, `scale`, or the bare
+-- archetype's name, `Press` -- each either a function of the control's
 -- live state returning its slots, or a table of one function per slot:
 --
 --     skin.define("material", {
 --       skins = {
---         Button = function(t, spec, node) return { background = ..., label = ... } end,
---         Switch = { indicator = function(t, spec) ... end },
+--         Press = function(t, spec, node) return { background = ..., label = ... } end,
+--         switch = { indicator = function(t, spec) ... end },
+--         label = function(spec) return ui.Text { ... } end,   -- a display widget: its node
 --       },
 --       defaults = { Press = { background = function(t, spec) ... end } },
 --     }, { extends = "base" })
@@ -17,8 +19,9 @@
 -- then from the chain's `defaults` for the archetype -- built only when no
 -- skin filled it. A skin may give a slot as a function instead of a node:
 -- it is built the first time the control is entered, pressed or focused --
--- for decoration most controls never show (a hover wash, a focus ring). `skin.use(name)` switches theme: every live control
--- rebuilds its slots in place.
+-- for decoration most controls never show (a hover wash, a focus ring).
+-- `skin.use(name)` switches theme: every live control rebuilds its slots
+-- in place.
 local M = {}
 
 local themes = {}
@@ -97,6 +100,31 @@ function M.build(widget, archetype, slots, t, spec, theme, node, send)
     end
   end
   return built
+end
+
+-- The default kit's skins, made once without being put in use: what a
+-- theme that leaves an entry out draws it with.
+local fallback
+
+--- The first skin entry named `name` along the current theme's `extends`
+--- chain (a display widget's skin, a popup's motion), else the default
+--- kit's. With no theme in use yet, the default kit's is put in use first.
+function M.find(name)
+  if current:get() == "" then local _ = require("lib.kit.skins.default").kit end
+  for _, theme_entry in ipairs(chain(current:get())) do
+    local found = theme_entry.skins[name]
+    if found ~= nil then return found end
+  end
+  fallback = fallback or require("lib.kit.skins.default").make { use = false }.skins
+  return fallback[name]
+end
+
+--- Draws the display widget `widget` (contract.lua, `display`) with the
+--- current theme's skin of that name, a function of the spec.
+function M.draw(widget, spec)
+  local draw = M.find(widget)
+  if type(draw) ~= "function" then error("no skin draws `" .. tostring(widget) .. "`", 2) end
+  return draw(spec or {})
 end
 
 --- Registers a live control: `rebuild()` is called on a theme switch.

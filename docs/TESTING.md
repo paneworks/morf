@@ -28,7 +28,7 @@ All three share one way of running a configuration, *headless*:
   for, or the root's own `width`/`height` when it asked for none. A layer
   surface is placed by its anchors and margins, centred on an axis it is
   anchored to neither or both ends of.
-- **Time is virtual.** Every `morf.timer` and `ui.Timer` runs on a clock
+- **Time is virtual.** Every `morf.time.timer` and `ui.Timer` runs on a clock
   that starts at zero and moves only when the runner moves it; animations
   advance by the frames the runner steps (16 ms each). Ten seconds of a
   configuration's time take as long as the work in them, and fire the same
@@ -54,8 +54,8 @@ machine:
 `morf check` reaches no bus unless it is given one of its own: `--no-dbus`
 is its default and `--private-bus` replaces it. `morf render` and `morf
 test` without either get the real bus, which a test never should. Programs
-started with `morf.run` and `morf.spawn` are real; `morf test` can stub
-`morf.run` (see below).
+started with `morf.process.run` and `morf.process.spawn` are real; `morf test` can stub
+`morf.process.run` (see below).
 
 ## `morf check`
 
@@ -90,10 +90,10 @@ followed by a settle), advances `--after` milliseconds of virtual time
 
 `--kit` checks the configuration's `kit` module -- what `require("kit")`
 answers once it has loaded -- against the widget contract
-(`library/lib/kit/contract.lua`): every function, display widget and
-archetype skin due at the contract's stage, and an owner in the contract
-for every row of the element catalogue (`library/lib/kit/catalogue.lua`).
-It prints `kit stage N: D due, M missing` and each problem as an error.
+(`library/lib/kit/contract.lua`): every token, archetype skin, display
+widget skin and composite. It prints `contract: D due, M missing; editor:
+D due, M missing`, each contract problem as an error and each gap in the
+editor group (Canvas, Dock) as a warning.
 
 `--frames` prints the host's frame accounting over the `--after` run (as
 `test.frames()` returns it): how many frames, how many late and over 2.4x
@@ -347,14 +347,14 @@ or an exact `text`), or a function of the node returning true.
 | `test.ipc_verbs()` | the verbs it registered |
 | `test.logs(level)` | `{ level, message }` for each line logged since load (or since `test.clear_logs()`) at `level` (`debug`, `info`, `warn`, `error`) or above |
 | `test.clear_logs()` | |
-| `test.stub_run(program, result)` | from now on, `morf.run` of `program` (its `argv[1]`, or that path's last part) does not start anything: the callback gets `result` -- `{ ok, code, stdout, stderr }`, missing fields filled in (`ok` from `code`), or a string meaning `stdout` -- on a later turn of the loop, as a real run's would come. Stubs outlast `test.load` within a spec file |
+| `test.stub_run(program, result)` | from now on, `morf.process.run` of `program` (its `argv[1]`, or that path's last part) does not start anything: the callback gets `result` -- `{ ok, code, stdout, stderr }`, missing fields filled in (`ok` from `code`), or a string meaning `stdout` -- on a later turn of the loop, as a real run's would come. Stubs outlast `test.load` within a spec file |
 | `test.clear_stubs()` | |
-| `test.runs()` | the argv of every `morf.run` since load, stubbed or not |
+| `test.runs()` | the argv of every `morf.process.run` since load, stubbed or not |
 | `test.resources()` | what the configuration holds open, as the engine counts it: `{ dbus_subscriptions, dbus_calls, timers, processes, connections, file_watches, owned_hooks }` -- compare with a baseline to prove a teardown gave everything back |
 | `test.snapshot(name [, { surface }])` | renders to `name` under `--snapshots DIR` (default `snapshots/` beside the spec); returns `true, path`, or `false, reason` when there is no GPU -- the test goes on, with the reason noted in the output |
 | `test.frame([{ surface }])` | renders the surface now (`"screen"` for all of them) and keeps the picture to read back, or returns `nil, reason` when there is no GPU: `frame.width`, `frame.height` in pixels at the runner's scale, `frame.pixel(x, y)` the straight colour there as `"#rrggbbaa"`, and `frame.region { x, y, width, height }` the region summed up -- its `mean` colour and its luma's `luma` (mean), `variance`, `min` and `max`, from 0 to 1 |
 | `test.note(text)`, `test.log(...)` | a line printed under the test's result |
-| `test.frames()` | the host's frame accounting since the last call (or load), and a new window begun: `{ frames, late, overruns, turns, motion_turns, worst_ms, mean_ms, refresh_ms, stages, owners, summary }`. `stages` is the wall time charged to `services`, `handlers`, `flush`, `motion`, `layout`, `paint` and `waiting` (no stage: between turns), `owners` how many overruns -- frames over 2.4x the refresh interval -- each held the most of, and `summary` the line `MORF_WAKE_LOG` prints. Times are the wall clock's, not the virtual one's |
+| `test.frames()` | the host's frame accounting since the last call (or load), and a new window begun: `{ frames, late, overruns, turns, motion_turns, worst_ms, mean_ms, refresh_ms, stages, owners, summary }`. `stages` is the wall time charged to `services`, `handlers`, `flush`, `motion`, `layout`, `paint` and `waiting` (no stage: between turns), `owners` how many overruns -- frames over 2.4x the refresh interval -- each held the most of, and `summary` the line `MORF_LOG=wake` prints. Times are the wall clock's, not the virtual one's |
 
 ## Examples
 
@@ -382,7 +382,7 @@ or an exact `text`), or a function of the node returning true.
 - `reload_band_spec.lua`: `test.reload` with a broken file and a fixed one:
   the old scene keeps painting under the engine's error band, which names
   the file, the line and the error, survives every kind of root, and goes
-  on a fixed reload, a press, or the configuration's own `on_reload_failed`.
+  on a fixed reload, a press, or the configuration's own `on_reload`.
 - `impasto_spec.lua`: loads `examples/shells/impasto/shell/init.lua` with
   `IMPASTO_DRY_RUN`, opens every panel over IPC and closes it, and checks
   that nothing landed in `morf ipc call failed`. Run it with
@@ -400,8 +400,8 @@ nixVulkanIntel morf test examples/demos/tests/counter_spec.lua   # with snapshot
   clipboard, drag and drop, idle and session-lock requests are accepted and
   go nowhere. A popup is sized but not positioned against its parent the way
   `xdg_positioner` would place it; a floating window has no position.
-- Timers are virtual; `morf.elapsed_timer`, the text caret's blink and the
-  wall-clock time of day (`morf.system_clock`, `os.time`) are not.
+- Timers are virtual; `morf.time.elapsed`, the text caret's blink and the
+  wall-clock time of day (`morf.time.clock`, `os.time`) are not.
 - One runtime is driven: `morf test` loads the configuration for the first
   screen (the rest are in `morf.screens`), where a shell runs one per
   screen. `morf check --screens N` does load it once per screen.

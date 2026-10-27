@@ -14,7 +14,7 @@ fn floating() -> Runtime {
                 local resized, requests, closed = {}, 0, 0
                 local keep = false
                 local root = ui.Item {}
-                win = window.floating {
+                win = window.toplevel {
                   root = root, width = 640, height = 480, visible = true,
                   on_resize = function(w, h) resized[#resized + 1] = w .. "x" .. h end,
                 }
@@ -119,7 +119,7 @@ fn a_window_with_no_close_handler_just_hides() {
             br#"
                 local ui = require("morf.ui")
                 local window = require("morf.window")
-                win = window.floating { root = ui.Item {}, visible = true }
+                win = window.toplevel { root = ui.Item {}, visible = true }
                 morf.ipc.visible = function() return win:visible() end
             "#,
         )
@@ -264,7 +264,7 @@ fn popups_and_layers_are_destroyed_too() {
                 assert(not pcall(layer.kind, layer))
                 assert(not pcall(function() layer.height = 40 end))
                 -- A new window after them works as ever.
-                local again = window.floating { root = ui.Item {}, width = 10, height = 10 }
+                local again = window.toplevel { root = ui.Item {}, width = 10, height = 10 }
                 assert(again:kind() == "toplevel")
             "#,
         )

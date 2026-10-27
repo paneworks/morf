@@ -1,11 +1,11 @@
--- `library/lib/util/m3shapes.lua` and `examples/demos/sdf/m3shapes.lua`: Material 3's
+-- `library/lib/theme/shapes.lua` and `examples/demos/sdf/m3shapes.lua`: Material 3's
 -- shapes as path outlines that morph into one another.
 --
 --     morf test examples/demos/tests/m3shapes_spec.lua
 --     nixVulkanIntel morf test examples/demos/tests/m3shapes_spec.lua   # with snapshots
 
 local test = morf.test
-local shapes = require("lib.util.m3shapes")
+local shapes = require("lib.theme.shapes")
 
 local function count(d, pattern)
   local n = 0

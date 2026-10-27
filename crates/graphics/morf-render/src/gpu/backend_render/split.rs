@@ -1,4 +1,4 @@
-//! `MORF_FRAME_LOG=2`: where a slow frame's render went on the CPU, step by
+//! `MORF_PROFILE=render_split`: where a slow frame's render went on the CPU, step by
 //! step -- the fields, the glyphs, the images, the layers, the upload, the
 //! encoding, and acquiring, submitting and presenting the frame.
 
@@ -14,8 +14,7 @@ pub(super) struct RenderSplit {
 impl RenderSplit {
     pub(super) fn start() -> Self {
         static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        let on =
-            *ON.get_or_init(|| std::env::var("MORF_FRAME_LOG").is_ok_and(|value| value == "2"));
+        let on = *ON.get_or_init(|| morf_value::env::flags("MORF_PROFILE").has("render_split"));
         let now = Instant::now();
         Self {
             on,
@@ -36,13 +35,12 @@ impl RenderSplit {
     }
 
     /// Says where the time went, for a render of 50 ms or more, or the
-    /// threshold in `MORF_RENDER_SPLIT_MS` when measuring shorter frames.
+    /// threshold in `MORF_PROFILE=render_split` when measuring shorter frames.
     pub(super) fn finish(self) {
         static THRESHOLD: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
         let threshold = *THRESHOLD.get_or_init(|| {
-            std::env::var("MORF_RENDER_SPLIT_MS")
-                .ok()
-                .and_then(|value| value.parse::<f64>().ok())
+            morf_value::env::flags("MORF_PROFILE")
+                .parsed::<f64>("render_split")
                 .filter(|value| value.is_finite() && *value >= 0.0)
                 .unwrap_or(50.0)
         });

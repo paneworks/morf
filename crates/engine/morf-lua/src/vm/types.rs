@@ -82,7 +82,7 @@ impl Limits {
     pub fn from_env() -> (Self, Vec<String>) {
         let mut limits = Self::default();
         let mut warnings = Vec::new();
-        let Ok(text) = std::env::var("MORF_LIMITS") else {
+        let Some(text) = morf_value::env::var("MORF_LIMITS") else {
             return (limits, warnings);
         };
         for entry in text
@@ -187,18 +187,16 @@ pub struct Runtime {
     pub(crate) cover: RefCell<Option<crate::vm::config::cover::Cover>>,
 }
 
-pub use morf_runtime::requests::{ReloadRequest, ToplevelRequest, WorkspaceRequest};
+pub use morf_runtime::requests::{ReloadRequest, ToplevelRequest};
 
 #[derive(Clone, Copy)]
 pub(crate) enum StorageKind {
-    Data,
     State,
     Cache,
 }
 
 pub(crate) fn shell_storage_dir(shell_root: &Path, kind: StorageKind) -> Result<PathBuf, String> {
     let (variable, fallback) = match kind {
-        StorageKind::Data => ("XDG_DATA_HOME", ".local/share"),
         StorageKind::State => ("XDG_STATE_HOME", ".local/state"),
         StorageKind::Cache => ("XDG_CACHE_HOME", ".cache"),
     };
@@ -265,7 +263,7 @@ pub(crate) fn icon_lookup_options(
         return Err("icon name is invalid".to_owned());
     }
     let theme = theme
-        .or_else(|| std::env::var("MORF_ICON_THEME").ok())
+        .or_else(|| morf_value::env::var("MORF_ICON_THEME"))
         .unwrap_or_else(|| "hicolor".to_owned());
     if theme.is_empty() || theme.len() > 128 || theme.as_bytes().contains(&0) {
         return Err("icon theme is invalid".to_owned());

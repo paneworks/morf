@@ -23,7 +23,7 @@ end
 
 morf.ipc.shell = function(verb)
   if verb ~= "reload" then return "usage: morf ipc call shell reload" end
-  morf.timer(1, function() morf.reload() end, false)
+  morf.time.timer(1, function() morf.reload() end, false)
   return "reloading"
 end
 

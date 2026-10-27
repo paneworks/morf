@@ -74,21 +74,6 @@ pub(crate) fn install_clipboard_api<'gc>(
             .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
-    let subscribe_state = Rc::clone(&state);
-    // The older, text-only view: called with the clipboard's text whenever
-    // it changes while the shell holds the keyboard.
-    let clipboard_subscribe = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let callback: Closure = stack.consume(ctx)?;
-        let mut state = subscribe_state.borrow_mut();
-        if state.requests().clipboard_callbacks.len() >= 64 {
-            return Err(HostError("clipboard callback limit reached".into()).into());
-        }
-        state
-            .requests_mut()
-            .clipboard_callbacks
-            .push(crate::vm::handler_store::register(ctx.stash(callback)));
-        Ok(CallbackReturn::Return)
-    });
     let watch_state = Rc::clone(&state);
     // `watch(function(offer) end, { primary = true })`: every change, focused
     // or not, through data control. `offer` is nil when the clipboard was
@@ -126,7 +111,6 @@ pub(crate) fn install_clipboard_api<'gc>(
     });
     let clipboard = Table::new(&ctx);
     clipboard.set_field(ctx, "set", clipboard_set);
-    clipboard.set_field(ctx, "subscribe", clipboard_subscribe);
     clipboard.set_field(ctx, "watch", clipboard_watch);
     clipboard.set_field(ctx, "supported", clipboard_supported);
     morf.set_field(ctx, "clipboard", clipboard);
@@ -146,17 +130,8 @@ pub(crate) fn install_clipboard_api<'gc>(
             .map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
-    let drag_supported_state = Rc::clone(&state);
-    let drag_supported = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        stack.replace(
-            ctx,
-            capability(&drag_supported_state.borrow(), "drag_and_drop"),
-        );
-        Ok(CallbackReturn::Return)
-    });
     let drag = Table::new(&ctx);
     drag.set_field(ctx, "start", drag_start);
-    drag.set_field(ctx, "supported", drag_supported);
     morf.set_field(ctx, "drag", drag);
 }
 

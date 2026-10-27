@@ -577,7 +577,7 @@ end
 function M.queue_sync()
   if sync_queued then return end
   sync_queued = true
-  morf.timer(1, sync, false)
+  morf.time.timer(1, sync, false)
 end
 
 local function save()
@@ -590,7 +590,7 @@ local function write(next_rows)
   bump()
   if not writing then
     writing = true
-    morf.timer(120, save, false)
+    morf.time.timer(120, save, false)
   end
   M.queue_sync()
 end
@@ -928,7 +928,7 @@ function M.spectrum_away()
   local ok, dock = pcall(require, "services.dock")
   if ok and dock and dock.signals and dock.signals.covered and dock.signals.covered:get() then return true end
   if not settings.spectrumOnEmpty then return false end
-  local okh, hypr = pcall(require, "lib.integrations.hyprland")
+  local okh, hypr = pcall(require, "lib.compositor.hyprland")
   if not okh or not hypr.available or not hypr.available() then return false end
   local ws = hypr.state.active_workspace.id
   return ws and ws > 0 and hypr.occupied(ws) or false
@@ -1255,7 +1255,7 @@ function M.edit(on)
   local was = M.editing:get()
   M.editing:set(on and true or false)
   if was ~= (on and true or false) then
-    morf.timer(1, function()
+    morf.time.timer(1, function()
       M.board_model:replace(M.editing:get() and { { id = "board" } } or {}, "id")
     end, false)
   end
@@ -1289,7 +1289,7 @@ function M.close_menu() M.menu_open:set(false) end
 -- Arranging lasts while the screen stays as it was: another workspace, a
 -- window opening or going fullscreen ends it, as in the original.
 do
-  local ok, hypr = pcall(require, "lib.integrations.hyprland")
+  local ok, hypr = pcall(require, "lib.compositor.hyprland")
   if ok and hypr and hypr.on then
     for _, event in ipairs { "workspacev2", "activespecialv2", "openwindow" } do
       hypr.on(event, function() if M.editing:get() then M.edit(false) end end)
@@ -1329,7 +1329,7 @@ morf.effect("impasto.desk.theme", function()
   local now = settings.desktopTheme
   if now == seen_theme then return end
   seen_theme = now
-  morf.timer(1, function() M.conform() M.queue_sync() end, false)
+  morf.time.timer(1, function() M.conform() M.queue_sync() end, false)
 end)
 
 -- The board changing size (the dock's band) re-lays every face.

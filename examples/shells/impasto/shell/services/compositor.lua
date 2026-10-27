@@ -5,8 +5,8 @@
 -- compositor.py that set options and build the cursor, and the chunk of
 -- theme/Motion.qml.
 --
--- Hyprland's vocabulary, so it goes through lib/integrations/hyprland_config.lua
--- (on top of lib/integrations/hyprland.lua) and under any other compositor does nothing:
+-- Hyprland's vocabulary, so it goes through lib/compositor/hyprland_config.lua
+-- (on top of lib/compositor/hyprland.lua) and under any other compositor does nothing:
 -- `available()` is false and the settings pages say so. The user's
 -- configuration files are never written; the values live in impasto's
 -- settings and are pushed on change (debounced, so a slider's drag is one
@@ -332,7 +332,7 @@ end
 
 function M.start()
   if config ~= nil then return end
-  local ok, lib = pcall(require, "lib.integrations.hyprland_config")
+  local ok, lib = pcall(require, "lib.compositor.hyprland_config")
   config = ok and lib or false
   if not config or not config.available() then
     s.status:set("unavailable")
@@ -355,7 +355,7 @@ function M.start()
       if seen[name] == value then return end
       seen[name] = value
       if timers[name] then timers[name]:cancel() end
-      timers[name] = morf.timer(delay or 120, function() timers[name] = nil apply() end, false)
+      timers[name] = morf.time.timer(delay or 120, function() timers[name] = nil apply() end, false)
     end)
   end
   follow("animations", function() return settings.animationPreset end, M.apply_animations)
@@ -389,7 +389,7 @@ function M.start()
   end)
   -- The config only enables animations and leaves the rest off; the
   -- settings are put on it once the shell is up.
-  morf.timer(1500, all, false)
+  morf.time.timer(1500, all, false)
 end
 
 return M

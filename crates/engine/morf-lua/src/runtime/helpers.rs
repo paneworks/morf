@@ -1,5 +1,4 @@
-use luna::{Context, Table, Value as LuaValue};
-use std::collections::HashMap;
+use luna::Context;
 use std::rc::Rc;
 
 use morf_scene::reactive::SignalId;
@@ -143,43 +142,4 @@ pub(crate) fn register_reloadable_value(
     state.register_reloadable(name, initial)
 }
 
-pub(crate) fn create_persistent_token<'gc>(
-    ctx: Context<'gc>,
-    state: &Rc<StateCell<ReactiveState>>,
-    name: &str,
-    defaults: Table<'gc>,
-) -> Result<PersistentToken, String> {
-    if name.is_empty() || name.len() > 256 {
-        return Err("persistent id must be 1..256 bytes".into());
-    }
-    let mut definitions = Vec::new();
-    for (key, value) in defaults.iter(ctx) {
-        let LuaValue::String(key) = key else {
-            return Err("persistent property names must be strings".into());
-        };
-        let key = key.display_lossy().to_string();
-        if key.is_empty() || key.len() > 256 || matches!(key.as_str(), "loaded" | "reloaded") {
-            return Err(format!("invalid persistent property `{key}`"));
-        }
-        definitions.push((key, IpcValue::from_lua(value)?));
-        if definitions.len() > 256 {
-            return Err("persistent object exceeds 256 properties".into());
-        }
-    }
-    definitions.sort_by(|left, right| left.0.cmp(&right.0));
-    let mut properties = HashMap::new();
-    let mut reloaded = false;
-    let mut state = state.borrow_mut();
-    for (key, initial) in definitions {
-        let full_name = format!("{name}.{key}");
-        let (id, restored) = register_reloadable_value(&mut state, full_name, initial)?;
-        reloaded |= restored;
-        properties.insert(key, id);
-    }
-    Ok(PersistentToken {
-        properties,
-        reloaded,
-    })
-}
-
-pub(crate) use morf_runtime::engine::{scoped_id, validate_scope_part};
+pub(crate) use morf_runtime::engine::validate_scope_part;

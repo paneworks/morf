@@ -1,6 +1,6 @@
-//! `MORF_GPU_PROFILE=1`: where a frame's GPU time goes.
+//! `MORF_PROFILE=gpu`: where a frame's GPU time goes.
 //!
-//! `MORF_GPU_WAIT` says how long a frame took on the GPU, which on a GPU the
+//! `MORF_LOG=gpu_wait` says how long a frame took on the GPU, which on a GPU the
 //! compositor is keeping busy is mostly time spent queued behind it. This
 //! says what the frame's own work cost, stage by stage, from timestamps the
 //! GPU writes as it gets there: the offscreen layers (with their blurs and
@@ -19,7 +19,7 @@ pub(crate) const MARKS: [&str; 4] = ["start", "layers", "surface", "present"];
 /// Whether profiling was asked for.
 pub(crate) fn wanted() -> bool {
     static WANTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *WANTED.get_or_init(|| std::env::var_os("MORF_GPU_PROFILE").is_some())
+    *WANTED.get_or_init(|| morf_value::env::flags("MORF_PROFILE").has("gpu"))
 }
 
 /// The device features profiling needs, when it is asked for and the adapter
@@ -27,7 +27,7 @@ pub(crate) fn wanted() -> bool {
 pub(crate) fn features(adapter: &wgpu::Adapter) -> wgpu::Features {
     let needed = wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS;
     if wanted() && adapter.features().contains(needed) {
-        if std::env::var_os("MORF_GPU_PROFILE_COMMANDS").is_some()
+        if morf_value::env::flags("MORF_PROFILE").has("gpu_commands")
             && adapter
                 .features()
                 .contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES)

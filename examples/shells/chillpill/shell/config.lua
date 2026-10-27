@@ -4,8 +4,6 @@
 -- reads here unchanged: comments are stripped before the JSON is parsed, and
 -- anything the file leaves out takes the default below.
 
-local core = require("morf.core")
-local io = require("morf.io")
 
 local config = {
   -- A picture for the dashboard's profile; empty tries `~/.face`.
@@ -47,7 +45,7 @@ local config = {
   bandwidthAlertMB = 0,
 }
 
-local home = core.env("HOME") or ""
+local home = morf.env("HOME") or ""
 
 --- `~` at the start of a path is the home directory.
 function config.expand(path)
@@ -84,12 +82,12 @@ local function strip_comments(text)
   return (text:gsub(",%s*([}%]])", "%1"))
 end
 
-local path = (core.env("XDG_CONFIG_HOME") or (home .. "/.config")) .. "/chillpill/config.json"
-local ok, handle = pcall(io.file, path)
+local path = (morf.env("XDG_CONFIG_HOME") or (home .. "/.config")) .. "/chillpill/config.json"
+local ok, handle = pcall(morf.fs.file, path)
 if ok and handle then
   local read, text = pcall(handle.read, handle)
   if read and type(text) == "string" and text ~= "" then
-    local decoded, values = pcall(io.json.decode, strip_comments(text))
+    local decoded, values = pcall(morf.json.decode, strip_comments(text))
     if decoded and type(values) == "table" then
       for key, value in pairs(values) do
         if config[key] ~= nil and type(value) == type(config[key]) then

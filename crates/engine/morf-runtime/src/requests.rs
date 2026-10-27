@@ -166,27 +166,6 @@ pub struct OfferDescription {
     pub text: Option<String>,
 }
 
-/// What `morf.gamma.set` or `reset` asked of an output.
-#[derive(Clone, Debug, PartialEq)]
-pub struct GammaRequest {
-    /// The output's name; `None` is the one this shell is on.
-    pub output: Option<String>,
-    /// `(temperature, brightness, gamma)`, or `None` to reset.
-    pub set: Option<(f64, f64, f64)>,
-}
-
-/// What a configuration asked to do to a workspace.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum WorkspaceRequest {
-    Activate(String),
-    Remove(String),
-    /// Move the workspace to the group on the named output.
-    Assign {
-        key: String,
-        output: String,
-    },
-}
-
 /// Something a configuration asked to do to another window.
 #[derive(Clone, Debug)]
 pub struct ToplevelRequest {
@@ -202,33 +181,6 @@ mod queue;
 
 pub use lifecycle::{Lifecycle, ReloadRequest};
 pub use queue::Requests;
-
-/// One workspace, as the engine hands it to a configuration.
-///
-/// Mirrors `morf_app::WorkspaceInfo` rather than re-exporting it, so the
-/// Lua runtime does not depend on the Wayland crate — the same separation the
-/// window list beside it keeps.
-#[derive(Clone, Debug, Default)]
-pub struct Workspace {
-    /// The field to act on, and what `morf.workspace.activate` takes.
-    pub key: String,
-    /// The compositor's cross-session id, when it offers one. Often empty --
-    /// the protocol makes it optional and Hyprland sends none.
-    pub id: String,
-    /// What to show a person.
-    pub name: String,
-    /// Where it sits in the compositor's arrangement.
-    pub coordinates: Vec<u32>,
-    /// The output it belongs to, so a per-screen bar can filter to its own.
-    pub output: String,
-    pub active: bool,
-    pub urgent: bool,
-    pub hidden: bool,
-    /// Whether `morf.workspace.activate` will do anything for it.
-    pub activatable: bool,
-    pub removable: bool,
-    pub assignable: bool,
-}
 
 /// One window the compositor reports, as handed to a configuration.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]

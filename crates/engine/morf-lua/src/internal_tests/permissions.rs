@@ -35,7 +35,7 @@ fn closures_carry_their_module_but_a_native_it_hands_out_does_not() {
             local M = {{ native = probe, item = {{ "chosen by leaky" }} }}
             function M.closure(item) local seen = probe(item) return seen end
             function M.tail(item) return probe(item) end
-            M.spawn = morf.spawn
+            M.spawn = morf.process.spawn
             M.command = {{ command = {{ "touch", "{}" }} }}
             require("defer").later(probe, M.item)
             return M

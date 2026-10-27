@@ -39,7 +39,7 @@ test.it("a channel keeps its newest numbers and wakes what reads it", function()
   test.eq(#test.logs("error"), 0)
 end)
 
-test.it("geometry draws arcs, hatching, ticks, rulers, segments and plots", function()
+test.it("geometry draws arcs, hatching, ticks, rulers and segments", function()
   test.load { source = [[
     local g = morf.geometry
     morf.ipc.all = function()
@@ -50,7 +50,6 @@ test.it("geometry draws arcs, hatching, ticks, rulers, segments and plots", func
         ticks = g.ticks(50, 50, 40, 45, { from = -150, sweep = 300, count = 60, major = 5, major_r0 = 38 }),
         ruler = g.ruler(40, 6, { pitch = 8, major = 5 }),
         segments = g.segments(100, 6, 10, 3),
-        plot = g.plot({ 0, 1, 0.5 }, { kind = "bars", width = 30, height = 10, gap = 0 }),
       }
     end
   ]] }
@@ -62,5 +61,4 @@ test.it("geometry draws arcs, hatching, ticks, rulers, segments and plots", func
   test.eq(select(2, d.ticks:gsub("M", "")), 61)
   test.eq(select(2, d.ruler:gsub("M", "")), 6)
   test.eq(select(2, d.segments:gsub("Z", "")), 10)
-  test.eq(select(2, d.plot:gsub("Z", "")), 3)
 end)

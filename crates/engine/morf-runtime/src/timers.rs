@@ -116,7 +116,7 @@ pub struct Timers {
     timers: Vec<Timer>,
     /// Each `ui.Timer`'s `on_triggered`.
     node_handlers: HashMap<NodeHandle, Handler>,
-    /// Where each `ui.Timer` was built, for `MORF_WAKE_LOG`.
+    /// Where each `ui.Timer` was built, for `MORF_LOG=wake`.
     origins: HashMap<NodeHandle, Rc<str>>,
     /// One-shot timers that came due this turn and have not yet fired: a
     /// cancel before their turn in the batch takes them out, so it holds.

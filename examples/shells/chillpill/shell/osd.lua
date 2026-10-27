@@ -23,7 +23,7 @@ osd.shown = morf.signal("chillpill.osd.shown", false)
 osd.kind = morf.signal("chillpill.osd.kind", "volume")
 osd.message = morf.signal("chillpill.osd.message", "")
 
-local hide_clock = morf.elapsed_timer()
+local hide_clock = morf.time.elapsed()
 local hide_after = 0
 
 --- Shows the pill for one kind, restarting the countdown.

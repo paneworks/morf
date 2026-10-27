@@ -153,7 +153,7 @@ fn private_bus_notification_with_an_image_and_a_resident_action() {
                         tostring(n.urgency), n.category, n.desktop_entry, tostring(n.resident),
                         n.image_source and n.image_source:match("^memory:image/") or "no source",
                     }, "|")
-                    morf.timer(1, function()
+                    morf.time.timer(1, function()
                         server.invoke(n.id, "open")
                         shown:set(described .. "|after=" .. #server.list)
                     end, false)

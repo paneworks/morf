@@ -21,8 +21,8 @@ from the defaults in `services/settings.lua`).
 ## The compositor
 
 What upstream pushed through CompositorService, MonitorService and
-ShortcutService goes through `lib/integrations/hyprland_config.lua` (on top
-of `lib/integrations/hyprland.lua`), for a Lua-configured Hyprland (`eval` of `hl.*` chunks)
+ShortcutService goes through `lib/compositor/hyprland_config.lua` (on top
+of `lib/compositor/hyprland.lua`), for a Lua-configured Hyprland (`eval` of `hl.*` chunks)
 or a hyprlang one (`keyword`s); the configuration files are never written,
 and whatever is pushed is pushed again after every reload. Under any other
 compositor the three services say so, the settings pages lock their
@@ -183,9 +183,9 @@ the desk's board; their rows are the desk's too.
 The faces read `desktop/sources.lua`, which prefers the shell's services
 (`services.audio`, `battery`, `media`, `tasks`, `notes`, `updates`, ...)
 and stands in with the libraries where one cannot load, and
-`services/weather|stats|github|claude.lua`, which read the lua-stdlib
-libraries (`lib.weather`, `lib.sysinfo`, `lib.github`, `lib.claude_usage`,
-`lib.packages`).
+`services/weather|stats|github|claude.lua`, which read the library's
+`lib.integrations.weather`, `lib.services.sysinfo` and `lib.integrations.packages`,
+and impasto's own `services.github_calendar` and `services.claude_usage`.
 
 `morf ipc call desk <verb>`: `edit`, `done`, `add <module> [col row]`,
 `remove <key>`, `select <key>`, `pick <key>`, `family <key> <2x2|4x2|4x4|8x2>`,
@@ -194,6 +194,192 @@ libraries (`lib.weather`, `lib.sysinfo`, `lib.github`, `lib.claude_usage`,
 calendar's day view), `note_edge <key> <edge>`, `note_grid <note> <col> <row>`,
 `deck_edge <key> <edge>`, `deck_add <edge>`, `along <deck> <0..1>`,
 `takes_new <deck> <1|0>`, `light <edge>` and `view <photo key>`.
+
+## services/palette.lua
+
+`services/palette.lua` derives a whole desk's colours from a wallpaper: the
+thirteen tokens impasto uses (`background surface surfaceHover border text
+textMuted accent accentHover accentText red green yellow blue`), a
+sixteen-colour terminal set, and writers for the programs that read them.
+It is a port of the substance of impasto's `theme_manager.py`, built on
+`morf.image.palette`, `morf.color`, `morf.fs` and `morf.json`.
+
+```lua
+local palette = require("services.palette")
+
+palette.from_image("~/Pictures/sea.jpg", { mode = "dark" }, function(ok, p)
+  if not ok then return morf.log.warn(p) end
+  local dir = morf.paths.cache("colors")
+  palette.write.kitty(p, dir .. "/kitty.conf")
+  palette.write.pywal(p, dir .. "/colors.json")
+  theme.accent = p.accent
+end)
+```
+
+### A palette
+
+A table of `morf.color` values under the token names, plus `terminal`
+(`color0`..`color15`, `foreground`, `background`, `cursor`, `cursor_text`,
+`selection`, `selection_foreground`) and `mode`, `picked` (the swatch the
+accent came from), `swatches` (the picture's most common colours, hex),
+`source`, and `cached`.
+
+### Making one
+
+| call | what |
+| --- | --- |
+| `palette.from_image(path, opts, on_done)` | quantises the picture off the loop, answers `on_done(true, p)` or `on_done(false, message)` |
+| `palette.derive(swatches, opts)` | the same from `{ color, fraction }` swatches, synchronously |
+| `palette.from_accent(color, opts)` | as if the picture were only that colour |
+| `palette.from_tokens(tokens)` | a fixed scheme's thirteen tokens made a whole palette |
+| `palette.presets`, `palette.preset(id)` | impasto's nine schemes: `catppuccin_mocha`, `catppuccin_latte`, `tokyo_night`, `gruvbox_dark`, `nord`, `rose_pine`, `cyberpunk`, `bauhaus`, `crimson` |
+| `palette.blend(a, b, t)` | every colour mixed in OkLab, for animating between two |
+| `palette.check(p)` | every contrast floor, measured: `report, all_ok` |
+| `palette.to_hex(p)`, `palette.from_hex(t)` | to and from plain hex strings |
+
+Options: `mode` (`"dark"` by default, `"light"`, or `"auto"` from the
+picture's lightness), `accent` (use this instead of picking), `fallback_accent`
+(`#89b4fa`), `population_weight` (1), `min_population` (0.004), `hue_pull`
+(0.25), `hue_shift` (12 degrees), `cyan_is_accent` (true), `count` (16
+swatches), `cache_dir` / `cache = false`.
+
+### How the colours are chosen
+
+- **Accent.** impasto's rule: among swatches with HSV saturation over 0.2
+  and luma between 0.2 and 0.85, the highest `2*sat + (1 - |luma - 0.55|)`;
+  added to it are `3 * OkLCh chroma` (so a near-black navy does not count
+  as saturated) and `sqrt(share of the picture)` (so a speck of neon does
+  not beat the sky). Failing that, the most saturated swatch over 0.1;
+  failing that, the neutral accent. Its hue is kept; its lightness is
+  brought into 0.64..0.84 (dark) or 0.42..0.62 (light) and its chroma into
+  0.07..0.2.
+- **Grounds** are near-black (OkLCh L 0.18 / 0.215 / 0.265 / 0.33) or
+  near-white, tinted towards the accent's hue by a fifth of its chroma.
+- **Type** starts near-white (or near-black) and is lifted until text reads
+  at 7:1 on the background and 4.5:1 on the surfaces, muted text 4.5:1.
+- **accentText** is the ground's dark or a near-white, whichever reads
+  better on the accent; if neither reaches 4.5:1 the accent moves instead.
+  `accentHover` is a step further from `accentText`, held to the same floor.
+- **Semantic colours** start at recognisable OkLCh hues (red 25, green 145,
+  yellow 92, blue 255) and are pulled a quarter of the way towards the
+  accent's hue, never more than twelve degrees; their chroma follows the
+  picture's own vividness (half to full), and each is lifted to 4.5:1.
+- **Terminal**: normal slots 1..6 at 4.5:1 on the terminal background,
+  bright slots a step further and at 7:1 (impasto's `lift` and
+  `brighten`); cyan carries the accent (impasto's choice; `cyan_is_accent =
+  false` for a real cyan); magenta is the red turned to 330 degrees.
+  On a light ground `color0` is the ink and `color15` the paper.
+
+Lifting moves only OkLCh lightness, keeping hue, and giving up chroma only
+where sRGB cannot show it. Every floor is listed in `palette.FLOORS` and
+checked by `palette.check`. The same image and options always give the same
+palette.
+
+### Caching
+
+`from_image` caches by path, modification time, size and options, as JSON
+in `opts.cache_dir` (default `morf.paths.cache("palette")`). A cached
+palette is answered before `from_image` returns. A fresh one is answered a
+few loop turns later: the derivation, the cache write and the caller each
+run in a turn of their own, because each handler has a fuel budget.
+
+### Writers
+
+`palette.build.<name>(p)` returns the file as a string; `palette.write.<name>(p,
+path)` writes it atomically and returns `true` or `nil, message`. Names:
+`kitty` (an include), `foot` (an include), `alacritty` (TOML import), `btop`
+(a theme file), `cava` (its `[color]` section), `gtk3`, `gtk4`, `gtk`
+(`@define-color` lines), `json`, `lua`, `pywal` (`colors.json`).
+
+Nothing is ever reloaded. `palette.reload_hints.<name>` says what each
+program needs (`signal`, `process`, `command`, `note`) for a configuration
+that wants to do it itself.
+
+### Templates
+
+```lua
+palette.render("accent = {{accent}}\nbar = {{surface | mix accent 0.2 | strip}}\n", p)
+palette.write.template(text, p, path)
+```
+
+`{{name}}` is a token, a `terminal.<slot>` or a field; colours are written
+`#rrggbb` unless a format follows: `.hex .strip .hexa .xhex .rgb .rgba .css
+.hsl .oklch .r .g .b .name`. Filters follow a bar and chain: `lighten n`,
+`darken n`, `saturate n`, `desaturate n`, `rotate deg`, `alpha a`, `mix
+<colour or token> t [space]`, `complement`, `invert`, `gray`, `text_color`,
+any format name, `upper`, `lower`. An unknown name or filter raises.
+
+## services/github_calendar.lua
+
+A public user's contribution calendar: a year of days, each with a count and
+the 0-4 shade GitHub draws it in.
+
+```lua
+local github = require("services.github_calendar")
+local me = github.new { user = "torvalds" }          -- or { user = ..., token = "ghp_..." }
+ui.Text { text = function()
+  local c = me:get()
+  return c.available and ("%d contributions, %d-day streak"):format(c.total, c.current_streak) or ""
+end }
+```
+
+Without a token the calendar is read from the public page
+`github.com/users/<user>/contributions`, by what identifies a day (a cell's
+`data-date` and `data-level`, the tooltip naming it with the count) rather
+than by where it sits in the markup. With a `token` it comes from the GraphQL
+API. Either way it is cached on disk (`ttl`, default an hour) and refreshed
+every `interval` (default an hour) while read.
+
+`me:get()` is a tracked read of `{ available, user, source, days = { {date,
+count, level, weekday} }, weeks, total, current_streak, longest_streak, today,
+max, updated, stale }`. `weeks` are columns of seven, Sunday first, the way the
+calendar is drawn (the first column padded with nils). `total` is the number
+GitHub states when it states one (it includes private contributions). The
+current streak runs back from today, or from yesterday while today is still
+empty. Options: `user`, `token`, `interval`, `ttl`, `cache_dir`, `today`,
+`base_url`, `api_url`. `github.parse_html`, `github.parse_graphql` and
+`github.summarise` are there for other uses.
+
+## services/claude_usage.lua
+
+Claude Code's token usage from its own transcripts, a port of impasto's
+`claude_usage.py`: tokens in the current five-hour billing block and in the
+last seven days, read from `~/.claude/projects/**/*.jsonl` with `morf.fs`.
+
+```lua
+local claude_usage = require("services.claude_usage")
+local usage = claude_usage.new {}
+ui.Text { text = function()
+  local u = usage:get()
+  return u.available and ("%dk / 5h"):format(u.block_tokens // 1000) or ""
+end }
+```
+
+A token count is input + output + cache-creation tokens, as the original
+counts them (cache reads re-send the same context every turn and are left
+out). A turn written as several lines with one request id is counted once.
+The block starts on the hour of its first message within reach of a
+five-hour window.
+
+`usage:get()` is a tracked read of `{ available, block_start, block_end,
+block_tokens, block_messages, week_tokens, week_messages, peak_block_tokens,
+peak_week_tokens, files, scanning, skipped, updated }`. Reading is
+incremental: every file's offset, size and mtime are kept on disk
+(`state_path`), an unchanged file is not opened, a grown one is read from
+where the last pass stopped, and the work is a job in slices. A pass reads at
+most `pass_bytes` (32 MiB); while a backlog remains, `scanning` is true and
+the next pass follows a second later, files written within the block first.
+Files up to `max_read` (4 MiB) are read whole with `morf.fs.read`; larger ones
+a `chunk` at a time by running `dd` directly for the byte range (`morf.fs`
+has no ranged read). Options: `dir`, `state_path`, `interval` (60 s),
+`keep_hours` (five weeks), `pass_bytes`, `max_read`, `chunk`, `read_range`,
+`now`.
+
+`claude_usage.limits(options, on_done)` reports the plan's 5-hour and 7-day
+utilisation from the `anthropic-ratelimit-unified-*` headers, which only a
+real API request returns: it sends the smallest one (one output token) with
+Claude Code's OAuth token from `~/.claude/.credentials.json`. It is never
+called by the library itself.
 
 ## Testing
 

@@ -80,7 +80,7 @@ function page.on_open()
   page.refresh()
 end
 
-morf.timer(2000, function()
+morf.time.timer(2000, function()
   if require("island").page:get() == "audio" then page.refresh() end
 end, true)
 

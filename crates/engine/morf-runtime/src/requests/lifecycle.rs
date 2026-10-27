@@ -19,25 +19,17 @@ pub struct ReloadRequest {
     pub output: bool,
 }
 
-/// A reload, file watching, quitting and unlocking, as asked.
+/// A reload and quitting, as asked.
 pub struct Lifecycle {
     /// A reload asked for.
     reload_request: Option<ReloadRequest>,
-    /// Whether the configuration's files are watched for a reload.
-    watch_files: bool,
-    /// Whether that changed since the host last asked.
-    watch_files_changed: bool,
     /// Whether the configuration has asked the shell to stop.
     ///
     /// One-way: nothing clears it but the supervisor reading it, and by then
     /// the process is on its way out. A configuration cannot un-quit.
     quit_requested: bool,
-    /// Whether the lock screen asked to unlock.
-    session_unlock_requested: bool,
-    /// Told when a reload finished.
-    reload_completed_callbacks: Vec<Handler>,
-    /// Told when a reload failed.
-    reload_failed_callbacks: Vec<Handler>,
+    /// Told when a reload finished or failed.
+    reload_callbacks: Vec<Handler>,
     /// What the last configuration kept, waiting to be claimed by name.
     reload_seed: HashMap<String, IpcValue>,
     /// Each `morf.reloadable` value, by name.
@@ -50,12 +42,8 @@ impl Default for Lifecycle {
     fn default() -> Self {
         Self {
             reload_request: None,
-            watch_files: true,
-            watch_files_changed: false,
             quit_requested: false,
-            session_unlock_requested: false,
-            reload_completed_callbacks: Vec::new(),
-            reload_failed_callbacks: Vec::new(),
+            reload_callbacks: Vec::new(),
             reload_seed: HashMap::new(),
             reloadable: HashMap::new(),
             shell_root: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
@@ -91,24 +79,6 @@ impl Lifecycle {
         self.reload_request.take()
     }
 
-    /// Whether the configuration's files are watched.
-    pub fn watch_files(&self) -> bool {
-        self.watch_files
-    }
-
-    /// Watches the configuration's files, or stops.
-    pub fn set_watch_files(&mut self, watch: bool) {
-        if self.watch_files != watch {
-            self.watch_files = watch;
-            self.watch_files_changed = true;
-        }
-    }
-
-    /// Whether to watch the files, if that changed since last asked.
-    pub fn take_watch_files_change(&mut self) -> Option<bool> {
-        std::mem::take(&mut self.watch_files_changed).then_some(self.watch_files)
-    }
-
     /// The configuration asked the shell to stop.
     pub fn quit(&mut self) {
         self.quit_requested = true;
@@ -119,32 +89,14 @@ impl Lifecycle {
         self.quit_requested
     }
 
-    /// The lock screen asked to unlock.
-    pub fn ask_unlock(&mut self) {
-        self.session_unlock_requested = true;
+    /// Tells `handler` when a reload finishes or fails.
+    pub fn on_reload(&mut self, handler: Handler) {
+        self.reload_callbacks.push(handler);
     }
 
-    /// Whether the lock screen asked to unlock since last asked.
-    pub fn take_unlock_request(&mut self) -> bool {
-        std::mem::take(&mut self.session_unlock_requested)
-    }
-
-    /// Tells `handler` when a reload finishes, or when one fails.
-    pub fn on_reload(&mut self, completed: bool, handler: Handler) {
-        if completed {
-            self.reload_completed_callbacks.push(handler);
-        } else {
-            self.reload_failed_callbacks.push(handler);
-        }
-    }
-
-    /// Who is told that a reload finished, or failed.
-    pub fn reload_callbacks(&self, completed: bool) -> Vec<Handler> {
-        if completed {
-            self.reload_completed_callbacks.clone()
-        } else {
-            self.reload_failed_callbacks.clone()
-        }
+    /// Who is told that a reload finished or failed.
+    pub fn reload_callbacks(&self) -> Vec<Handler> {
+        self.reload_callbacks.clone()
     }
 
     /// What the last configuration kept, for this one to claim.

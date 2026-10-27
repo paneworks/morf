@@ -6,7 +6,7 @@
 -- classes to desktop entries (below).
 --
 -- Windows come from the compositor-agnostic `morf.windows` (the foreign
--- toplevel list), and are acted on through `morf.toplevel`. Where Hyprland is
+-- toplevel list), and are acted on through `morf.toplevels`. Where Hyprland is
 -- there and `lib.hyprland` can be required (`MORF_RUNTIME_PATH` naming
 -- `examples/`), its clients add what the protocol does not say: each
 -- window's workspace, for the menu, and which monitor a fullscreen window
@@ -33,7 +33,7 @@ local M = {}
 -- ------------------------------------------------------------- hyprland --
 
 local hyprland
-for _, name in ipairs { "lib.integrations.hyprland", "hyprland" } do
+for _, name in ipairs { "lib.compositor.hyprland", "hyprland" } do
   local ok, lib = pcall(require, name)
   if ok and type(lib) == "table" and lib.available then
     hyprland = lib
@@ -163,7 +163,7 @@ end
 
 local function index_applications()
   -- The launcher's directories, flatpak's exported entries included.
-  local ok, entries = pcall(morf.desktop_entries, require("services.launcher").application_paths())
+  local ok, entries = pcall(morf.apps.entries, require("services.launcher").application_paths())
   if not ok or not entries then
     morf.log("warn", "impasto: dock: no desktop entries: " .. tostring(entries))
     return
@@ -187,7 +187,7 @@ local function index_applications()
 end
 
 local indexed_at = -math.huge
-local clock = morf.elapsed_timer()
+local clock = morf.time.elapsed()
 local function now() return clock:elapsed_ms() / 1000 end
 
 --- Reads the entries again, at most every half minute: a class nothing
@@ -534,7 +534,7 @@ local function focus_window(handle)
     if h then h.dispatch("focuswindow", "address:" .. address) end
     return
   end
-  morf.toplevel.activate(handle)
+  morf.toplevels.activate(handle)
 end
 
 local function close_window(handle)
@@ -544,7 +544,7 @@ local function close_window(handle)
     if h then h.dispatch("closewindow", "address:" .. address) end
     return
   end
-  morf.toplevel.close(handle)
+  morf.toplevels.close(handle)
 end
 
 M.focus_window = focus_window
@@ -608,7 +608,7 @@ local poll_queued = false
 local function queue_poll()
   if poll_queued then return end
   poll_queued = true
-  morf.timer(1, function()
+  morf.time.timer(1, function()
     poll_queued = false
     M.poll()
   end, false)

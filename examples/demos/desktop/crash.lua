@@ -17,7 +17,7 @@ morf.surface.layer = "overlay"
 
 local report = morf.operands[1] or "(no report)"
 local head = {}
-local ok, text = pcall(function() return morf.file(report):read() end)
+local ok, text = pcall(function() return morf.fs.file(report):read() end)
 if ok and type(text) == "string" then
   -- The first lines say what and where; the backtrace below them is for the
   -- file, not the screen.

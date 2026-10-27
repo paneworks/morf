@@ -1,17 +1,12 @@
-use luna::{
-    Callback, CallbackReturn, Closure, Context, Executor, Table, UserData, UserRef,
-    Value as LuaValue, Variadic,
-};
+use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as LuaValue};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::Duration;
 
-use morf_scene::{Behavior, ListModel, Value as SceneValue, VirtualList};
+use morf_scene::{ListModel, Value as SceneValue};
 
 use crate::{
-    api::ui::bindings::*, api::ui::scene::*, runtime::host_types::*, runtime::model_revisions::*,
-    runtime::state::*, runtime::views::*, value::lua::*, value::table::*, vm::execute::*,
-    vm::loader::*, vm::types::*,
+    api::ui::bindings::*, api::ui::scene::*, runtime::model_revisions::*, runtime::state::*,
+    runtime::views::*, vm::loader::*, vm::types::*,
 };
 
 pub(crate) fn install_view_api<'gc>(
@@ -20,43 +15,6 @@ pub(crate) fn install_view_api<'gc>(
     morf: Table<'gc>,
     limits: Limits,
 ) {
-    let variants = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (items, factory): (Table, Closure) = stack.consume(ctx)?;
-        let mut values = items
-            .iter(ctx)
-            .map(|(key, value)| match key {
-                LuaValue::Integer(index) => Ok((index, value)),
-                _ => Err(HostError("variants model keys must be integers".into())),
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        if values.len() > 256 {
-            return Err(HostError("variants model exceeds 256 entries".into()).into());
-        }
-        values.sort_by_key(|(index, _)| *index);
-        let instances = Table::new(&ctx);
-        // One budget for the whole call, not one per entry. Every factory here
-        // runs from a single `morf.variants`, so giving each of up to 256 items
-        // a full effect budget would let one construction spend 256 times what
-        // any other Lua entry point is allowed.
-        let mut budget = limits.effect_fuel;
-        for (offset, (index, item)) in values.into_iter().enumerate() {
-            if index != offset as i64 + 1 {
-                return Err(HostError("variants model must be a dense sequence".into()).into());
-            }
-            let executor = Executor::start(ctx, factory.into(), Variadic(vec![item]));
-            let spent = drive_executor(ctx, executor, limits, budget, "variant factory")
-                .map_err(HostError)?;
-            budget = budget.saturating_sub(spent);
-            let value = executor
-                .take_result::<LuaValue>(ctx)
-                .map_err(|error| HostError(error.to_string()))??;
-            instances.set(ctx, index, value)?;
-        }
-        stack.replace(ctx, instances);
-        Ok(CallbackReturn::Return)
-    });
-    morf.set_field(ctx, "variants", variants);
-
     // Reads register the model's revision as a dependency of the running
     // binding; changes bump it. See `model_revisions`.
     let model_len = Callback::from_fn(&ctx, {
@@ -265,77 +223,6 @@ pub(crate) fn install_view_api<'gc>(
     });
     morf.set_field(ctx, "list_model", list_model);
 
-    let virtual_visible = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let view: UserRef<VirtualListToken> = stack.consume(ctx)?;
-        let model = view.model.borrow();
-        let range = view.view.borrow().visible_range(model.len());
-        let items = Table::new(&ctx);
-        for (position, index) in range.enumerate() {
-            let value = Table::new(&ctx);
-            value.set_field(ctx, "index", index as i64 + 1);
-            if let Some((_, item)) = model.get(index) {
-                value.set_field(ctx, "item", scene_to_lua(ctx, item).map_err(HostError)?);
-            }
-            items
-                .set(ctx, position as i64 + 1, value)
-                .expect("virtual-list table accepts integer keys");
-        }
-        stack.replace(ctx, items);
-        Ok(CallbackReturn::Return)
-    });
-    let virtual_offset = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (view, offset): (UserRef<VirtualListToken>, f64) = stack.consume(ctx)?;
-        view.view.borrow_mut().set_offset(offset);
-        Ok(CallbackReturn::Return)
-    });
-    let virtual_sync = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let view: UserRef<VirtualListToken> = stack.consume(ctx)?;
-        let changes = view.model.borrow_mut().take_changes();
-        let transitions = view.view.borrow_mut().sync(&view.model.borrow(), &changes);
-        let result = Table::new(&ctx);
-        for (index, transition) in transitions.into_iter().enumerate() {
-            result
-                .set(
-                    ctx,
-                    index as i64 + 1,
-                    view_transition_to_lua(ctx, transition),
-                )
-                .expect("view-transition table accepts integer keys");
-        }
-        stack.replace(ctx, result);
-        Ok(CallbackReturn::Return)
-    });
-    let virtual_methods = Table::new(&ctx);
-    virtual_methods.set_field(ctx, "visible", virtual_visible);
-    virtual_methods.set_field(ctx, "set_offset", virtual_offset);
-    virtual_methods.set_field(ctx, "sync", virtual_sync);
-    let virtual_metatable = Table::new(&ctx);
-    virtual_metatable.set_field(ctx, "__index", virtual_methods);
-    let virtual_metatable = ctx.stash(virtual_metatable);
-    let virtual_list = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (model, item_extent, viewport_extent, overscan): (
-            UserRef<ListModelToken>,
-            f64,
-            f64,
-            i64,
-        ) = stack.consume(ctx)?;
-        let overscan = usize::try_from(overscan)
-            .map_err(|_| HostError("virtual-list overscan cannot be negative".into()))?;
-        let view = VirtualList::new(item_extent, viewport_extent, overscan)
-            .ok_or_else(|| HostError("invalid virtual-list dimensions".into()))?;
-        let userdata = UserData::new_static(
-            &ctx,
-            VirtualListToken {
-                model: Rc::clone(&model.model),
-                view: RefCell::new(view),
-            },
-        );
-        userdata.set_metatable(ctx, Some(ctx.fetch(&virtual_metatable)));
-        stack.replace(ctx, userdata);
-        Ok(CallbackReturn::Return)
-    });
-    morf.set_field(ctx, "virtual_list", virtual_list);
-
     let sync_state = Rc::clone(&state);
     let sync_view = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let (node, offset): (UserRef<NodeToken>, f64) = stack.consume(ctx)?;
@@ -382,7 +269,7 @@ pub(crate) fn install_view_api<'gc>(
         stack.replace(ctx, extent);
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "view_extent", view_extent);
+    crate::api::namespace::table(ctx, morf, "ui").set_field(ctx, "view_extent", view_extent);
 
     // Where row `index` (from 1) of a view starts along it: what keeping a
     // row in sight scrolls to.
@@ -400,35 +287,9 @@ pub(crate) fn install_view_api<'gc>(
         stack.replace(ctx, start);
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "view_item_start", view_item_start);
-
-    let transition_state = Rc::clone(&state);
-    let transition_parent = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (node, parent, options): (UserRef<NodeToken>, UserRef<NodeToken>, Table) =
-            stack.consume(ctx)?;
-        let duration = table_number(ctx, options, "duration", 250.0).map_err(HostError)?;
-        if duration < 0.0 {
-            return Err(HostError("parent-transition duration cannot be negative".into()).into());
-        }
-        let easing = parse_easing(ctx, options.get_value(ctx, "easing")).map_err(HostError)?;
-        let anchors = match options.get_value(ctx, "anchors") {
-            LuaValue::Nil => None,
-            value => match lua_to_scene(ctx, value, 0).map_err(HostError)? {
-                SceneValue::Map(anchors) => Some(anchors),
-                _ => return Err(HostError("transition anchors must be a table".into()).into()),
-            },
-        };
-        transition_state
-            .borrow_mut()
-            .windows_mut()
-            .parent_transitions
-            .push(ParentTransitionRequest {
-                node: node.handle,
-                parent: parent.handle,
-                anchors,
-                behavior: Behavior::timed(Duration::from_secs_f64(duration / 1_000.0), easing),
-            });
-        Ok(CallbackReturn::Return)
-    });
-    morf.set_field(ctx, "transition_parent", transition_parent);
+    crate::api::namespace::table(ctx, morf, "ui").set_field(
+        ctx,
+        "view_item_start",
+        view_item_start,
+    );
 }

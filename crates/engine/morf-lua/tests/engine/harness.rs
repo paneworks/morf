@@ -26,8 +26,8 @@ fn timers_on_a_virtual_clock_fire_when_it_is_advanced_and_not_before() {
                 morf.ipc.once = function() return once end
                 morf.ipc.every = function() return every end
                 morf.ipc.node = function() return node end
-                morf.timer(100, function() once = once + 1 end, false)
-                morf.timer(30, function() every = every + 1 end)
+                morf.time.timer(100, function() once = once + 1 end, false)
+                morf.time.timer(30, function() every = every + 1 end)
                 require("morf.ui").Timer {
                     interval = 50, running = true,
                     on_triggered = function() node = node + 1 end,

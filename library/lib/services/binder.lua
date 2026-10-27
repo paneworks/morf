@@ -14,7 +14,7 @@
 --   `close()`.
 
 local morf = require("morf")
-local dbus_client = require("lib.services.dbus_client")
+local dbus_client = require("lib.services.dbus")
 
 local binder = {}
 
@@ -397,7 +397,7 @@ function binder.bind(descriptor, options, help)
   function binding.timer(ms, fn, repeating)
     if closed then return nil end
     local handle
-    handle = morf.timer(ms, function()
+    handle = morf.time.timer(ms, function()
       if not repeating then timers[handle] = nil end
       if not closed then fn() end
     end, repeating == true)

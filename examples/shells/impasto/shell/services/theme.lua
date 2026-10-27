@@ -1,6 +1,6 @@
 -- The active palette: the wallpaper's own, or one of the fixed schemes.
 --
--- Port of ThemeService.qml over library/lib/util/palette.lua (which does what
+-- Port of ThemeService.qml over services/palette.lua (which does what
 -- theme_manager.py did). "adaptive" derives the palette from whatever
 -- picture is up and derives it again when the picture changes; any other
 -- id is one of the nine fixed schemes. A change blends from the old
@@ -11,7 +11,7 @@
 -- colours. That writes into the user's own dotfiles, so here it happens
 -- only with `writeAppThemes` on, and only into the files it names.
 
-local palette = require("lib.util.palette")
+local palette = require("services.palette")
 local theme = require("theme")
 local settings = require("services.settings")
 local wallpaper = require("services.wallpaper")
@@ -41,7 +41,7 @@ local function show(target)
     step = step + 1
     local t = step / M.STEPS
     theme.apply_palette(palette.to_hex(palette.blend(from, target, t)))
-    if step < M.STEPS then morf.timer(math.floor(M.TRANSITION_MS / M.STEPS), tick, false) end
+    if step < M.STEPS then morf.time.timer(math.floor(M.TRANSITION_MS / M.STEPS), tick, false) end
   end
   tick()
 end
@@ -109,7 +109,7 @@ morf.effect("impasto.theme.follow", function()
     last_picture = path
     M.derived = nil
     if M.active_id:get() == "adaptive" then
-      morf.timer(1, M.refresh_adaptive, false)
+      morf.time.timer(1, M.refresh_adaptive, false)
     end
   end
 end)

@@ -13,7 +13,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
 
 local W, H = 980, 470
 morf.surface.width = W
@@ -98,7 +97,7 @@ card(1, 1, "a drawing, half-alpha ring", plate {
     ui.Rect { anchors = { fill = true }, radius = CARD / 2, color = "#ffffff50" },
     ui.Sdf {
       x = 30, y = 30, width = 120, height = 120,
-      ui.SdfShape { width = 120, height = 120, source = core.shell_path("../assets/sdf-heart.svg") },
+      ui.SdfShape { width = 120, height = 120, source = morf.paths.shell("../assets/sdf-heart.svg") },
     },
   },
 })

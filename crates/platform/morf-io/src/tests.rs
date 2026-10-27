@@ -18,17 +18,6 @@ use crate::dbus_decode::basic_value;
 use crate::dbus_encode::dbus_argument_value;
 
 #[test]
-fn split_parser_handles_multibyte_delimiters() {
-    let mut parser = SplitParser::new(b"--".to_vec());
-    assert_eq!(parser.push(b"a-b--c--"), [b"a-b".to_vec(), b"c".to_vec()]);
-    assert!(parser.push(b"left|ri").is_empty());
-    assert_eq!(parser.set_delimiter(b"|".to_vec()), [b"left".to_vec()]);
-    assert_eq!(parser.push(b"ght|"), [b"right".to_vec()]);
-    assert_eq!(parser.set_delimiter(Vec::new()), Vec::<Vec<u8>>::new());
-    assert_eq!(parser.push(b"raw"), [b"raw".to_vec()]);
-}
-
-#[test]
 fn file_document_tracks_load_write_and_errors() {
     let path = std::env::temp_dir().join(format!("morf-file-{}", std::process::id()));
     let _ = std::fs::remove_file(&path);
@@ -281,22 +270,6 @@ fn explicit_dbus_signatures_build_compound_values() {
 }
 
 #[test]
-fn stream_collector_controls_publication_and_bounds() {
-    let mut delayed = StreamCollector::new(8, true).unwrap();
-    assert!(!delayed.push(b"ab").unwrap());
-    assert_eq!(delayed.data(), b"");
-    assert!(delayed.finish());
-    assert_eq!(delayed.text(), "ab");
-
-    let mut live = StreamCollector::new(4, false).unwrap();
-    assert!(live.push(b"ab").unwrap());
-    assert_eq!(live.data(), b"ab");
-    assert!(live.push(b"cde").is_err());
-    live.reset();
-    assert!(!live.finished());
-}
-
-#[test]
 fn a_finished_process_reports_its_exit_rather_than_an_empty_poll() {
     // Closing the pipes and being reaped are two different moments. Between
     // them the event channel is disconnected, which makes `recv_timeout` return
@@ -349,25 +322,6 @@ fn a_property_holding_an_object_path_is_readable() {
     assert_eq!(
         basic_value(&signature).unwrap(),
         DbusValue::String("a{sv}".to_owned())
-    );
-}
-
-#[test]
-fn splitting_on_newlines_drops_the_carriage_return_that_comes_with_them() {
-    // A line ending is two characters on one of the two systems that write text
-    // files, so the newline delimiter has to account for it — that convention
-    // is the entire reason a second, near-identical line parser existed. A
-    // parser splitting on anything else has no such convention and must not
-    // invent one.
-    let mut lines = SplitParser::new(b"\n".to_vec());
-    let parts = lines.push(b"alpha\r\nbeta\ngamma");
-    assert_eq!(parts, vec![b"alpha".to_vec(), b"beta".to_vec()]);
-    assert_eq!(lines.finish(), Some(b"gamma".to_vec()));
-
-    let mut dashes = SplitParser::new(b"--".to_vec());
-    assert_eq!(
-        dashes.push(b"one\r--two--"),
-        vec![b"one\r".to_vec(), b"two".to_vec()]
     );
 }
 

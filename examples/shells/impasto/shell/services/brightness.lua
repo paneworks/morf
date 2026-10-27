@@ -147,7 +147,7 @@ end
 local function on_bus(slot, what, argv, on_done, options)
   local held = claim(slot.bus)
   if not held then
-    morf.timer(250, function() on_bus(slot, what, argv, on_done, options) end, false)
+    morf.time.timer(250, function() on_bus(slot, what, argv, on_done, options) end, false)
     return
   end
   act.collect(what, ddcutil, argv, function(text, ok)
@@ -311,7 +311,7 @@ function M.detect()
     elseif not adopt(slot, levels[entry.bus]) then
       -- The asking screen has not written yet: look again shortly, and ask
       -- the monitor here if this has become the screen that asks.
-      morf.timer(3000, function()
+      morf.time.timer(3000, function()
         if slot.bus ~= entry.bus then return end
         if not adopt(slot, load_levels()[entry.bus]) and live.here() then read(slot) end
       end, false)
@@ -334,7 +334,7 @@ end
 -- The focused screen, from Hyprland when another part of the shell has it
 -- running; requiring it here would start its socket poll for one name.
 local function focused_name()
-  local hyprland = type(package) == "table" and package.loaded and package.loaded["lib.integrations.hyprland"]
+  local hyprland = type(package) == "table" and package.loaded and package.loaded["lib.compositor.hyprland"]
   if type(hyprland) ~= "table" or not hyprland.available or not hyprland.available() then return "" end
   local ok, name = pcall(function() return hyprland.state.focused_monitor end)
   if ok and type(name) == "string" then return name end
@@ -383,7 +383,7 @@ end
 
 -- A moment after load, so the first frame is not waiting on I2C; again
 -- whenever a monitor comes or goes (morf.screens is kept current in place).
-morf.timer(1500, M.detect, false)
+morf.time.timer(1500, M.detect, false)
 local function outputs()
   local names = {}
   for _, screen in ipairs(morf.screens or {}) do names[#names + 1] = tostring(screen.name) end
@@ -392,13 +392,13 @@ local function outputs()
 end
 local seen_outputs = outputs()
 -- Re-detected when an output comes, goes or moves: the engine says so
--- through `morf.screens_revision()` rather than a timer comparing lists.
+-- through `morf.window.screens_revision()` rather than a timer comparing lists.
 morf.effect("impasto.brightness.outputs", function()
-  if morf.screens_revision then morf.screens_revision() end
+  if morf.window.screens_revision then morf.window.screens_revision() end
   local now = outputs()
   if now == seen_outputs then return end
   seen_outputs = now
-  morf.timer(1500, M.detect, false)
+  morf.time.timer(1500, M.detect, false)
 end)
 
 return M

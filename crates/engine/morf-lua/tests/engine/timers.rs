@@ -116,8 +116,8 @@ fn a_one_shot_cancelled_earlier_in_the_same_turn_does_not_fire() {
             br#"
                 local fired = 0
                 local first, second
-                first = morf.timer(3, function() fired = fired + 1; second:cancel() end, false)
-                second = morf.timer(3, function() fired = fired + 1; first:cancel() end, false)
+                first = morf.time.timer(3, function() fired = fired + 1; second:cancel() end, false)
+                second = morf.time.timer(3, function() fired = fired + 1; first:cancel() end, false)
                 morf.ipc.fired = function() return fired end
             "#,
         )

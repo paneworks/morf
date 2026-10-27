@@ -178,7 +178,7 @@ function M.keyed(name, value)
   end
   local ok, err = pcall(morf.effect, "impasto.desk.arrange.keyed." .. name, function()
     value()
-    morf.timer(1, apply, false)
+    morf.time.timer(1, apply, false)
   end)
   if not ok then morf.log("warn", "impasto: " .. name .. ": " .. tostring(err)) end
   return model

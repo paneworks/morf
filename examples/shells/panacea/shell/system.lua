@@ -6,8 +6,6 @@
 -- D-Bus and timers, and this decides what a "network" is.
 
 local morf = require("morf")
-local io = require("morf.io")
-local core = require("morf.core")
 local proc = require("proc")
 local config = require("config")
 
@@ -32,13 +30,13 @@ system.state = morf.state {
   uptime = "",
   uptime_seconds = 0,
   traffic = { rx = 0, tx = 0 },
-  user = { name = core.env("USER") or "", full_name = "", host = "" },
+  user = { name = morf.env("USER") or "", full_name = "", host = "" },
 }
 local state = system.state
 
 --- Reads a small file whole, or nil.
 local function slurp(path)
-  local ok, handle = pcall(io.file, path)
+  local ok, handle = pcall(morf.fs.file, path)
   if not ok or not handle then return nil end
   local read, text = pcall(handle.read, handle)
   if not read or type(text) ~= "string" then return nil end
@@ -50,7 +48,7 @@ local function trim(text) return proc.trim(text) end
 
 --- Writes a small file whole; false when it cannot.
 local function spit(path, text)
-  local ok, handle = pcall(io.file, path)
+  local ok, handle = pcall(morf.fs.file, path)
   if not ok or not handle then return false end
   return pcall(handle.write, handle, text)
 end
@@ -295,7 +293,7 @@ function system.bluetooth_connect(path, connect)
   local proxy = bluez_object(path, "org.bluez.Device1")
   if not proxy then return end
   pcall(proxy.call, proxy, connect and "Connect" or "Disconnect")
-  morf.timer(1500, poll_bluetooth, false)
+  morf.time.timer(1500, poll_bluetooth, false)
 end
 
 function system.bluetooth_forget(path)
@@ -304,7 +302,7 @@ function system.bluetooth_forget(path)
   if not adapter then return end
   local proxy = bluez_object(adapter.path, "org.bluez.Adapter1")
   if proxy then pcall(proxy.call_with, proxy, "RemoveDevice", { signature = "o", value = path }) end
-  morf.timer(500, poll_bluetooth, false)
+  morf.time.timer(500, poll_bluetooth, false)
 end
 
 function system.bluetooth_scan(on)
@@ -382,13 +380,13 @@ poll_bluetooth()
 poll_uptime()
 poll_traffic()
 
-morf.timer(10000, poll_battery, true)
-morf.timer(5000, poll_volume, true)
-morf.timer(1000, poll_brightness, true)
-morf.timer(15000, poll_network, true)
-morf.timer(10000, poll_bluetooth, true)
-morf.timer(30000, poll_uptime, true)
-morf.timer(5000, poll_traffic, true)
+morf.time.timer(10000, poll_battery, true)
+morf.time.timer(5000, poll_volume, true)
+morf.time.timer(1000, poll_brightness, true)
+morf.time.timer(15000, poll_network, true)
+morf.time.timer(10000, poll_bluetooth, true)
+morf.time.timer(30000, poll_uptime, true)
+morf.time.timer(5000, poll_traffic, true)
 
 system.poll_volume = poll_volume
 system.poll_network = poll_network
@@ -397,7 +395,7 @@ system.poll_brightness = poll_brightness
 --- Runs a program the shell does not wait for.
 function system.launch(command)
   if type(command) == "string" then command = { "sh", "-c", command } end
-  pcall(core.exec_detached, command)
+  pcall(morf.process.detach, command)
 end
 
 return system

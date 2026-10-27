@@ -133,7 +133,7 @@ end
 -- Reboot and power off ask twice: the second click within three seconds
 -- is the one that counts.
 local armed = morf.signal("chillpill.dashboard.armed", "")
-local armed_clock = morf.elapsed_timer()
+local armed_clock = morf.time.elapsed()
 
 local function dangerous(name, command)
   return function()
@@ -178,7 +178,7 @@ local function foot()
         height = S(44),
         theme.text {
           size = 16, anchors = { center_in = true },
-          text = function() return bar.clock:format(date_format):gsub("AM", "am"):gsub("PM", "pm") end,
+          text = function() return bar.clock.format(date_format):gsub("AM", "am"):gsub("PM", "pm") end,
         },
       },
       ui.Row {
@@ -236,7 +236,7 @@ local function fetch_holidays(year)
     "https://date.nager.at/api/v3/PublicHolidays/" .. year .. "/" .. (config.country or "IN") },
     function(output, success)
       if not success then return end
-      local ok, list = pcall(require("morf.io").json.decode, output)
+      local ok, list = pcall(morf.json.decode, output)
       if not ok or type(list) ~= "table" then return end
       for _, entry in ipairs(list) do
         if type(entry.date) == "string" then holidays[entry.date] = entry.localName or entry.name end
@@ -246,7 +246,7 @@ local function fetch_holidays(year)
 end
 
 local function sync_today()
-  local now = bar.clock:snapshot()
+  local now = morf.time.date()
   if calendar.today ~= now.day or calendar.today_month ~= now.month then
     calendar.today, calendar.today_month, calendar.today_year = now.day, now.month, now.year
     calendar.year, calendar.month = now.year, now.month
@@ -255,7 +255,7 @@ local function sync_today()
   fetch_holidays(now.year)
 end
 sync_today()
-morf.timer(60000, sync_today, true)
+morf.time.timer(60000, sync_today, true)
 
 local cells = morf.list_model({})
 
@@ -278,7 +278,7 @@ local month_slide = morf.signal("chillpill.dashboard.month_slide", 0)
 
 local function shift_month(by)
   month_slide:set(by * S(60))
-  morf.timer(16, function() month_slide:set(0) end, false)
+  morf.time.timer(16, function() month_slide:set(0) end, false)
   local month = calendar.month + by
   local year = calendar.year
   if month < 1 then month, year = 12, year - 1 end
@@ -462,7 +462,7 @@ end
 function dashboard.build(top)
   local on_calendar = morf.signal("chillpill.dashboard.on_calendar", true)
   local on_weather = morf.signal("chillpill.dashboard.on_weather", false)
-  morf.timer(24, function()
+  morf.time.timer(24, function()
     on_calendar:set(dashboard.shown:get() and dashboard.page:get() == "calendar")
     on_weather:set(dashboard.shown:get() and dashboard.page:get() == "weather")
   end, true)

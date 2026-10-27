@@ -1,4 +1,4 @@
--- A search bar: a search field that slides into view on Ctrl+F (or its
+-- GtkSearchBar: a search entry that slides into view on Ctrl+F (or its
 -- toggle) and away on Escape (TextField + Disclosure).
 --
 --     local node, bar = composites.search_bar {
@@ -13,22 +13,17 @@
 -- Ctrl+F reveals it and puts the keys in it (from anywhere on the surface
 -- unless `scope = "local"`, when only from inside it); Escape clears it,
 -- hides it and gives focus back to what had it. `on_revealed(open)`
--- follows. Other fields: `x`, `y`, `height` (the field's, 40), `text`.
+-- follows. Other fields: `x`, `y`, `height` (the entry's, 34), `text`.
 local ui = require("morf.ui")
-local control = require("lib.kit.control")
-local disclosure = require("lib.kit.disclosure")
-local group = require("lib.kit.composites.input_group")
-
-local function K() local ok, kit = pcall(require, "kit") return ok and type(kit) == "table" and kit or {} end
+local widgets = require("lib.kit.widgets")
 
 local serial = 0
 
-local function make(spec)
+return function(spec)
   spec = spec or {}
-  local kit = K()
   serial = serial + 1
   local id = spec.id
-  local W, FH = spec.width or 400, spec.height or 40
+  local W, FH = spec.width or 400, spec.height or 34
   local revealed = morf.signal("kit.composites.search_bar." .. tostring(id) .. "." .. serial, spec.revealed == true)
   local before
   local input
@@ -50,22 +45,16 @@ local function make(spec)
     elseif input then morf.focus.clear(input) end
   end
   local field
-  field, input = group.make {
-    id = id, width = W - 16, height = FH, x = 8, y = 6, widget = "search", icon = "search",
+  field, input = widgets.search_entry {
+    id = id, width = W - 16, height = FH, x = 8, y = 6, icon = "search",
     text = spec.text, placeholder = spec.placeholder or "Search",
     on_edited = function(text) if spec.on_search then spec.on_search(text) end end,
     on_accepted = function(text) if spec.on_accepted then spec.on_accepted(text) end end,
     on_escape = hide,
   }
-  -- The reveal: a disclosure with no header of its own, its content the
-  -- field, growing and shrinking with it.
   local content = ui.Item { width = W, height = FH + 12, field }
-  local revealer = disclosure.make("area", {
-    -- (A sliver of a header: a height of nought is no height at all, and
-    -- the clip would take the field's.)
-    id = id and (id .. "-revealer") or nil, width = W, header_height = 1e-3, focus_policy = "none",
-    expanded = function() return revealed:get() end, content = content,
-  })
+  local revealer = widgets.revealer { id = id and (id .. "-revealer") or nil, width = W,
+    expanded = function() return revealed:get() end, content = content }
   -- Hidden once folded away, so Tab passes it by.
   content.visible = function() return revealed:get() or (revealer.layout_height or 0) > 0.5 end
   local shortcuts = { ["ctrl+f"] = function() reveal() end }
@@ -74,13 +63,13 @@ local function make(spec)
   local y = 0
   if spec.toggle or spec.title then
     local TH = 44
-    local title = spec.title and kit.text and kit.text { x = 8, anchors = { vertical_center = true },
-      text = spec.title, width = W - 64, elide = "right" } or nil
-    local button = spec.toggle ~= false and control.make("Press", "icon", { widget = "icon",
-      id = id and (id .. "-toggle") or nil, width = 36, height = 36, size = 20, icon_off = "search",
-      icon_on = "search", anchors = { right = true, right_margin = 4, vertical_center = true },
-      accessible_name = "Search",
-      on_clicked = function() if revealed:get() then hide() else reveal() end end }) or nil
+    local title = spec.title and widgets.label { x = 8, anchors = { vertical_center = true },
+      text = spec.title, width = W - 64, elide = "right", variant = "heading" } or nil
+    local button = spec.toggle ~= false and widgets.toggle_button {
+      id = id and (id .. "-toggle") or nil, width = 34, height = 34, icon = "search", variant = "flat",
+      anchors = { right = true, right_margin = 4, vertical_center = true }, accessible_name = "Search",
+      checked = function() return revealed:get() end,
+      on_clicked = function() if revealed:get() then hide() else reveal() end end } or nil
     children[#children + 1] = ui.Item { width = W, height = TH, title, button }
     y = TH
   end
@@ -93,5 +82,3 @@ local function make(spec)
     revealed = function() return revealed:get() end }
   return node, handle
 end
-
-return { make = make }

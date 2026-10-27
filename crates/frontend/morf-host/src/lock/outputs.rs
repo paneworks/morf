@@ -8,7 +8,7 @@
 //! external monitor everything placed by `screen.width` lands where the first
 //! screen would have it.
 //!
-//! The other is `morf.lock_surface(function(screen) ... end)`: a builder the
+//! The other is `morf.lock.surface(function(screen) ... end)`: a builder the
 //! loop calls once per output, with that output's description and the size of
 //! its lock surface. Each output then has a root of its own, and every
 //! binding in it closes over its own screen. What the trees share — the
@@ -55,7 +55,7 @@ pub fn lock_window(index: usize, root: NodeHandle) -> Window {
 pub enum LockTrees {
     /// The file's one root, drawn on every output.
     Shared(NodeHandle),
-    /// A root per output, from `morf.lock_surface`.
+    /// A root per output, from `morf.lock.surface`.
     PerOutput,
 }
 
@@ -66,7 +66,7 @@ impl LockTrees {
         if runtime.has_lock_surface_builder() {
             if !roots.is_empty() {
                 return Err(
-                    "a lock configuration that builds per output (morf.lock_surface) \
+                    "a lock configuration that builds per output (morf.lock.surface) \
                      must not create a root of its own"
                         .to_owned(),
                 );

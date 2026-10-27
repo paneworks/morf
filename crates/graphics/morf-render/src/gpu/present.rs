@@ -374,11 +374,11 @@ impl BufferRing {
     }
 }
 
-/// `MORF_PRESENT_LOG=1`: every frame's buffer, how many the compositor
+/// `MORF_LOG=present`: every frame's buffer, how many the compositor
 /// held, and how long getting one took.
 pub(crate) fn log_wanted() -> bool {
     static WANTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *WANTED.get_or_init(|| std::env::var_os("MORF_PRESENT_LOG").is_some())
+    *WANTED.get_or_init(|| morf_value::env::log("present"))
 }
 
 /// `[12345.678]`: monotonic milliseconds, as every diagnostic line starts.
@@ -396,16 +396,15 @@ pub(crate) fn stamp() -> String {
 }
 
 /// How long a frame waits for the compositor to give a buffer back before it
-/// is skipped: about a refresh and a half, unless `MORF_PRESENT_WAIT_MS`
+/// is skipped: about a refresh and a half, unless `MORF_PRESENT=wait_ms`
 /// says. The wait holds the output's whole loop -- input, IPC, every other
 /// surface -- so it is short: a skipped frame is owed, and painted on the
 /// next callback (`WgpuBackend::take_skipped`), rather than waited for.
 fn release_wait() -> std::time::Duration {
     static WAIT: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     std::time::Duration::from_millis(*WAIT.get_or_init(|| {
-        std::env::var("MORF_PRESENT_WAIT_MS")
-            .ok()
-            .and_then(|value| value.parse().ok())
+        morf_value::env::flags("MORF_PRESENT")
+            .parsed("wait_ms")
             .unwrap_or(24)
     }))
 }

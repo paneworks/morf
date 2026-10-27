@@ -44,16 +44,6 @@ pub(super) fn install_paths<'gc>(ctx: Context<'gc>, fs: Table<'gc>) {
 
     fs.set_field(
         ctx,
-        "normalize",
-        Callback::from_fn(&ctx, |ctx, _, mut stack| {
-            let path: String = stack.consume(ctx)?;
-            stack.replace(ctx, text(&ops::normalize(Path::new(&path))));
-            Ok(CallbackReturn::Return)
-        }),
-    );
-
-    fs.set_field(
-        ctx,
         "join",
         Callback::from_fn(&ctx, |ctx, _, mut stack| {
             let mut joined = PathBuf::new();
@@ -68,23 +58,6 @@ pub(super) fn install_paths<'gc>(ctx: Context<'gc>, fs: Table<'gc>) {
             Ok(CallbackReturn::Return)
         }),
     );
-
-    for (name, part) in [
-        ("basename", ops::PathPart::Basename),
-        ("dirname", ops::PathPart::Dirname),
-        ("extension", ops::PathPart::Extension),
-        ("stem", ops::PathPart::Stem),
-    ] {
-        fs.set_field(
-            ctx,
-            name,
-            Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-                let path: String = stack.consume(ctx)?;
-                stack.replace(ctx, ops::path_part(Path::new(&path), part));
-                Ok(CallbackReturn::Return)
-            }),
-        );
-    }
 
     fs.set_field(
         ctx,

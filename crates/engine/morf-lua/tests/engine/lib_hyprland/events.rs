@@ -164,7 +164,7 @@ fn hyprland_library_parses_event_fields() {
         .execute(
             &examples_script(),
             br##"
-                local H = require("lib.integrations.hyprland")
+                local H = require("lib.compositor.hyprland")
                 H.start { signature = "" }
                 local function same(a, b) assert(a == b, tostring(a) .. " ~= " .. tostring(b)) end
                 local id, name, monitor = H.parse_event("moveworkspacev2", "3,a,b,DP-1")

@@ -53,7 +53,7 @@ mod live {
             name: &str,
             painted: bool,
         ) -> bool {
-            if std::env::var_os("MORF_NO_A11Y").is_some() {
+            if morf_value::env::debug("no_a11y") {
                 return false;
             }
             let mut roots: Vec<NodeHandle> = vec![state.primary_root];

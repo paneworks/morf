@@ -9,10 +9,10 @@ local SOURCE=[[
   }})
   skin.use("plain")
   local clicks,pages,value=0,0,0
-  local root,flick=w.scroll_view {id="page",x=20,y=20,width=320,height=300,clip=true,
+  local root,flick=w.scrolled_window {id="page",x=20,y=20,width=320,height=300,clip=true,
     ui.Item {width=320,height=1000,
-      w.push {id="button",x=30,y=120,width=150,height=40,on_clicked=function() clicks=clicks+1 end},
-      w.slider {id="slider",x=30,y=200,width=200,height=30,from=0,to=1,
+      w.button {id="button",x=30,y=120,width=150,height=40,on_clicked=function() clicks=clicks+1 end},
+      w.scale {id="slider",x=30,y=200,width=200,height=30,from=0,to=1,
         on_moved=function(v) value=v end,on_value_changed=function(v) value=v end},
     },
   }
@@ -127,7 +127,7 @@ test.it("a swipe across a slider goes on to the panel holding it",function()
     skin.use("plain")
     local swiped,value="",0
     ui.Item {width=400,height=400,on_swiped=function(direction) swiped=direction end,
-      w.slider {id="slider",x=30,y=200,width=300,height=40,from=0,to=1,
+      w.scale {id="slider",x=30,y=200,width=300,height=40,from=0,to=1,
         on_moved=function(v) value=v end,on_value_changed=function(v) value=v end}}
     morf.ipc.state=function() return {swiped=swiped,value=value} end
   ]],size={400,400}} test.advance(100)

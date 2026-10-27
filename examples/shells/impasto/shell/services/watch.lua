@@ -31,7 +31,7 @@ function M.file(path, on_change, interval)
     }
   end
   local last = fs.stat(path)
-  local timer = morf.timer(interval or 500, function()
+  local timer = morf.time.timer(interval or 500, function()
     local now = fs.stat(path)
     local changed = (now and now.modified) ~= (last and last.modified)
       or (now and now.size) ~= (last and last.size)

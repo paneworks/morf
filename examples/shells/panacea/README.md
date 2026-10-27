@@ -168,7 +168,7 @@ a fullscreen surface made a small island cost a whole 4K frame on both
 sides of the protocol. A click anywhere else is heard through
 `morf.surface.backdrop`: a blank surface under the island that covers the
 output, never painted, whose input region wakes with the page and whose
-click arrives as `morf.on_backdrop_click`. (A compositor that hands the
+click arrives as `morf.window.on_backdrop_click`. (A compositor that hands the
 island every press while it holds the keyboard, as Hyprland does, delivers
 the same click as a press on nothing, which counts too.)
 

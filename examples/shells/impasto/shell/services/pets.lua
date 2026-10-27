@@ -193,7 +193,7 @@ end
 local function schedule_save()
   if saving then return end
   saving = true
-  morf.timer(120, save, false)
+  morf.time.timer(120, save, false)
 end
 
 local function plain(value)
@@ -450,8 +450,8 @@ morf.effect("impasto.pets.clock", function()
     if not minute then
       -- Caught up at once (from a timer: an effect only reads), then kept
       -- up each minute.
-      morf.timer(1, function() now:set(morf.time.now_ms()) end, false)
-      minute = morf.timer(60000, function() now:set(morf.time.now_ms()) end, true)
+      morf.time.timer(1, function() now:set(morf.time.now_ms()) end, false)
+      minute = morf.time.timer(60000, function() now:set(morf.time.now_ms()) end, true)
     end
   elseif minute then
     minute:cancel()
@@ -473,7 +473,7 @@ local live = require("services.live")
 morf.effect("impasto.pets.company", function()
   local running = M.hatched() and M.on_bar() and M.mood() ~= "asleep" and not lock_service.locked()
   if running and not company then
-    company = morf.timer(M.company_every, function()
+    company = morf.time.timer(M.company_every, function()
       if lock_service.locked() or not live.here() then return end
       M.reward(M.company_xp, nil)
     end, true)

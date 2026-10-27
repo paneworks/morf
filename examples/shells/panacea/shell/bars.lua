@@ -9,8 +9,6 @@
 
 local morf = require("morf")
 local ui = require("morf.ui")
-local core = require("morf.core")
-local io = require("morf.io")
 local config = require("config")
 local theme = require("theme")
 local proc = require("proc")
@@ -27,7 +25,7 @@ for index = 1, bars.COUNT do
   bars.levels[index] = morf.signal("panacea.bars." .. index, 0)
 end
 
-local cache_dir = (core.env("XDG_CACHE_HOME") or (config.home .. "/.cache")) .. "/panacea"
+local cache_dir = (morf.env("XDG_CACHE_HOME") or (config.home .. "/.cache")) .. "/panacea"
 
 local function set_levels(values)
   for index = 1, bars.COUNT do
@@ -86,7 +84,7 @@ function bars.start()
       local which = proc.trim(output)
       if which == "cava" then
         local conf = cache_dir .. "/cava.conf"
-        local ok, file = pcall(io.file, conf)
+        local ok, file = pcall(morf.fs.file, conf)
         if ok then
           pcall(file.write, file, table.concat({
             "[general]", "bars = " .. bars.COUNT, "framerate = 30", "autosens = 1",

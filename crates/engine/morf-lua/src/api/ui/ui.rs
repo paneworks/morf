@@ -12,8 +12,8 @@ pub(crate) fn install_ui_json_api<'gc>(
     state: Rc<StateCell<ReactiveState>>,
     morf: Table<'gc>,
     limits: Limits,
-) -> (Table<'gc>, Table<'gc>, crate::api::io::http::JsonKinds) {
-    let ui = Table::new(&ctx);
+) -> (Table<'gc>, crate::api::io::http::JsonKinds) {
+    let ui = crate::api::namespace::table(ctx, morf, "ui");
     for (name, element) in [
         ("Item", Element::Item),
         ("Inset", Element::Inset),
@@ -39,31 +39,6 @@ pub(crate) fn install_ui_json_api<'gc>(
             element_constructor(ctx, Rc::clone(&state), limits, element),
         );
     }
-    // `ui.each(list, delegate, options)`: a Repeater over a list, which is
-    // what a `morf.state` array is. `options.as` lays the rows out as a
-    // column, row or grid, as for a Repeater.
-    let each_state = Rc::clone(&state);
-    let each = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (model, delegate, options): (LuaValue, LuaValue, Option<Table>) = stack.consume(ctx)?;
-        let properties = Table::new(&ctx);
-        if let Some(options) = options {
-            for (key, value) in options.iter(ctx) {
-                properties.set(ctx, key, value)?;
-            }
-        }
-        properties.set_field(ctx, "model", model);
-        properties.set_field(ctx, "delegate", delegate);
-        let node = crate::api::ui::constructors::construct_view(
-            ctx,
-            &each_state,
-            limits,
-            ViewKind::Repeater,
-            properties,
-        )?;
-        stack.replace(ctx, node);
-        Ok(CallbackReturn::Return)
-    });
-    ui.set_field(ctx, "each", each);
     // A kind that does not exist is named, not a nil that fails to call.
     let unknown_kind = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (_, key): (Table, LuaValue) = stack.consume(ctx)?;
@@ -214,7 +189,8 @@ pub(crate) fn install_ui_json_api<'gc>(
         Ok(CallbackReturn::Return)
     });
     ui.set_field(ctx, "follow", follow);
-    for kind in ["spring", "smoothed"] {
+    {
+        let kind = "spring";
         ui.set_field(
             ctx,
             kind,
@@ -238,12 +214,12 @@ pub(crate) fn install_ui_json_api<'gc>(
     morf.set_field(ctx, "ui", ui);
     let json_array_metatable = Table::new(&ctx);
     json_array_metatable.set_field(ctx, "__json_kind", "array");
-    json_array_metatable.set_field(ctx, "__metatable", "morf.io.json");
+    json_array_metatable.set_field(ctx, "__metatable", "morf.json");
     let json_object_metatable = Table::new(&ctx);
     json_object_metatable.set_field(ctx, "__json_kind", "object");
-    json_object_metatable.set_field(ctx, "__metatable", "morf.io.json");
+    json_object_metatable.set_field(ctx, "__metatable", "morf.json");
     let json_null_metatable = Table::new(&ctx);
-    json_null_metatable.set_field(ctx, "__metatable", "morf.io.json");
+    json_null_metatable.set_field(ctx, "__metatable", "morf.json");
     let json_null = UserData::new_static(&ctx, JsonNullToken);
     json_null.set_metatable(ctx, Some(json_null_metatable));
     let array_metatable = ctx.stash(json_array_metatable);
@@ -314,79 +290,17 @@ pub(crate) fn install_ui_json_api<'gc>(
             Ok(CallbackReturn::Return)
         }
     });
-    let json_file_read = Callback::from_fn(&ctx, {
-        let array_metatable = array_metatable.clone();
-        let object_metatable = object_metatable.clone();
-        let null = null.clone();
-        move |ctx, _, mut stack| {
-            let file: UserRef<FileDocumentToken> = stack.consume(ctx)?;
-            let file = file.file.borrow();
-            let data = file
-                .data()
-                .ok_or_else(|| HostError("JSON file view is not loaded".into()))?;
-            let value = serde_json::from_slice::<serde_json::Value>(data)
-                .map_err(|error| HostError(error.to_string()))?;
-            let mut entries = 0;
-            let value = json_to_lua(
-                ctx,
-                &value,
-                ctx.fetch(&array_metatable),
-                ctx.fetch(&object_metatable),
-                ctx.fetch(&null),
-                0,
-                &mut entries,
-            )
-            .map_err(HostError)?;
-            stack.replace(ctx, value);
-            Ok(CallbackReturn::Return)
-        }
-    });
-    let json_write_state = Rc::clone(&state);
-    let json_file_write = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let (file, value, pretty): (UserRef<FileDocumentToken>, LuaValue, LuaValue) =
-            stack.consume(ctx)?;
-        let target = file.file.borrow().path().to_path_buf();
-        if crate::vm::permissions::refused_write(
-            ctx,
-            &json_write_state,
-            &mut stack,
-            "morf.json.write_file",
-            &target,
-        ) {
-            return Ok(CallbackReturn::Return);
-        }
-        let pretty = match pretty {
-            LuaValue::Nil => true,
-            LuaValue::Boolean(value) => value,
-            _ => return Err(HostError("JSON pretty flag must be boolean".into()).into()),
-        };
-        let mut entries = 0;
-        let value = lua_to_json(ctx, value, 0, &mut entries).map_err(HostError)?;
-        let mut encoded = if pretty {
-            serde_json::to_vec_pretty(&value)
-        } else {
-            serde_json::to_vec(&value)
-        }
-        .map_err(|error| HostError(error.to_string()))?;
-        if pretty {
-            encoded.push(b'\n');
-        }
-        stack.replace(ctx, file.file.borrow_mut().set_data(&encoded));
-        Ok(CallbackReturn::Return)
-    });
     let json = Table::new(&ctx);
     json.set_field(ctx, "decode", json_decode);
     json.set_field(ctx, "encode", json_encode);
     json.set_field(ctx, "array", json_array);
     json.set_field(ctx, "object", json_object);
     json.set_field(ctx, "null", json_null);
-    json.set_field(ctx, "read_file", json_file_read);
-    json.set_field(ctx, "write_file", json_file_write);
     morf.set_field(ctx, "json", json);
     let kinds = crate::api::io::http::JsonKinds {
         array: array_metatable,
         object: object_metatable,
         null,
     };
-    (ui, json, kinds)
+    (ui, kinds)
 }

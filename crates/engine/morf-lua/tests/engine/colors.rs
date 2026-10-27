@@ -97,16 +97,12 @@ fn every_pastel_operation_has_a_lua_counterpart() {
                 put("samples", #morf.color.scale { "black", "white" }:samples(5))
                 put("distinct", #morf.color.distinct(4, { fixed = { "red" }, order = true, iterations = 3000 }))
                 put("random", morf.color.random("gray"):hsl().s)
-                put("named", morf.color.named("Tomato"))
-                put("names", morf.color.names().tomato == morf.color.named("tomato"))
-                put("ansi", morf.color.ansi8(9):hex() .. ":" .. c:ansi8())
                 put("paint", c:paint("x", { bold = true, mode = "8bit" }) ~= "x")
                 put("table", morf.color { r = 255, g = 0, b = 0 })
                 put("hwb", morf.color "hwb(0 0% 0%)")
                 put("slash", morf.color "rgb(255 0 0 / 50%)")
-                put("cmyk", morf.color.cmyk(0, 1, 1, 0))
                 put("invert", morf.color("#ff0000"):invert())
-                put("gray8", morf.color.gray(0.5):rgb8().r)
+                put("gray8", morf.color.rgb(128, 128, 128):rgb8().r)
                 morf.ipc.answers = function() return table.concat(answers, " ") end
             "##,
         )
@@ -132,14 +128,10 @@ fn every_pastel_operation_has_a_lua_counterpart() {
     expect("samples=5");
     expect("distinct=4");
     expect("random=0.0");
-    expect("named=#ff6347");
-    expect("names=true");
-    expect("ansi=#ff0000:");
     expect("paint=true");
     expect("table=#ff0000");
     expect("hwb=#ff0000");
     expect("slash=#ff000080");
-    expect("cmyk=#ff0000");
     expect("invert=#00ffff");
     expect("gray8=128");
 }

@@ -5,7 +5,7 @@ and the engine's API as definitions for the Lua language server.
 
 ```
 library/
-  lib/                 the modules: require("lib.util.material"), require("lib.integrations.hyprland"), ...
+  lib/                 the modules: require("lib.theme.material"), require("lib.compositor.hyprland"), ...
   types/               the engine's API for LuaLS, written by `morf types` (do not edit)
     morf.lua           require("morf") and the global `morf`
     morf/ui.lua        require("morf.ui"): every element and its properties
@@ -35,112 +35,344 @@ merge it into yours): the Lua language server then completes `morf.`,
 function's documentation. The types are generated from the installed
 binary on every `make install`, so they match the engine you run.
 
----
+## Layout
 
+Pure-Lua modules a configuration can `require("lib.<part>.<name>")`. morf's
+core stays compositor- and service-agnostic; anything that speaks one
+program's protocol lives here, built only on the engine's generic APIs.
+Each folder holds one kind of thing:
 
-Pure-Lua libraries a configuration can `require("lib.<name>")`. morf's core
-stays compositor- and service-agnostic; anything that speaks one program's
-protocol lives here, built only on the engine's generic APIs.
+```
+lib/
+  kit/            widgets: the contract, the archetypes, the composites, the default skin (docs/UI.md)
+  theme/          colour schemes and shape policy a theme builds on
+  services/       system services over D-Bus and the OS, and the binder that runs them
+  compositor/     compositor IPC (Hyprland today)
+  integrations/   third-party tools (weather, packages)
+  shell/          shell features that are not widgets: the on-screen keyboard
+  util/           generic helpers: poll, clock
+  testing/        fakes a shell's own specs can use
+```
 
-## equalizer.lua and settings_pages.lua
+Modules in `compositor/` and `integrations/` are treated as imported code:
+each declares what it touches in a `<name>.permissions.lua` beside it, and
+a configuration approves it before it runs (`morf approve`).
 
-`lib.equalizer` owns a standalone PipeWire stereo smart filter, with explicit
-left/right channel chains. `new {name, path?}` returns `start(curve)`,
-`update(curve)`, `stop()`, and `status`/`error` signals. Only the shell's primary
-runtime should start it. It requires WirePlumber 0.5+, never restarts services,
-and never changes the default output. Runtime controls are coalesced into a
-single Props update; discovery retries are bounded and there is no idle poll.
-`graph(curve, owner)`, `controls(curve)` and `classify(sink)` are reusable helpers.
+## theme
 
-`morf.audio.equalizer_curve {left?, right?, bands?, strength?, per_ear?,
-compensation?, enabled?, trim?}` computes the eight-band response in Rust.
-Threshold lists contain eight dB HL values (−10..120), bands eight dB gains
-(−12..12), strength is 0..100, trim −24..0 dB. Returns gains, frequencies,
-preamp attenuation and 160 log-spaced response samples per ear (20 Hz–20 kHz).
-Headroom is estimated from the combined 48 kHz filter response with a 0.5 dB
-margin; it is not a limiter. Compensation uses the MIT-licensed
-[omarchy-audiogram-eq](https://github.com/Fail-Safe/omarchy-audiogram-eq)
-mapping: half the threshold excess over 20 dB HL, capped at 12 dB, then
-scaled by strength. Audio DSP runs in PipeWire's builtin filters.
+### theme.material
 
-`lib.settings_pages.new(pages, selected_signal, aliases?)` validates a tree
-of `{key, name, parent?}` descriptors. `request(key)` validates routes,
-`back()` returns to the parent, `path(key)` returns its ancestors and
-`breadcrumb()` labels the selected page's ancestry. Root's key is `""`.
+`lib/theme/material.lua` makes Material 3 colour schemes over `morf.color`'s HCT:
+five tonal palettes placed around a source colour's hue, and every role
+(`primary`, `onPrimaryContainer`, `surfaceContainerHigh`, `outlineVariant`,
+the `*Fixed` roles, ...) at its tone for dark or light. This is what an M3
+shell's colour tool does, in Lua.
 
-## annotation.lua and capture.lua
+```lua
+local material = require("lib.theme.material")
+local s = material.scheme("#4a7fb5", { variant = "tonal_spot", mode = "dark" })
+s.primary  s.surfaceContainer  s.palettes.tertiary(70)
+material.from_image("~/Pictures/sea.jpg", { mode = "light" }, function(ok, s) ... end)
+```
 
-`lib.annotation` owns a document in image-pixel coordinates, independent
-of themes, files or compositors. `new(width, height, options)` returns a document
-with `choose`, `style`, `begin`, `update`, `finish`, `abort`, `set_crop`,
-`resize`, `remove`, `undo` and `redo`. It holds vector annotations and regional
-blur/pixelation/zoom, sharing immutable annotations through a bounded undo
-history. `tools` lists shortcuts/icons;
-`ops(document, crop, include_draft)` creates ordered `morf.image.process` ops.
-Bounds, hit testing, picking and rasterization run in Rust through `morf.image`.
-Live drafts use native `ui.Path` geometry; Lua does not generate SVG artwork.
-Cropping happens last; effects apply to preceding artwork.
-`viewport_ops(document, {x,y,w,h}, include_draft, omit_moving)` builds
-operations for an already cropped monitor preview, preserving the original
-document and its export coordinates. Native operations share the original
-point arrays and apply their viewport offset in Rust.
+| call | what |
+|------|------|
+| `material.scheme(source, opts)` | every role as a `morf.color`; `source` is a colour or a hue. `opts.variant`: `tonal_spot` (default), `vibrant`, `expressive`, `neutral`, `monochrome`, `fidelity`, `content`, `rainbow`, `fruit_salad`; `opts.mode`: `dark` or `light` |
+| `material.palettes(source, variant)` | the six tonal palettes alone |
+| `material.score(swatches, opts)` | a picture's best source colours, best first (a colour's share and its neighbours' within 15 degrees of hue, and its chroma; greys do not count; `#4285f4` when nothing has colour) |
+| `material.from_image(path, opts, on_done)` | quantised off the loop, scored, and made a scheme: `on_done(true, s)` or `on_done(false, message)` |
+| `material.hex(s)` | the roles as `#rrggbb` |
+| `material.terminal(s)` | sixteen terminal colours and extras, in a palette's `terminal` shape, for its file writers |
 
-`lib.capture.session(options)` owns temporary snapshots and render outputs.
-`snapshot(output, callback)` captures a monitor, `desktop(screens, callback)`
-stitches scaled outputs (including negative origins), and
-`render(source, ops, callback)` runs image operations on workers.
-`compose(width, height, ops, callback)` starts with a native black RGBA canvas,
-used for desktop stitching without a placeholder SVG. Snapshot
-callbacks receive `(ok, {source, width, height, output|desktop})`; render
-callbacks receive `(ok, path|error)`. `preview(source, ops, callback)` retains
-one decoded immutable source in a native session and returns an in-memory
-image, replacing its previous frame without generating temporary PNGs.
-Older engines fall back to file rendering. Call `remove(path)` for obsolete previews
-and `close()` when done; late callbacks cannot resurrect a closed session.
-Each output owns a private scratch namespace; abandoned scratch data is cleaned
-on the next capture. `windows(callback)`/`window_at` provide compositor geometry.
-KDE acquisition falls back to Spectacle; other supported compositors use native
-screencopy. `directory(path)` supplies the filesystem model for a shell-owned
-picker without requiring an external GUI.
+The palette rules and the score follow Material Color Utilities
+(Apache-2.0). There is one contrast level, the standard one.
 
-`copy`, `save` and `upload` take asynchronous `(ok, result|error)` callbacks.
-Copy uses wl-copy; upload uses HTTPS curl form upload and copies the returned
-URL. Callers own upload confirmation, notifications, picker UI and preferences.
-`binding_plan` and `rebind` support Hyprland Lua/conf and an optional dedicated
-include file; they do not rewrite the main compositor configuration.
+### theme.shapes
 
-## taskwarrior.lua
+`lib/theme/shapes.lua` draws Material 3's expressive shapes (cookie, clover,
+sunny, burst, gem, pill, arch, heart, ...: `shapes.NAMES`) as `ui.Path`
+outlines. Each is a polygon with per-corner rounding, cut into the same
+number of cubics (`shapes.SEGMENTS`, 72) starting at the top, so
+`morph_to` walks any one onto any other.
 
-`taskwarrior.new()` connects to the installed `task` CLI using its normal
-configuration and data location. `tasks`, `busy`, `error`, `loaded` and
-`revision` are signals. `refresh()` exports pending and waiting tasks;
-`watch(true)` refreshes every ten seconds, and `watch(false)` stops it.
+```lua
+local shapes = require("lib.theme.shapes")
+ui.Path { width = 48, height = 48, view_box = { 0, 0, 100, 100 }, d = shapes.path("cookie9"), fill_color = accent }
+shapes.Shape { width = 96, height = 96, shape = function() return which:get() end, color = accent, easing = "out_back" }
+```
 
-`save(uuid_or_nil, fields, callback)` adds or edits a task. Fields include
-description, project, priority, scheduled, due, wait, tags (comma-separated),
-recur, until and depends. Omitted fields are preserved; an empty string clears
-a field. `action(uuid, "start"|"stop"|"done"|"delete", callback)` acts on one
-task. Callbacks receive success as a boolean; successful writes refresh the
-list. Mutations require a complete UUID, and recurrence changes apply only
-to the selected occurrence. Callers handle confirmation before deletion.
+| call | what |
+|------|------|
+| `shapes.path(shape, { size, segments })` | SVG path data in a `size` square (100) |
+| `shapes.Shape(props)` | a `ui.Path` that morphs when `shape` (a name or a function returning one) changes; `color`, `duration` (350), `easing`; other props pass through |
+| `shapes.polygon(vertices, { rounding })`, `shapes.star(points, inner, opts)`, `shapes.regular(sides, opts)`, `shapes.lobes(count, inner, opts)` | outlines of your own, for `path` and `curves` |
+| `shapes.curves(shape, segments)` | the normalised cubics themselves |
 
-Commands use argv, asynchronous `morf.run`, and a timeout. Errors remain in
-the `error` signal; no optimistic database edits are made. Optional `command`
-and `env` arguments to `new` allow testing against an isolated installation.
-`timestamp`, `date`, and `day` convert exported timestamps to local dates.
+Rounding, cubic resampling, normalization and path formatting run in
+`morf.geometry`, implemented by `morf-outline`. Default named paths (a 100
+square, 72 cubics) preserve the existing outlines exactly and are shared across
+runtimes. Custom named paths use a bounded native cache. The Lua wrapper owns
+node construction and animation controls. Native recipes can be exported with
+`cargo run -p morf-outline --example generate_shapes`.
+`segments = false` keeps an outline as it was made, for a shape that is only
+drawn.
+`examples/demos/sdf/m3shapes.lua` shows every one.
 
-## hyprland.lua
+## services
+
+Five services a shell's panels need, each one module, each exposing a
+`morf.state` whose fields and lists bindings read directly, kept current by the
+service's own D-Bus signals. When a service is not running, `available()` is
+false and every list is empty; nothing raises. None of them ever *starts* a
+service: an absent name is read as absent, never activated, because reading
+NetworkManager or power-profiles-daemon into existence changes how the machine
+runs.
+
+Call `connect()` while the configuration loads: the state is made of signals,
+and signals are declared up front. Every action returns a truthy value on
+success and `nil, reason` on failure.
+
+All five take the same test seam, `dbus = <table with a proxy function>`,
+defaulting to `morf.dbus`; `lib.testing.dbus` is a stand-in that answers from
+Lua tables, which the tests in `crates/engine/morf-lua/tests/engine/lib_dbus_services/`
+and the library's own specs use to run each library against fake services.
+
+### `services.dbus` — the shared half
+
+Proxies cached per address (each `morf.dbus.proxy` is its own bus connection),
+subscriptions made once per address and shared by every handler on it,
+`call`/`call1`/`get`/`get_all`/`set` (blocking; for quick reads),
+`call_async`/`call1_async`/`set_async` (answered later through
+`done(reply, err)`; for anything that may wait on a radio, polkit or a person),
+`on_signal`/`on_properties` (handlers get `info` with the sender's unique name
+last; both return a handle whose `close()` ends the subscription when its last
+handler goes — the system bus caps match rules at 512 per connection),
+`has_owner`/`owner_of`/`list_names`/`watch_name` (asked of the bus, never
+activating anything), `managed_objects`, typed-value helpers (`u`, `o`, `x`,
+`typed`) and `debounce`. Replies arrive as the list of a method's outputs (a
+lone scalar bare); `call1` and `first` take the one output out.
+
+### `services.networkmanager` — `org.freedesktop.NetworkManager`, system bus
+
+```lua
+local net = require("lib.services.networkmanager").connect()
+net.state.available, .version, .state, .connectivity         -- "full", "portal", ...
+net.state.networking_enabled, .wifi_enabled, .wifi_hardware_enabled
+net.state.primary  { id, type, path }
+net.state.wifi     { device, state, ssid, strength, frequency, security, connected, last_scan }
+net.state.wired    { device, state, connected, carrier, speed, hw_address, ip4 }
+net.state.devices            -- rows: path, interface, type, state, driver, managed, hw_address, ip4, connection
+net.state.active_connections -- rows: path, id, uuid, type, state, default, vpn, devices, connection
+net.state.access_points      -- one row per SSID: key, ssid, bssid, strength, frequency, band,
+                             -- security ("open"/"owe"/"wep"/"wpa"/"wpa2"/"wpa3"/"enterprise"),
+                             -- secure, in_use, known, path, device
+net.state.known_connections  -- rows: path, id, uuid, type, ssid, autoconnect, timestamp, vpn
+net.state.vpn_connections    -- rows: path, id, uuid, type, active, state
+
+-- Actions never wait: each returns true once sent (or nil and why not) and
+-- takes an optional last `done(result, err)`.
+net.request_scan([interface], [done])
+net.connect(ap_row_or_ssid, [password], [interface], [done(path)]) -- ActivateConnection if
+                                                       -- saved, AddAndActivateConnection if new
+net.disconnect([active id/uuid/path or interface], [done])  -- default: the Wi-Fi connection
+net.forget(ssid, [done(count)])  -- returns how many profiles it asked to delete
+net.set_wifi(enabled, [done])
+net.activate(id_or_uuid, [done(path)]), net.deactivate(id_or_uuid, [done])
+net.activate_vpn(id_or_uuid, [done]), net.deactivate_vpn(id_or_uuid, [done])
+net.snapshot(), net.refresh()
+```
+
+The whole tree is one `GetManagedObjects` on NetworkManager's ObjectManager,
+re-read (debounced) when the manager, a device or the object set changes.
+Access points are never subscribed one by one — their paths are never reused —
+and their strengths arrive with each scan, through the device's `LastScan`;
+devices are, for as long as they exist. Limitations: a password given for an
+already-saved SSID creates a second profile beside the old one (rewriting a
+saved profile means sending all of it back, fully typed); 802.1X networks need
+a profile made elsewhere; an action's answer is awaited for up to
+`action_timeout_ms` (5000) — without blocking — since the service may be
+waiting on polkit.
+
+### `services.bluez` — `org.bluez`, system bus
+
+```lua
+local bt = require("lib.services.bluez").connect()
+bt.state.available, .adapter, .address, .powered, .discovering, .discoverable,
+       .pairable, .connected_count
+bt.state.adapters -- rows: path, name, address, powered, discovering, discoverable, pairable
+bt.state.devices  -- rows: path, adapter, address, name, alias, named, icon, paired, bonded,
+                  -- trusted, blocked, connected, rssi, in_range, battery (-1 unknown), has_battery
+
+-- Every action takes an optional last `done(ok, err)` and never waits.
+bt.set_powered(on, [adapter]), bt.set_discoverable(on), bt.set_pairable(on)
+bt.start_discovery(), bt.stop_discovery()
+bt.connect(dev), bt.disconnect(dev), bt.pair(dev), bt.cancel_pairing(dev)  -- true, "pending"
+bt.trust(dev, [on]), bt.remove(dev)       -- dev: a row, a path or an address
+```
+
+Mirrors the ObjectManager tree incrementally (`InterfacesAdded`/`Removed`,
+`PropertiesChanged` on adapters and on paired or connected devices). Strangers
+found by a scan are refreshed by re-reading the tree every `discovery_poll_ms`
+(2000) while discovery runs, rather than by a match rule each; a device's
+subscription is closed when it is removed or unpaired. `Connect` and `Pair`
+can take as long as a person does, so they are sent asynchronously
+(`connect_timeout_ms`, 60000) and return `true, "pending"` at once: the result
+arrives as `connected`/`paired` changing, and through `done`.
+Pairing a device that needs a PIN requires an `org.bluez.Agent1`, which this
+does not register.
+
+### `services.upower` — `org.freedesktop.UPower` and power-profiles-daemon
+
+```lua
+local power = require("lib.services.upower").connect()
+power.state.available, .on_battery, .lid_is_closed, .lid_is_present
+power.state.display  { present, percentage, state, charging, time_to_empty, time_to_full,
+                       icon_name, energy_rate, kind, warning_level }
+power.state.devices      -- every device: path, kind ("battery", "mouse", "headset", ...),
+                         -- model, vendor, percentage, state, charging, power_supply, online, ...
+power.state.peripherals  -- batteries that are not the machine's own
+power.state.profiles { available, active, degraded, service, list = rows { name, driver } }
+
+power.set_profile("power-saver" | "balanced" | "performance")
+power.devices(), power.refresh()
+require("lib.services.upower").format_time(seconds)  -- "3 h 12 min"
+```
+
+Power profiles are read from `org.freedesktop.UPower.PowerProfiles`, falling
+back to `net.hadess.PowerProfiles`, and only when one of them is already
+running. The module is a registry descriptor (`lib.services.registry`):
+`morf.service("power", { owner = node })` binds the same service, and
+`power.close()` lets go of it.
+
+### `services.mpris` — `org.mpris.MediaPlayer2.*`, session bus
+
+```lua
+local media = require("lib.services.mpris").connect()
+media.state.available, .count
+media.state.players -- rows: name, identity, desktop_entry, status, playing, title, artist,
+                    -- album, art_url, length, position, volume, can_*
+media.state.active  { name, identity, desktop_entry, status, playing, title, artist,
+                      album_artist, album, art_url, url, track_id, length, position,
+                      rate, volume, shuffle, loop, can_play, can_pause, can_go_next,
+                      can_go_previous, can_seek, can_control, can_raise }
+
+media.play_pause([name]), .play, .pause, .stop, .next, .previous
+media.seek(offset_seconds), media.set_position(seconds), media.set_volume(0..1)
+media.set_shuffle(on), media.set_loop("none" | "track" | "playlist"), media.raise()
+media.set_active(name_or_nil), media.active(), media.position([name]), media.players()
+```
+
+The active player is one that is playing (the most recent to start), else the
+most recently changed, else the first by name; `set_active` pins one. Lengths
+and positions are seconds. Position is interpolated between readings and
+`Seeked`, and `state.active.position` is advanced by a timer (`tick_ms`, 1000)
+while playing. Every player lives at the same object path; the engine routes a
+signal only to the subscriptions naming its sender, so a player's change
+re-reads that player alone (debounced), and its subscriptions close when it
+leaves. The buttons are sent without waiting on the player. `playerctld` is
+skipped by default (`ignore`). The module is a registry descriptor whose
+`bind` keeps the active choice, the position clock and the buttons:
+`morf.service("media", { owner = node })` binds the same service, and
+`media.close()` lets go of it.
+
+### `services.logind` — `org.freedesktop.login1`, system bus
+
+```lua
+local login = require("lib.services.logind").connect()
+login.state.available
+login.state.session { id, path, user, uid, type, class, seat, vt, active, locked, idle,
+                      remote, state, desktop, service }
+login.state.can     { suspend, hibernate, hybrid_sleep, suspend_then_hibernate, reboot,
+                      power_off }  -- "yes" | "no" | "challenge" | "na"
+login.state.lid_closed, .handle_lid_switch, .docked, .idle_hint,
+            .preparing_for_sleep, .preparing_for_shutdown
+login.state.brightness { device, value, max, percent }
+login.state.inhibitors -- rows: what, who, why, mode, uid, pid
+
+login.on_lock(fn), login.on_unlock(fn)
+login.on_prepare_for_sleep(fn(going)), login.on_prepare_for_shutdown(fn(going))
+-- Actions never wait on logind (it may be waiting on polkit): each returns true
+-- once sent and takes an optional last `done(ok, err)`.
+login.lock(), login.unlock(), login.set_locked_hint(on), login.set_idle_hint(on)
+login.suspend([interactive]), .hibernate, .hybrid_sleep, .suspend_then_hibernate,
+      .reboot, .power_off
+login.can("suspend")                         -- asked now
+login.inhibit(what, who, why, mode, [done])  -- handle with release(), held once granted
+login.set_brightness(fraction, [device]), login.set_brightness_raw(value, [device])
+login.backlights()
+```
+
+`Inhibit` answers with a file descriptor, which the engine hands over as an
+opaque handle (see `morf_io::dbus_types`): it can be held and closed, nothing
+more. The lock ends when the handle is released, when it is dropped and
+collected, or when the shell dies — never outliving it. Brightness is read from
+`/sys/class/backlight` with `morf.fs` and written with `Session.SetBrightness`,
+which an active session may do unprivileged; it is re-read on udev backlight
+events.
+
+### `services.notifications` — serving `org.freedesktop.Notifications`
+
+A notification server (see the file's header). Each entry carries `id`, `app`,
+`icon`, `summary`, `body`, `actions`, `urgency`, `timeout_ms`, `hints`, and the
+hints read out: `image_path`, `image_data` (`width`, `height`, `rowstride`,
+`has_alpha`, `bits_per_sample`, `channels`, `data`), `category`,
+`desktop_entry`, `resident` (stays after an action) and `transient`.
+Replacement ids keep a notification's place in the list; closes report the
+spec's reasons (expired, dismissed, closed by the app).
+
+### services.sysinfo
+
+The machine, from `/proc` and `/sys` only.
+
+```lua
+local sysinfo = require("lib.services.sysinfo")
+ui.Text { text = function() return ("CPU %d%%"):format(sysinfo.cpu().usage) end }
+ui.Text { text = function()
+  local t = sysinfo.temperatures().cpu
+  return t and ("%d°C"):format(t) or ""
+end }
+sysinfo.configure { intervals = { cpu = 1000, processes = 3000 }, history = 120, top = 8 }
+```
+
+| reader | returns | default interval |
+| --- | --- | --- |
+| `cpu()` | `usage`, `cores[i] = {name, usage, frequency}`, `count`, `frequency` (MHz, mean), `load = {1, 5, 15}`, `running`, `threads`, `model` | 2 s |
+| `memory()` | bytes: `total`, `available`, `used`, `free`, `cached`, `percent`, `swap = {total, used, free, percent}` | 3 s |
+| `disks()` | real filesystems from `/proc/mounts` (one row per device), `{device, mount, type, total, used, free, available, percent}` | 30 s |
+| `temperatures()` | `cpu` (°C, the package sensor when there is one), `cpu_sensor`, `sensors[i] = {chip, label, celsius, critical}` from hwmon and thermal zones | 5 s |
+| `gpu()` | `busy` and `cards` where the driver exposes `gpu_busy_percent` (amdgpu); Intel reads as nil | 2 s |
+| `network()` | `default` interface (from the routing table), `rx_rate`/`tx_rate` in bytes/s for it, `interfaces[i]` | 2 s |
+| `battery()` | `present`, `percent`, `status`, `charging`, `power` (W), `time_left`/`time_to_full` (s), `ac`, `batteries` -- for machines without UPower | 30 s |
+| `backlight()` | `brightness`, `max`, `percent`, `writable`, `set(percent)` only when writable, `devices` | 5 s |
+| `system()` | `os`, `os_id`, `os_version`, `kernel`, `hostname`, `user`, `uptime` | 60 s |
+| `processes()` | `count`, `by_cpu`, `by_memory`: the top few `{pid, name, state, cpu, memory, memory_percent}` | 5 s, in slices |
+
+`sysinfo.history(name)` gives the last samples of `cpu`, `load`, `memory`,
+`swap`, `temperature`, `gpu`, `rx`, `tx` or `coreN`, oldest first.
+`sysinfo.set_brightness(percent, device)` writes the backlight when its file
+is writable (world-writable, root, or group-writable with the user in
+`video`); nothing here asks for privileges. `sysinfo.sample(name)` samples
+one section now. `sysinfo.sources[name]` are the poll sources, for `pin`.
+`sysinfo.configure { root = "/some/folder" }` reads a fake `/proc` and `/sys`
+from a folder, which is how the tests run.
+
+The tables handed out are shared and replaced whole on every sample: read
+them, do not change them.
+
+## compositor
+
+### compositor.hyprland
 
 Hyprland over its own two sockets in
 `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE`: `.socket.sock` for
 requests (one per connection, `j/` for JSON, `[[BATCH]]` for several) and
 `.socket2.sock` for the `EVENT>>DATA` stream. No `hyprctl` is spawned. Both
-sockets are drained from one repeating `morf.timer` (`poll_ms`, default 30),
+sockets are drained from one repeating `morf.time.timer` (`poll_ms`, default 30),
 because the engine does not watch arbitrary sockets for readiness; an idle
 tick blocks at most 1 ms per open socket.
 
 ```lua
-local hyprland = require("lib.integrations.hyprland")
+local hyprland = require("lib.compositor.hyprland")
 
 -- Reactive state, current from events; bind to it directly.
 ui.Repeater { model = hyprland.state.workspaces, delegate = function(ws) ... end }
@@ -195,7 +427,7 @@ hyprland.json("j/activeworkspace", function(value, err) ... end)
 Tested against a fake compositor in
 `crates/morf-lua/src/tests/lib_hyprland.rs`.
 
-## hyprland_config.lua
+### compositor.hyprland_config
 
 Opt-in, on top of `hyprland.lua`: changes Hyprland's configuration at run
 time and never writes its files. Works with a Lua config (0.56+, every
@@ -206,7 +438,7 @@ does nothing.
 Each change is a *plan* built by a pure, validated function, then sent:
 
 ```lua
-local config = require("lib.integrations.hyprland_config")
+local config = require("lib.compositor.hyprland_config")
 config.apply(function(how)
   return config.options_plan({ { "input:kb_layout", "str", "us,de" },
                                { "input:repeat_rate", "int", 30 } }, how)
@@ -225,535 +457,9 @@ end, function(ok, replies) end)
   `plugin_available(option, cb)`, `reload(cb)`, `on_reload(fn)`.
 - Without Hyprland, `available()` is false and nothing is sent.
 
-## m3shapes
+## integrations
 
-`lib/util/m3shapes.lua` draws Material 3's expressive shapes (cookie, clover,
-sunny, burst, gem, pill, arch, heart, ...: `shapes.NAMES`) as `ui.Path`
-outlines. Each is a polygon with per-corner rounding, cut into the same
-number of cubics (`shapes.SEGMENTS`, 72) starting at the top, so
-`morph_to` walks any one onto any other.
-
-```lua
-local shapes = require("lib.util.m3shapes")
-ui.Path { width = 48, height = 48, view_box = { 0, 0, 100, 100 }, d = shapes.path("cookie9"), fill_color = accent }
-shapes.Shape { width = 96, height = 96, shape = function() return which:get() end, color = accent, easing = "out_back" }
-```
-
-| call | what |
-|------|------|
-| `shapes.path(shape, { size, segments })` | SVG path data in a `size` square (100) |
-| `shapes.Shape(props)` | a `ui.Path` that morphs when `shape` (a name or a function returning one) changes; `color`, `duration` (350), `easing`; other props pass through |
-| `shapes.polygon(vertices, { rounding })`, `shapes.star(points, inner, opts)`, `shapes.regular(sides, opts)`, `shapes.lobes(count, inner, opts)` | outlines of your own, for `path` and `curves` |
-| `shapes.curves(shape, segments)` | the normalised cubics themselves |
-
-Rounding, cubic resampling, normalization and path formatting run in
-`morf.geometry`, implemented by `morf-outline`. Default named paths (a 100
-square, 72 cubics) preserve the existing outlines exactly and are shared across
-runtimes. Custom named paths use a bounded native cache. `m3shapes_paths.lua`
-remains a compatibility lookup; the Lua wrapper owns node construction and
-animation controls. Native recipes can be exported with
-`cargo run -p morf-outline --example generate_shapes`.
-`segments = false` keeps an outline as it was made, for a shape that is only
-drawn.
-`examples/demos/sdf/m3shapes.lua` shows every one.
-
-## spectrum
-
-`lib/util/spectrum.lua` turns the bands `morf.audio.monitor` measures into
-visualiser bars: a noise floor, a sensitivity that follows the music's
-loudness, a little memory on the way up, a fall under gravity, and peaks
-that lean on their neighbours.
-
-```lua
-local spectrum = require("lib.util.spectrum")
-local vis = spectrum.new { bars = 24 }      -- vis.bars: a signal of 24 levels, 0 to 1
-ui.Rect { height = function() return 4 + 60 * (vis.bars:get()[3] or 0) end }
-vis:stop()
-```
-
-`spectrum.filter(opts)` is the same shaping, pure: `f.step(bands, dt)`
-gives bars. Options (`spectrum.DEFAULTS`): `bars`, `rate_hz`, `noise`,
-`smoothing`, `gravity`, `spread`, `attack`, `release`, `auto`,
-`sensitivity`. Options are captured when the filter is constructed.
-The numeric filter lives in `morf.audio.spectrum_filter`, with reusable native
-scratch buffers. Neighbour spread uses two linear passes instead of comparing
-every pair of bars. Lua retains monitor subscriptions, signals and lifecycle.
-
-## lyrics
-
-`lib/integrations/lyrics.lua` reads LRC (several times a line, `[offset:]`, word
-timings dropped), finds the line for a moment, and finds lyrics for a
-track: an `.lrc` beside the playing file, then lrclib.net (keyless), cached
-on disk for a week (a miss too).
-
-```lua
-local lyrics = require("lib.integrations.lyrics")
-local follow = lyrics.follow(require("lib.services.mpris").connect())
-ui.Text { text = function() return follow.line:get() end }
-```
-
-| call | what |
-|------|------|
-| `lyrics.parse(text)` | `{ lines = { { time, text } }, tags, synced }` |
-| `lyrics.index_at(parsed, seconds)` | the line being sung (0 before the first) |
-| `lyrics.find(track, on_done, opts)` | `on_done(parsed, source)` (`file`, `cache`, `lrclib`) or `on_done(nil, why)`; `opts`: `cache_dir`, `ttl`, `base`, `offline` |
-| `lyrics.follow(media, opts)` | signals `lines`, `index`, `line`, `next_line`, `status` (`none`, `searching`, `synced`, `plain`, `missing`), `source`; `stop()` |
-
-## settings
-
-`lib/util/settings.lua` keeps a shell's preferences: nested defaults in the
-configuration, a JSON file holding only what differs, every leaf a signal,
-the file watched so another screen's runtime or an editor changes it live
-(only the keys that moved re-run). A value must have its default's type;
-keys the defaults lack are kept in the file untouched.
-
-```lua
-local config = require("lib.util.settings").open {
-  path = morf.config_path("shell.json"),
-  defaults = { appearance = { rounding = { scale = 1 } }, bar = { persistent = true } },
-}
-config.get("appearance.rounding.scale")   config.set("bar.persistent", false)
-config.values.bar.persistent = true       -- the same, through nested tables
-```
-
-`set` returns `true` or `false, why`; `reset(key)`, `flush()`, `keys()`,
-`accepts(key, value)`; `opts.legacy(decoded)` migrates an older file.
-
-## frecency
-
-`lib/util/frecency.lua` remembers launches, each halving in weight every
-`half_life` days (14), in a small JSON file, and ranks a launcher's
-`morf.text.fuzzy` results with it: by use alone for an empty query, and a
-bounded lift among comparable matches otherwise.
-
-```lua
-local used = require("lib.util.frecency").open { path = morf.state_path("launches.json") }
-used.record(app.id)
-used.rank(query, apps, { key = "name", id = "id", limit = 30 })   -- fuzzy hits, reordered
-```
-
-## lule
-
-`lib/integrations/lule.lua` reads the scheme lule (a colour generator) writes to
-`$LULE_A/colors.json` (`~/.cache/lule`): `{ accent, background,
-foreground, cursor, theme, wallpaper, colors }`. `lule.watch()` is a signal
-kept current as lule rewrites it. For the colours themselves as the tool
-sets them on terminals, whatever the tool, see `morf.terminal.listen`
-(docs/IO.md); eva uses both, the file as the backup.
-
-`lule.generate({ image = "/path/to/wallpaper.png", theme = "dark",
-palette = "pigment" }, callback)` runs generation asynchronously, with a
-60-second timeout and bounded output. It uses Lule's own configuration and
-post-generation hooks. `directory` can replace `image` for random selection;
-`configs`, `cache`, `env` and `command` can isolate a run. The returned process
-handle can be cancelled, and the callback receives the normal `morf.run`
-result. Invalid options return `nil, reason` before starting a process.
-
-## material
-
-`lib/util/material.lua` makes Material 3 colour schemes over `morf.color`'s HCT:
-five tonal palettes placed around a source colour's hue, and every role
-(`primary`, `onPrimaryContainer`, `surfaceContainerHigh`, `outlineVariant`,
-the `*Fixed` roles, ...) at its tone for dark or light. This is what an M3
-shell's colour tool does, in Lua.
-
-```lua
-local material = require("lib.util.material")
-local s = material.scheme("#4a7fb5", { variant = "tonal_spot", mode = "dark" })
-s.primary  s.surfaceContainer  s.palettes.tertiary(70)
-material.from_image("~/Pictures/sea.jpg", { mode = "light" }, function(ok, s) ... end)
-```
-
-| call | what |
-|------|------|
-| `material.scheme(source, opts)` | every role as a `morf.color`; `source` is a colour or a hue. `opts.variant`: `tonal_spot` (default), `vibrant`, `expressive`, `neutral`, `monochrome`, `fidelity`, `content`, `rainbow`, `fruit_salad`; `opts.mode`: `dark` or `light` |
-| `material.palettes(source, variant)` | the six tonal palettes alone |
-| `material.score(swatches, opts)` | a picture's best source colours, best first (a colour's share and its neighbours' within 15 degrees of hue, and its chroma; greys do not count; `#4285f4` when nothing has colour) |
-| `material.from_image(path, opts, on_done)` | quantised off the loop, scored, and made a scheme: `on_done(true, s)` or `on_done(false, message)` |
-| `material.hex(s)` | the roles as `#rrggbb` |
-| `material.terminal(s)` | sixteen terminal colours and extras, in `lib/util/palette.lua`'s shape, for its writers |
-
-The palette rules and the score follow Material Color Utilities
-(Apache-2.0). There is one contrast level, the standard one.
-
-## palette
-
-`lib/util/palette.lua` derives a whole desk's colours from a wallpaper: the
-thirteen tokens impasto uses (`background surface surfaceHover border text
-textMuted accent accentHover accentText red green yellow blue`), a
-sixteen-colour terminal set, and writers for the programs that read them.
-It is a port of the substance of impasto's `theme_manager.py`, built on
-`morf.image.palette`, `morf.color`, `morf.fs` and `morf.json`.
-
-```lua
-local palette = require("lib.util.palette")
-
-palette.from_image("~/Pictures/sea.jpg", { mode = "dark" }, function(ok, p)
-  if not ok then return morf.log.warn(p) end
-  local dir = morf.cache_path("colors")
-  palette.write.kitty(p, dir .. "/kitty.conf")
-  palette.write.pywal(p, dir .. "/colors.json")
-  theme.accent = p.accent
-end)
-```
-
-### A palette
-
-A table of `morf.color` values under the token names, plus `terminal`
-(`color0`..`color15`, `foreground`, `background`, `cursor`, `cursor_text`,
-`selection`, `selection_foreground`) and `mode`, `picked` (the swatch the
-accent came from), `swatches` (the picture's most common colours, hex),
-`source`, and `cached`.
-
-### Making one
-
-| call | what |
-| --- | --- |
-| `palette.from_image(path, opts, on_done)` | quantises the picture off the loop, answers `on_done(true, p)` or `on_done(false, message)` |
-| `palette.derive(swatches, opts)` | the same from `{ color, fraction }` swatches, synchronously |
-| `palette.from_accent(color, opts)` | as if the picture were only that colour |
-| `palette.from_tokens(tokens)` | a fixed scheme's thirteen tokens made a whole palette |
-| `palette.presets`, `palette.preset(id)` | impasto's nine schemes: `catppuccin_mocha`, `catppuccin_latte`, `tokyo_night`, `gruvbox_dark`, `nord`, `rose_pine`, `cyberpunk`, `bauhaus`, `crimson` |
-| `palette.blend(a, b, t)` | every colour mixed in OkLab, for animating between two |
-| `palette.check(p)` | every contrast floor, measured: `report, all_ok` |
-| `palette.to_hex(p)`, `palette.from_hex(t)` | to and from plain hex strings |
-
-Options: `mode` (`"dark"` by default, `"light"`, or `"auto"` from the
-picture's lightness), `accent` (use this instead of picking), `fallback_accent`
-(`#89b4fa`), `population_weight` (1), `min_population` (0.004), `hue_pull`
-(0.25), `hue_shift` (12 degrees), `cyan_is_accent` (true), `count` (16
-swatches), `cache_dir` / `cache = false`.
-
-### How the colours are chosen
-
-- **Accent.** impasto's rule: among swatches with HSV saturation over 0.2
-  and luma between 0.2 and 0.85, the highest `2*sat + (1 - |luma - 0.55|)`;
-  added to it are `3 * OkLCh chroma` (so a near-black navy does not count
-  as saturated) and `sqrt(share of the picture)` (so a speck of neon does
-  not beat the sky). Failing that, the most saturated swatch over 0.1;
-  failing that, the neutral accent. Its hue is kept; its lightness is
-  brought into 0.64..0.84 (dark) or 0.42..0.62 (light) and its chroma into
-  0.07..0.2.
-- **Grounds** are near-black (OkLCh L 0.18 / 0.215 / 0.265 / 0.33) or
-  near-white, tinted towards the accent's hue by a fifth of its chroma.
-- **Type** starts near-white (or near-black) and is lifted until text reads
-  at 7:1 on the background and 4.5:1 on the surfaces, muted text 4.5:1.
-- **accentText** is the ground's dark or a near-white, whichever reads
-  better on the accent; if neither reaches 4.5:1 the accent moves instead.
-  `accentHover` is a step further from `accentText`, held to the same floor.
-- **Semantic colours** start at recognisable OkLCh hues (red 25, green 145,
-  yellow 92, blue 255) and are pulled a quarter of the way towards the
-  accent's hue, never more than twelve degrees; their chroma follows the
-  picture's own vividness (half to full), and each is lifted to 4.5:1.
-- **Terminal**: normal slots 1..6 at 4.5:1 on the terminal background,
-  bright slots a step further and at 7:1 (impasto's `lift` and
-  `brighten`); cyan carries the accent (impasto's choice; `cyan_is_accent =
-  false` for a real cyan); magenta is the red turned to 330 degrees.
-  On a light ground `color0` is the ink and `color15` the paper.
-
-Lifting moves only OkLCh lightness, keeping hue, and giving up chroma only
-where sRGB cannot show it. Every floor is listed in `palette.FLOORS` and
-checked by `palette.check`. The same image and options always give the same
-palette.
-
-### Caching
-
-`from_image` caches by path, modification time, size and options, as JSON
-in `opts.cache_dir` (default `morf.cache_path("palette")`). A cached
-palette is answered before `from_image` returns. A fresh one is answered a
-few loop turns later: the derivation, the cache write and the caller each
-run in a turn of their own, because each handler has a fuel budget.
-
-### Writers
-
-`palette.build.<name>(p)` returns the file as a string; `palette.write.<name>(p,
-path)` writes it atomically and returns `true` or `nil, message`. Names:
-`kitty` (an include), `foot` (an include), `alacritty` (TOML import), `btop`
-(a theme file), `cava` (its `[color]` section), `gtk3`, `gtk4`, `gtk`
-(`@define-color` lines), `json`, `lua`, `pywal` (`colors.json`).
-
-Nothing is ever reloaded. `palette.reload_hints.<name>` says what each
-program needs (`signal`, `process`, `command`, `note`) for a configuration
-that wants to do it itself.
-
-### Templates
-
-```lua
-palette.render("accent = {{accent}}\nbar = {{surface | mix accent 0.2 | strip}}\n", p)
-palette.write.template(text, p, path)
-```
-
-`{{name}}` is a token, a `terminal.<slot>` or a field; colours are written
-`#rrggbb` unless a format follows: `.hex .strip .hexa .xhex .rgb .rgba .css
-.hsl .oklch .r .g .b .name`. Filters follow a bar and chain: `lighten n`,
-`darken n`, `saturate n`, `desaturate n`, `rotate deg`, `alpha a`, `mix
-<colour or token> t [space]`, `complement`, `invert`, `gray`, `text_color`,
-any format name, `upper`, `lower`. An unknown name or filter raises.
-
-## System services
-
-Five services a shell's panels need, each one module, each exposing a
-`morf.state` whose fields and lists bindings read directly, kept current by the
-service's own D-Bus signals. When a service is not running, `available()` is
-false and every list is empty; nothing raises. None of them ever *starts* a
-service: an absent name is read as absent, never activated, because reading
-NetworkManager or power-profiles-daemon into existence changes how the machine
-runs.
-
-Call `connect()` while the configuration loads: the state is made of signals,
-and signals are declared up front. Every action returns a truthy value on
-success and `nil, reason` on failure.
-
-All five take the same test seam, `dbus = <table with a proxy function>`,
-defaulting to `morf.dbus`. The tests in
-`crates/morf-lua/src/tests/lib_dbus_services.rs` use it to run each library
-against fake services written in Lua.
-
-### `dbus_client` — the shared half
-
-Proxies cached per address (each `morf.dbus.proxy` is its own bus connection),
-subscriptions made once per address and shared by every handler on it,
-`call`/`call1`/`get`/`get_all`/`set` (blocking; for quick reads),
-`call_async`/`call1_async`/`set_async` (answered later through
-`done(reply, err)`; for anything that may wait on a radio, polkit or a person),
-`on_signal`/`on_properties` (handlers get `info` with the sender's unique name
-last; both return a handle whose `close()` ends the subscription when its last
-handler goes — the system bus caps match rules at 512 per connection),
-`has_owner`/`owner_of`/`list_names`/`watch_name` (asked of the bus, never
-activating anything), `managed_objects`, typed-value helpers (`u`, `o`, `x`,
-`typed`) and `debounce`. Replies arrive as the list of a method's outputs (a
-lone scalar bare); `call1` and `first` take the one output out.
-
-### `networkmanager` — `org.freedesktop.NetworkManager`, system bus
-
-```lua
-local net = require("lib.services.networkmanager").connect()
-net.state.available, .version, .state, .connectivity         -- "full", "portal", ...
-net.state.networking_enabled, .wifi_enabled, .wifi_hardware_enabled
-net.state.primary  { id, type, path }
-net.state.wifi     { device, state, ssid, strength, frequency, security, connected, last_scan }
-net.state.wired    { device, state, connected, carrier, speed, hw_address, ip4 }
-net.state.devices            -- rows: path, interface, type, state, driver, managed, hw_address, ip4, connection
-net.state.active_connections -- rows: path, id, uuid, type, state, default, vpn, devices, connection
-net.state.access_points      -- one row per SSID: key, ssid, bssid, strength, frequency, band,
-                             -- security ("open"/"owe"/"wep"/"wpa"/"wpa2"/"wpa3"/"enterprise"),
-                             -- secure, in_use, known, path, device
-net.state.known_connections  -- rows: path, id, uuid, type, ssid, autoconnect, timestamp, vpn
-net.state.vpn_connections    -- rows: path, id, uuid, type, active, state
-
--- Actions never wait: each returns true once sent (or nil and why not) and
--- takes an optional last `done(result, err)`.
-net.request_scan([interface], [done])
-net.connect(ap_row_or_ssid, [password], [interface], [done(path)]) -- ActivateConnection if
-                                                       -- saved, AddAndActivateConnection if new
-net.disconnect([active id/uuid/path or interface], [done])  -- default: the Wi-Fi connection
-net.forget(ssid, [done(count)])  -- returns how many profiles it asked to delete
-net.set_wifi(enabled, [done])
-net.activate(id_or_uuid, [done(path)]), net.deactivate(id_or_uuid, [done])
-net.activate_vpn(id_or_uuid, [done]), net.deactivate_vpn(id_or_uuid, [done])
-net.snapshot(), net.refresh()
-```
-
-The whole tree is one `GetManagedObjects` on NetworkManager's ObjectManager,
-re-read (debounced) when the manager, a device or the object set changes.
-Access points are never subscribed one by one — their paths are never reused —
-and their strengths arrive with each scan, through the device's `LastScan`;
-devices are, for as long as they exist. Limitations: a password given for an
-already-saved SSID creates a second profile beside the old one (rewriting a
-saved profile means sending all of it back, fully typed); 802.1X networks need
-a profile made elsewhere; an action's answer is awaited for up to
-`action_timeout_ms` (5000) — without blocking — since the service may be
-waiting on polkit.
-
-### `bluez` — `org.bluez`, system bus
-
-```lua
-local bt = require("lib.services.bluez").connect()
-bt.state.available, .adapter, .address, .powered, .discovering, .discoverable,
-       .pairable, .connected_count
-bt.state.adapters -- rows: path, name, address, powered, discovering, discoverable, pairable
-bt.state.devices  -- rows: path, adapter, address, name, alias, named, icon, paired, bonded,
-                  -- trusted, blocked, connected, rssi, in_range, battery (-1 unknown), has_battery
-
--- Every action takes an optional last `done(ok, err)` and never waits.
-bt.set_powered(on, [adapter]), bt.set_discoverable(on), bt.set_pairable(on)
-bt.start_discovery(), bt.stop_discovery()
-bt.connect(dev), bt.disconnect(dev), bt.pair(dev), bt.cancel_pairing(dev)  -- true, "pending"
-bt.trust(dev, [on]), bt.remove(dev)       -- dev: a row, a path or an address
-```
-
-Mirrors the ObjectManager tree incrementally (`InterfacesAdded`/`Removed`,
-`PropertiesChanged` on adapters and on paired or connected devices). Strangers
-found by a scan are refreshed by re-reading the tree every `discovery_poll_ms`
-(2000) while discovery runs, rather than by a match rule each; a device's
-subscription is closed when it is removed or unpaired. `Connect` and `Pair`
-can take as long as a person does, so they are sent asynchronously
-(`connect_timeout_ms`, 60000) and return `true, "pending"` at once: the result
-arrives as `connected`/`paired` changing, and through `done`.
-Pairing a device that needs a PIN requires an `org.bluez.Agent1`, which this
-does not register.
-
-### `upower` — `org.freedesktop.UPower` and power-profiles-daemon
-
-```lua
-local power = require("lib.services.upower").connect()
-power.state.available, .on_battery, .lid_is_closed, .lid_is_present
-power.state.display  { present, percentage, state, charging, time_to_empty, time_to_full,
-                       icon_name, energy_rate, kind, warning_level }
-power.state.devices      -- every device: path, kind ("battery", "mouse", "headset", ...),
-                         -- model, vendor, percentage, state, charging, power_supply, online, ...
-power.state.peripherals  -- batteries that are not the machine's own
-power.state.profiles { available, active, degraded, service, list = rows { name, driver } }
-
-power.set_profile("power-saver" | "balanced" | "performance")
-power.devices(), power.refresh()
-require("lib.services.upower").format_time(seconds)  -- "3 h 12 min"
-```
-
-Power profiles are read from `org.freedesktop.UPower.PowerProfiles`, falling
-back to `net.hadess.PowerProfiles`, and only when one of them is already
-running. The module is a registry descriptor (`lib.services.registry`):
-`morf.service("power", { owner = node })` binds the same service, and
-`power.close()` lets go of it.
-
-### `mpris` — `org.mpris.MediaPlayer2.*`, session bus
-
-```lua
-local media = require("lib.services.mpris").connect()
-media.state.available, .count
-media.state.players -- rows: name, identity, desktop_entry, status, playing, title, artist,
-                    -- album, art_url, length, position, volume, can_*
-media.state.active  { name, identity, desktop_entry, status, playing, title, artist,
-                      album_artist, album, art_url, url, track_id, length, position,
-                      rate, volume, shuffle, loop, can_play, can_pause, can_go_next,
-                      can_go_previous, can_seek, can_control, can_raise }
-
-media.play_pause([name]), .play, .pause, .stop, .next, .previous
-media.seek(offset_seconds), media.set_position(seconds), media.set_volume(0..1)
-media.set_shuffle(on), media.set_loop("none" | "track" | "playlist"), media.raise()
-media.set_active(name_or_nil), media.active(), media.position([name]), media.players()
-```
-
-The active player is one that is playing (the most recent to start), else the
-most recently changed, else the first by name; `set_active` pins one. Lengths
-and positions are seconds. Position is interpolated between readings and
-`Seeked`, and `state.active.position` is advanced by a timer (`tick_ms`, 1000)
-while playing. Every player lives at the same object path; the engine routes a
-signal only to the subscriptions naming its sender, so a player's change
-re-reads that player alone (debounced), and its subscriptions close when it
-leaves. The buttons are sent without waiting on the player. `playerctld` is
-skipped by default (`ignore`). The module is a registry descriptor whose
-`bind` keeps the active choice, the position clock and the buttons:
-`morf.service("media", { owner = node })` binds the same service, and
-`media.close()` lets go of it.
-
-### `logind` — `org.freedesktop.login1`, system bus
-
-```lua
-local login = require("lib.services.logind").connect()
-login.state.available
-login.state.session { id, path, user, uid, type, class, seat, vt, active, locked, idle,
-                      remote, state, desktop, service }
-login.state.can     { suspend, hibernate, hybrid_sleep, suspend_then_hibernate, reboot,
-                      power_off }  -- "yes" | "no" | "challenge" | "na"
-login.state.lid_closed, .handle_lid_switch, .docked, .idle_hint,
-            .preparing_for_sleep, .preparing_for_shutdown
-login.state.brightness { device, value, max, percent }
-login.state.inhibitors -- rows: what, who, why, mode, uid, pid
-
-login.on_lock(fn), login.on_unlock(fn)
-login.on_prepare_for_sleep(fn(going)), login.on_prepare_for_shutdown(fn(going))
--- Actions never wait on logind (it may be waiting on polkit): each returns true
--- once sent and takes an optional last `done(ok, err)`.
-login.lock(), login.unlock(), login.set_locked_hint(on), login.set_idle_hint(on)
-login.suspend([interactive]), .hibernate, .hybrid_sleep, .suspend_then_hibernate,
-      .reboot, .power_off
-login.can("suspend")                         -- asked now
-login.inhibit(what, who, why, mode, [done])  -- handle with release(), held once granted
-login.set_brightness(fraction, [device]), login.set_brightness_raw(value, [device])
-login.backlights()
-```
-
-`Inhibit` answers with a file descriptor, which the engine hands over as an
-opaque handle (see `morf_io::dbus_types`): it can be held and closed, nothing
-more. The lock ends when the handle is released, when it is dropped and
-collected, or when the shell dies — never outliving it. Brightness is read from
-`/sys/class/backlight` with `morf.fs` and written with `Session.SetBrightness`,
-which an active session may do unprivileged; it is re-read on udev backlight
-events.
-
-### `notifications` — serving `org.freedesktop.Notifications`
-
-A notification server (see the file's header). Each entry carries `id`, `app`,
-`icon`, `summary`, `body`, `actions`, `urgency`, `timeout_ms`, `hints`, and the
-hints read out: `image_path`, `image_data` (`width`, `height`, `rowstride`,
-`has_alpha`, `bits_per_sample`, `channels`, `data`), `category`,
-`desktop_entry`, `resident` (stays after an action) and `transient`.
-Replacement ids keep a notification's place in the list; closes report the
-spec's reasons (expired, dismissed, closed by the app).
-
-## poll
-
-The shared machinery for the libraries below that watch something.
-
-- `poll.source { sample = function(done) ... end, interval = ms, linger = n, initial = v }`
-  makes a value that polls **only while something reads it**. `source:get()`
-  is a tracked read (a binding that calls it re-runs on each sample) and
-  starts the timer; a sample nobody re-reads counts as idle, and after
-  `linger` idle samples the timer stops until the next read. Also
-  `pin(bool)`, `refresh()`, `set_interval(ms)`, `running()`, `stop()`,
-  `publish(value)`, and the fields `value`, `error`, `updated`, `samples`.
-- `poll.job(body, on_done, { slice })` runs `body(spend)` as a coroutine over
-  timer ticks. A handler gets 100k Lua instructions and a native call costs a
-  few dozen, so anything proportional to the machine calls `spend(n)` and is
-  resumed next tick when its slice is used.
-- `poll.run(argv, on_done, { timeout_ms, max_bytes })` runs a program
-  directly (no shell) and calls back with `{ ok, code, stdout, stderr, error }`.
-- `poll.which(name)` finds a program on `PATH`.
-- `poll.ring(n)` is a ring buffer (`push`, `list`) for sparklines.
-- `poll.cache_dir()`, `poll.cache_read(path, ttl)`, `poll.cache_write(path, value)`
-  keep JSON with the time it was fetched.
-
-## sysinfo
-
-The machine, from `/proc` and `/sys` only.
-
-```lua
-local sysinfo = require("lib.services.sysinfo")
-ui.Text { text = function() return ("CPU %d%%"):format(sysinfo.cpu().usage) end }
-ui.Text { text = function()
-  local t = sysinfo.temperatures().cpu
-  return t and ("%d°C"):format(t) or ""
-end }
-sysinfo.configure { intervals = { cpu = 1000, processes = 3000 }, history = 120, top = 8 }
-```
-
-| reader | returns | default interval |
-| --- | --- | --- |
-| `cpu()` | `usage`, `cores[i] = {name, usage, frequency}`, `count`, `frequency` (MHz, mean), `load = {1, 5, 15}`, `running`, `threads`, `model` | 2 s |
-| `memory()` | bytes: `total`, `available`, `used`, `free`, `cached`, `percent`, `swap = {total, used, free, percent}` | 3 s |
-| `disks()` | real filesystems from `/proc/mounts` (one row per device), `{device, mount, type, total, used, free, available, percent}` | 30 s |
-| `temperatures()` | `cpu` (°C, the package sensor when there is one), `cpu_sensor`, `sensors[i] = {chip, label, celsius, critical}` from hwmon and thermal zones | 5 s |
-| `gpu()` | `busy` and `cards` where the driver exposes `gpu_busy_percent` (amdgpu); Intel reads as nil | 2 s |
-| `network()` | `default` interface (from the routing table), `rx_rate`/`tx_rate` in bytes/s for it, `interfaces[i]` | 2 s |
-| `battery()` | `present`, `percent`, `status`, `charging`, `power` (W), `time_left`/`time_to_full` (s), `ac`, `batteries` -- for machines without UPower | 30 s |
-| `backlight()` | `brightness`, `max`, `percent`, `writable`, `set(percent)` only when writable, `devices` | 5 s |
-| `system()` | `os`, `os_id`, `os_version`, `kernel`, `hostname`, `user`, `uptime` | 60 s |
-| `processes()` | `count`, `by_cpu`, `by_memory`: the top few `{pid, name, state, cpu, memory, memory_percent}` | 5 s, in slices |
-
-`sysinfo.history(name)` gives the last samples of `cpu`, `load`, `memory`,
-`swap`, `temperature`, `gpu`, `rx`, `tx` or `coreN`, oldest first.
-`sysinfo.set_brightness(percent, device)` writes the backlight when its file
-is writable (world-writable, root, or group-writable with the user in
-`video`); nothing here asks for privileges. `sysinfo.sample(name)` samples
-one section now. `sysinfo.sources[name]` are the poll sources, for `pin`.
-`sysinfo.configure { root = "/some/folder" }` reads a fake `/proc` and `/sys`
-from a folder, which is how the tests run.
-
-The tables handed out are shared and replaced whole on every sample: read
-them, do not change them.
-
-## weather
+### integrations.weather
 
 The weather from keyless APIs: Open-Meteo (geocoding and forecast), with
 wttr.in as the fallback and as the answer when no place is given (it guesses
@@ -785,38 +491,7 @@ temperatures, `precipitation` (%), `code`, `condition`, `icon`, `glyph`.
 Answers are cached on disk; offline, the last one comes back with `stale =
 true`. `weather.condition(code, is_day)` maps any WMO code.
 
-## github
-
-A public user's contribution calendar: a year of days, each with a count and
-the 0-4 shade GitHub draws it in.
-
-```lua
-local github = require("lib.integrations.github")
-local me = github.new { user = "torvalds" }          -- or { user = ..., token = "ghp_..." }
-ui.Text { text = function()
-  local c = me:get()
-  return c.available and ("%d contributions, %d-day streak"):format(c.total, c.current_streak) or ""
-end }
-```
-
-Without a token the calendar is read from the public page
-`github.com/users/<user>/contributions`, by what identifies a day (a cell's
-`data-date` and `data-level`, the tooltip naming it with the count) rather
-than by where it sits in the markup. With a `token` it comes from the GraphQL
-API. Either way it is cached on disk (`ttl`, default an hour) and refreshed
-every `interval` (default an hour) while read.
-
-`me:get()` is a tracked read of `{ available, user, source, days = { {date,
-count, level, weekday} }, weeks, total, current_streak, longest_streak, today,
-max, updated, stale }`. `weeks` are columns of seven, Sunday first, the way the
-calendar is drawn (the first column padded with nils). `total` is the number
-GitHub states when it states one (it includes private contributions). The
-current streak runs back from today, or from yesterday while today is still
-empty. Options: `user`, `token`, `interval`, `ttl`, `cache_dir`, `today`,
-`base_url`, `api_url`. `github.parse_html`, `github.parse_graphql` and
-`github.summarise` are there for other uses.
-
-## packages
+### integrations.packages
 
 Pending updates and installed counts from the package managers that are
 there, by running their programs directly (an argument list, never a shell)
@@ -849,43 +524,57 @@ list of `{ name, old, new }`, and a manager that is not installed is absent.
 replace how programs are run and found (the tests do). `packages.vercmp(a,
 b)` is pacman's version comparison.
 
-## claude_usage
+## shell
 
-Claude Code's token usage from its own transcripts, a port of impasto's
-`claude_usage.py`: tokens in the current five-hour billing block and in the
-last seven days, read from `~/.claude/projects/**/*.jsonl` with `morf.fs`.
+### shell.osk
+
+An on-screen keyboard, whole: for a shell on a desk, a phone and a lock
+screen alike. The host places it and says which keyboard it wants; the
+keyboard says what was struck (see the head of `lib/shell/osk.lua`).
+
+## util
+
+### util.poll
+
+The shared machinery for the libraries below that watch something.
+
+- `poll.source { sample = function(done) ... end, interval = ms, linger = n, initial = v }`
+  makes a value that polls **only while something reads it**. `source:get()`
+  is a tracked read (a binding that calls it re-runs on each sample) and
+  starts the timer; a sample nobody re-reads counts as idle, and after
+  `linger` idle samples the timer stops until the next read. Also
+  `pin(bool)`, `refresh()`, `set_interval(ms)`, `running()`, `stop()`,
+  `publish(value)`, and the fields `value`, `error`, `updated`, `samples`.
+- `poll.job(body, on_done, { slice })` runs `body(spend)` as a coroutine over
+  timer ticks. A handler gets 100k Lua instructions and a native call costs a
+  few dozen, so anything proportional to the machine calls `spend(n)` and is
+  resumed next tick when its slice is used.
+- `poll.run(argv, on_done, { timeout_ms, max_bytes })` runs a program
+  directly (no shell) and calls back with `{ ok, code, stdout, stderr, error }`.
+- `poll.which(name)` finds a program on `PATH`.
+- `poll.ring(n)` is a ring buffer (`push`, `list`) for sparklines.
+- `poll.cache_dir()`, `poll.cache_read(path, ttl)`, `poll.cache_write(path, value)`
+  keep JSON with the time it was fetched.
+
+### util.clock
+
+`clock.format(pattern)` is `morf.time.format(pattern)` read in a binding at
+the grain the pattern shows: a pattern with seconds follows
+`morf.time.clock`, one with minutes `morf.time.minute_clock`, any other
+(`"%A"`, `"%d %B"`) `morf.time.hour_clock`.
 
 ```lua
-local claude_usage = require("lib.integrations.claude_usage")
-local usage = claude_usage.new {}
-ui.Text { text = function()
-  local u = usage:get()
-  return u.available and ("%dk / 5h"):format(u.block_tokens // 1000) or ""
-end }
+local clock = require("lib.util.clock")
+ui.Text { text = function() return clock.format("%a %H:%M") end }
 ```
 
-A token count is input + output + cache-creation tokens, as the original
-counts them (cache reads re-send the same context every turn and are left
-out). A turn written as several lines with one request id is counted once.
-The block starts on the hour of its first message within reach of a
-five-hour window.
+## testing
 
-`usage:get()` is a tracked read of `{ available, block_start, block_end,
-block_tokens, block_messages, week_tokens, week_messages, peak_block_tokens,
-peak_week_tokens, files, scanning, skipped, updated }`. Reading is
-incremental: every file's offset, size and mtime are kept on disk
-(`state_path`), an unchanged file is not opened, a grown one is read from
-where the last pass stopped, and the work is a job in slices. A pass reads at
-most `pass_bytes` (32 MiB); while a backlog remains, `scanning` is true and
-the next pass follows a second later, files written within the block first.
-Files up to `max_read` (4 MiB) are read whole with `morf.fs.read`; larger ones
-a `chunk` at a time by running `dd` directly for the byte range (`morf.fs`
-has no ranged read). Options: `dir`, `state_path`, `interval` (60 s),
-`keep_hours` (five weeks), `pass_bytes`, `max_read`, `chunk`, `read_range`,
-`now`.
+Fakes a shell's own specs can use, so nothing a test presses reaches the
+real machine.
 
-`claude_usage.limits(options, on_done)` reports the plan's 5-hour and 7-day
-utilisation from the `anthropic-ratelimit-unified-*` headers, which only a
-real API request returns: it sends the smallest one (one output token) with
-Claude Code's OAuth token from `~/.claude/.credentials.json`. It is never
-called by the library itself.
+- `lib.testing.dbus`: a stand-in for `morf.dbus` answering from Lua tables,
+  in the shapes the engine's decoder produces, and recording every call with
+  its arguments exactly as the library typed them.
+- `lib.testing.hyprland`: a fake Hyprland on its own two sockets, speaking
+  either configuration flavour, for `lib.compositor.*` under `morf test`.

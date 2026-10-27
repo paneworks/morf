@@ -1,4 +1,4 @@
-//! `morf.menu`, `morf.desktop_entries` and `morf.session_paths`: menu models
+//! `morf.window.menu`, `morf.apps.entries` and `morf.paths.session`: menu models
 //! and the applications a launcher lists, over `morf_system`'s.
 
 use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as LuaValue};
@@ -123,7 +123,7 @@ pub(crate) fn install_menu_desktop_api<'gc>(
         stack.replace(ctx, userdata);
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "menu", menu);
+    crate::api::namespace::table(ctx, morf, "window").set_field(ctx, "menu", menu);
 
     let desktop_applications = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let entries: UserRef<DesktopEntriesToken> = stack.consume(ctx)?;
@@ -227,14 +227,14 @@ pub(crate) fn install_menu_desktop_api<'gc>(
         stack.replace(ctx, userdata);
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "desktop_entries", desktop_entries);
+    crate::api::namespace::table(ctx, morf, "apps").set_field(ctx, "entries", desktop_entries);
 
     // Where the sessions a greeter can start are described. Handed over as
     // paths rather than as a second kind of entry list, because they are
     // ordinary desktop entries in two other directories — so this composes with
     // the constructor above rather than duplicating it:
     //
-    //     local sessions = core.desktop_entries(core.session_paths())
+    //     local sessions = morf.apps.entries(morf.paths.session())
     //
     // A configuration that wants both asks for both and concatenates. The
     // engine does not need an opinion about that.
@@ -252,5 +252,5 @@ pub(crate) fn install_menu_desktop_api<'gc>(
         stack.replace(ctx, paths);
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "session_paths", session_paths_fn);
+    crate::api::namespace::table(ctx, morf, "paths").set_field(ctx, "session", session_paths_fn);
 }

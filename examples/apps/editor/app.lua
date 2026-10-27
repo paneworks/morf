@@ -17,10 +17,10 @@
 local morf = require("morf")
 local ui = require("morf.ui")
 local app = require("lib.kit.app")
-local kit = app.kit()
-local composites = require("lib.kit.composites")
+app.kit()
 local widgets = require("lib.kit.widgets")
-local samples = require("lib.kit.samples.canvas")
+local popup = require("lib.kit.archetypes.popup")
+local models = require("canvas")
 
 local HEADER, TOOLS = 46, 44
 
@@ -33,7 +33,7 @@ local floating = morf.signal("editor.floating", {})
 -- The layout survives a restart: kept in the state directory
 -- (EDITOR_STATE names another file), read at start, written a moment
 -- after the dock last changed.
-local STATE_FILE = (morf.env and morf.env("EDITOR_STATE")) or morf.state_path("editor.json")
+local STATE_FILE = (morf.env and morf.env("EDITOR_STATE")) or morf.paths.state("editor.json")
 do
   local ok, text = pcall(morf.fs.read, STATE_FILE)
   local ok2, saved = false, nil
@@ -46,7 +46,7 @@ end
 local save_timer
 local function save()
   if save_timer then save_timer:cancel() end
-  save_timer = morf.timer(500, function()
+  save_timer = morf.time.timer(500, function()
     save_timer = nil
     local ok, err = pcall(morf.fs.write, STATE_FILE, morf.json.encode { layout = layout:get(), floating = floating:get() })
     if not ok then morf.log.warn("editor: could not save the layout: " .. tostring(err)) end
@@ -92,7 +92,7 @@ end
 
 -- ----------------------------------------------------------- documents --
 
-local graph = samples.graph({
+local graph = models.graph({
   { id = "image", title = "Image", tone = "info", x = 40, y = 60, outputs = { "Color", "Alpha" } },
   { id = "noise", title = "Noise", tone = "extra", x = 40, y = 280, inputs = { "Scale" }, outputs = { "Value" } },
   { id = "blur", title = "Blur", tone = "accent", x = 280, y = 80, inputs = { "Image", "Radius" }, outputs = { "Result" } },
@@ -210,7 +210,7 @@ app.application {
       files = { title = "Files", icon = "folder", closable = false, content = fill(function(holder)
         sized(holder, function(w, h)
           local node, tree
-          node, tree = widgets.tree_view { id = "editor-files", width = w, height = h, row_height = 32, tree = FILES,
+          node, tree = widgets.tree_expander { id = "editor-files", width = w, height = h, row_height = 32, tree = FILES,
             accessible_name = "Files",
             on_activated = function(i)
               local row = tree and tree.model and tree.model:get(i)
@@ -250,20 +250,20 @@ app.application {
         return node
       end) },
       map = { title = "Map", icon = "map", content = fill(function()
-        local node, view = widgets.map_view { id = "editor-map", anchors = { fill = true }, items = samples.district(),
+        local node, view = widgets.map_view { id = "editor-map", anchors = { fill = true }, items = models.district(),
           zoom = 0.45, view_x = 40, view_y = 40, attribution = "© Sample Atlas" }
         views.map = view
         return node
       end) },
       log = { title = "Log", icon = "terminal", content = fill(function(holder)
         sized(holder, function(w, h)
-          return (widgets.list { id = "editor-log", rows = log, width = w, height = h, row_height = 28,
+          return (widgets.list_view { id = "editor-log", rows = log, width = w, height = h, row_height = 28,
             accessible_name = "Log" })
         end)
       end) },
     }
 
-    dock_node, dock = widgets.dock_area { id = "editor-dock", y = HEADER + TOOLS,
+    dock_node, dock = widgets.dock_area { id = "editor-dock",
       width = W, height = function() return H() - HEADER - TOOLS end,
       panels = panels, layout = layout:get() or DEFAULT_LAYOUT, floating = floating:get(),
       -- The layout is the application's: kept as the dock reports it.
@@ -280,24 +280,27 @@ app.application {
 
     -- The toolbar: the tools, one on at a time, and a fit button.
     local items = {}
+    local function tip(node, text) popup.tooltip(node, text) return node end
+    local function separator() return widgets.separator { orientation = "vertical", height = 24 } end
     for _, tool in ipairs(TOOLS_LIST) do
-      items[#items + 1] = { id = "editor-tool-" .. tool.id, icon = tool.icon, tooltip = tool.label,
-        checked = function() return state.tool == tool.id end,
+      items[#items + 1] = tip(widgets.toggle_button { id = "editor-tool-" .. tool.id, icon = tool.icon,
+        variant = "flat", accessible_name = tool.label, checked = function() return state.tool == tool.id end,
         on_toggled = function(on)
           if on then state.tool = tool.id note("Tool: " .. tool.label) end
-        end }
-      if tool.id == "connect" then items[#items + 1] = { separator = true } end
+        end }, tool.label)
+      if tool.id == "connect" then items[#items + 1] = separator() end
     end
-    items[#items + 1] = { separator = true }
-    items[#items + 1] = { id = "editor-fit", icon = "fit_screen", tooltip = "Fit the document",
+    items[#items + 1] = separator()
+    items[#items + 1] = tip(widgets.button { id = "editor-fit", icon = "fit_screen", variant = "flat",
+      accessible_name = "Fit the document",
       on_clicked = function()
         local view = views[state.document]
         if view then view.fit() end
-      end }
-    local toolbar = composites.toolbar { id = "editor-tools", y = HEADER, width = W, height = TOOLS, items = items,
-      accessible_name = "Tools" }
+      end }, "Fit the document")
+    items.id, items.variant, items.width, items.height, items.accessible_name = "editor-tools", "toolbar", W, TOOLS, "Tools"
+    local toolbar = widgets.box(items)
 
-    local header = composites.header_bar { id = "editor-header", width = W, window = win, title = "Editor",
+    local header = widgets.header_bar { id = "editor-header", width = W, window = win, title = "Editor",
       subtitle = function()
         local panel = panels[state.document]
         return panel and panel.title or ""
@@ -305,7 +308,8 @@ app.application {
 
     -- For tests and scripting.
     morf.ipc["editor-resize"] = function(w, h) win:size(tonumber(w), tonumber(h)) return true end
-    return ui.Item { width = W, height = H, dock_node, toolbar, header }
+    return (widgets.toolbar_view { id = "editor-window", width = W, height = H, header_bar = header,
+      header_height = HEADER, toolbar_top = toolbar, toolbar_top_height = TOOLS, content = dock_node })
   end,
 }
 

@@ -1,7 +1,6 @@
 use luna::{Closure, Context, Executor, Table, UserData, Value as LuaValue};
 use morf_io::DbusValue;
 use morf_scene::{Value as SceneValue, ViewTransition};
-use morf_system::XkbKeymap;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
@@ -19,10 +18,7 @@ pub(crate) use json::{json_to_lua, lua_to_json};
 pub(crate) use require::{Require, install_require};
 
 pub(crate) fn default_module_roots() -> Vec<PathBuf> {
-    std::env::var_os("MORF_RUNTIME_PATH")
-        .into_iter()
-        .flat_map(|value| std::env::split_paths(&value).collect::<Vec<_>>())
-        .collect()
+    morf_value::env::paths("MORF_RUNTIME_PATH")
 }
 
 /// The nearest `library/` holding a `lib/`, beside the folder `file` is in
@@ -64,7 +60,7 @@ pub fn runtimepath_roots(config: &std::path::Path, external: bool) -> Vec<PathBu
             });
         if let Some(data) = data {
             // The user's own modules first, then the library `make install`
-            // puts beside the binary: `require("lib.util.material")` from any
+            // puts beside the binary: `require("lib.theme.material")` from any
             // configuration, wherever it lives.
             roots.push(data.join("morf/site"));
             roots.push(data.join("morf/library"));
@@ -169,46 +165,6 @@ pub(crate) fn scene_to_lua<'gc>(
             LuaValue::Table(table)
         }
     })
-}
-
-pub(crate) fn xkb_keymap_to_lua<'gc>(ctx: Context<'gc>, keymap: &XkbKeymap) -> Table<'gc> {
-    let result = Table::new(&ctx);
-    result.set_field(ctx, "source", keymap.source.as_str());
-    let keys = Table::new(&ctx);
-    for (key_index, key) in keymap.keys.iter().enumerate() {
-        let value = Table::new(&ctx);
-        value.set_field(ctx, "keycode", i64::from(key.keycode));
-        value.set_field(ctx, "evdev_code", i64::from(key.evdev_code));
-        value.set_field(ctx, "name", key.name.as_str());
-        value.set_field(ctx, "repeats", key.repeats);
-        let layouts = Table::new(&ctx);
-        for (layout_index, layout) in key.layouts.iter().enumerate() {
-            let levels = Table::new(&ctx);
-            for (level_index, level) in layout.iter().enumerate() {
-                let symbols = Table::new(&ctx);
-                for (symbol_index, symbol) in level.iter().enumerate() {
-                    let item = Table::new(&ctx);
-                    item.set_field(ctx, "keysym", i64::from(symbol.keysym));
-                    item.set_field(ctx, "name", symbol.name.as_str());
-                    item.set_field(ctx, "text", symbol.text.as_str());
-                    symbols
-                        .set(ctx, symbol_index as i64 + 1, item)
-                        .expect("XKB symbol table accepts integer keys");
-                }
-                levels
-                    .set(ctx, level_index as i64 + 1, symbols)
-                    .expect("XKB level table accepts integer keys");
-            }
-            layouts
-                .set(ctx, layout_index as i64 + 1, levels)
-                .expect("XKB layout table accepts integer keys");
-        }
-        value.set_field(ctx, "layouts", layouts);
-        keys.set(ctx, key_index as i64 + 1, value)
-            .expect("XKB key table accepts integer keys");
-    }
-    result.set_field(ctx, "keys", keys);
-    result
 }
 
 pub(crate) fn view_transition_to_lua(ctx: Context<'_>, transition: ViewTransition) -> Table<'_> {

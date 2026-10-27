@@ -18,47 +18,6 @@ pub enum ClockPrecision {
 }
 
 impl ClockPrecision {
-    /// The precision a `morf.system_clock` was made with; anything else is
-    /// seconds, the finest there is, so nothing is ever shown stale.
-    pub fn parse(name: &str) -> Self {
-        match name {
-            "hours" => Self::Hours,
-            "minutes" => Self::Minutes,
-            _ => Self::Seconds,
-        }
-    }
-
-    /// The finest unit a strftime format shows, which is how often text made
-    /// from it can change. A conversion this does not know counts as
-    /// seconds.
-    pub fn of_format(format: &str) -> Self {
-        let mut finest = Self::Hours;
-        let mut chars = format.chars();
-        while let Some(char) = chars.next() {
-            if char != '%' {
-                continue;
-            }
-            // Flags, a width, a precision and a colon may come between the
-            // percent sign and the conversion: `%-d`, `%_3H`, `%.3f`, `%:z`.
-            let conversion = chars
-                .by_ref()
-                .find(|char| !matches!(char, '-' | '_' | '0'..='9' | '^' | '#' | '.' | ':'));
-            let unit = match conversion {
-                None => break,
-                Some('H' | 'I' | 'k' | 'l' | 'p' | 'P') => Self::Hours,
-                Some('M' | 'R') => Self::Minutes,
-                Some(
-                    'Y' | 'y' | 'C' | 'G' | 'g' | 'm' | 'b' | 'B' | 'h' | 'd' | 'e' | 'j' | 'a'
-                    | 'A' | 'u' | 'w' | 'U' | 'W' | 'V' | 'D' | 'F' | 'x' | 'n' | 't' | '%' | 'z'
-                    | 'Z' | 'Q',
-                ) => Self::Hours,
-                Some(_) => Self::Seconds,
-            };
-            finest = finest.max(unit);
-        }
-        finest
-    }
-
     /// How long until the local clock next turns over at this grain.
     pub fn until_next(self) -> Duration {
         let now = jiff::Zoned::now();
@@ -77,10 +36,10 @@ impl ClockPrecision {
     }
 }
 
-/// Why the loop wakes on its own, for `MORF_WAKE_LOG`.
+/// Why the loop wakes on its own, for `MORF_LOG=wake`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DeadlineCause {
-    /// A `morf.timer` or a running `ui.Timer`.
+    /// A `morf.time.timer` or a running `ui.Timer`.
     Timer,
     /// The focused field's caret turns on or off.
     Caret,
@@ -120,27 +79,8 @@ pub fn earliest(
     deadlines.into_iter().flatten().min_by_key(|(at, _)| *at)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_format_changes_as_often_as_its_finest_conversion() {
-        assert_eq!(ClockPrecision::of_format("%H:%M"), ClockPrecision::Minutes);
-        assert_eq!(
-            ClockPrecision::of_format("%A %-d %B"),
-            ClockPrecision::Hours
-        );
-        assert_eq!(
-            ClockPrecision::of_format("%H:%M:%S"),
-            ClockPrecision::Seconds
-        );
-        assert_eq!(ClockPrecision::of_format("%.3f"), ClockPrecision::Seconds);
-    }
-}
-
-/// `morf.clock` ("HH:MM:SS"), `morf.minute_clock` ("HH:MM") and
-/// `morf.hour_clock` ("HH"): one signal per grain, so whatever changes by the
+/// `morf.time.clock` ("HH:MM:SS"), `morf.time.minute_clock` ("HH:MM") and
+/// `morf.time.hour_clock` ("HH"): one signal per grain, so whatever changes by the
 /// minute does not wake the shell every second.
 #[derive(Clone, Copy, Debug)]
 pub struct Clocks {
@@ -155,9 +95,9 @@ impl Clocks {
     pub fn new(graph: &mut Graph<IpcValue>) -> (Self, [(SignalId, IpcValue); 3]) {
         let empty = IpcValue::String(String::new());
         let clocks = Self {
-            seconds: graph.signal("morf.clock", empty.clone()),
-            minutes: graph.signal("morf.minute_clock", empty.clone()),
-            hours: graph.signal("morf.hour_clock", empty.clone()),
+            seconds: graph.signal("morf.time.clock", empty.clone()),
+            minutes: graph.signal("morf.time.minute_clock", empty.clone()),
+            hours: graph.signal("morf.time.hour_clock", empty.clone()),
         };
         let values = [
             (clocks.seconds, empty.clone()),

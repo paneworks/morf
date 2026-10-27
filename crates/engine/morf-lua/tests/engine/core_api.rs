@@ -15,7 +15,7 @@ fn window_handles_map_item_geometry_after_layout() {
                 local window = require("morf.window")
                 local child = ui.Item { x = 15, y = 7, width = 20, height = 10 }
                 local root = ui.Item { child }
-                _G.window_handle = window.floating {
+                _G.window_handle = window.toplevel {
                   root = root, width = 100, height = 50,
                 }
                 _G.window_child = child
@@ -60,43 +60,33 @@ fn core_namespace_exposes_native_process_and_path_data() {
     runtime.set_shell_root(PathBuf::from("/tmp/morf-shell"));
     runtime
         .execute(
-            "core.lua",
+            "morf.lua",
             br#"
-                local core = require("morf.core")
-                assert(type(core.process_id) == "number")
-                assert(type(core.version) == "string")
-                assert(type(core.instance_id) == "string")
-                assert(type(core.launch_time_ms) == "number")
-                assert(type(core.app_id) == "string")
-                assert(type(core.working_directory()) == "string")
-                assert(core.working_directory(core.working_directory()) == core.working_directory())
-                assert(core.watch_files())
-                assert(not core.watch_files(false))
-                assert(core.env("PATH") ~= nil)
-                assert(core.env("MORF_VARIABLE_THAT_DOES_NOT_EXIST") == nil)
-                assert(core.shell_dir() == "/tmp/morf-shell")
-                assert(string.find(core.shell_id(), "morf-shell-", 1, true) == 1)
-                assert(core.shell_path("icons/logo.svg") == "/tmp/morf-shell/icons/logo.svg")
-                assert(core.config_path("config.lua") == "/tmp/morf-shell/config.lua")
-                assert(core.data_path("values.json") == core.data_dir() .. "/values.json")
-                assert(core.state_path("state.json") == core.state_dir() .. "/state.json")
-                assert(core.cache_path("image") == core.cache_dir() .. "/image")
-                assert(string.find(core.data_dir(), "/morf/morf-shell-", 1, true))
-                assert(not pcall(core.shell_path, "/absolute"))
-                assert(core.icon_path("morf-icon-that-does-not-exist") == nil)
-                assert(not core.has_icon("morf-icon-that-does-not-exist"))
-                assert(not pcall(core.icon_path, "icon", "hicolor", 0))
-                assert(core.has_version(0, 1))
-                assert(core.has_version(0, 1, { "wayland", "ipc", "lua" }))
-                assert(not core.has_version(0, 1, { "morf-widget-toolkit" }))
-                local timer = core.elapsed_timer()
+                assert(type(morf.process_id) == "number")
+                assert(type(morf.version) == "string")
+                assert(type(morf.instance_id) == "string")
+                assert(type(morf.launch_time_ms) == "number")
+                assert(type(morf.app_id) == "string")
+                assert(morf.env("PATH") ~= nil)
+                assert(morf.env("MORF_VARIABLE_THAT_DOES_NOT_EXIST") == nil)
+                assert(morf.paths.shell() == "/tmp/morf-shell")
+                assert(string.find(morf.shell_id(), "morf-shell-", 1, true) == 1)
+                assert(morf.paths.shell("icons/logo.svg") == "/tmp/morf-shell/icons/logo.svg")
+                assert(morf.paths.shell("config.lua") == "/tmp/morf-shell/config.lua")
+                assert(morf.paths.state("state.json") == morf.paths.state() .. "/state.json")
+                assert(morf.paths.cache("image") == morf.paths.cache() .. "/image")
+                assert(not pcall(morf.paths.shell, "/absolute"))
+                assert(morf.image.icon("morf-icon-that-does-not-exist") == nil)
+                assert(not morf.image.has_icon("morf-icon-that-does-not-exist"))
+                assert(not pcall(morf.image.icon, "icon", "hicolor", 0))
+                local timer = morf.time.elapsed()
                 assert(timer:elapsed() >= 0)
                 assert(timer:elapsed_ms() >= 0)
                 assert(timer:elapsed_ns() >= 0)
                 assert(timer:restart() >= 0)
                 assert(timer:restart_ms() >= 0)
                 assert(timer:restart_ns() >= 0)
-                local curve = core.easing_curve("in_quad")
+                local curve = morf.easing.curve("in_quad")
                 assert(curve:value_at(0.5) == 0.25, "in_quad")
                 assert(curve:interpolate(0.5, 10, 20) == 12.5, "interpolate")
                 local point = curve:interpolate(0.5, { x = 0, y = 10 }, { x = 20, y = 30 })
@@ -105,28 +95,12 @@ fn core_namespace_exposes_native_process_and_path_data() {
                     { x = 0, y = 10, width = 20, height = 30 },
                     { x = 20, y = 30, width = 40, height = 50 })
                 assert(rect.x == 5 and rect.y == 15 and rect.width == 25 and rect.height == 35)
-                local bezier = core.easing_curve({ x1 = 0.42, y1 = 0, x2 = 1, y2 = 1 })
+                local bezier = morf.easing.curve({ x1 = 0.42, y1 = 0, x2 = 1, y2 = 1 })
                 assert(bezier:value_at(0) == 0, "bezier start")
                 assert(bezier:value_at(1) > 0.999999, "bezier end")
-                local clock = core.system_clock({ precision = "minutes" })
-                local now = clock:snapshot()
-                assert(now.year >= 2020)
-                assert(now.month >= 1 and now.month <= 12)
-                assert(now.day >= 1 and now.day <= 31)
-                assert(now.hours >= 0 and now.hours <= 23)
-                assert(now.minutes >= 0 and now.minutes <= 59)
-                assert(now.seconds >= 0 and now.seconds <= 60)
-                assert(now.weekday >= 1 and now.weekday <= 7)
-                assert(type(clock:format("%Y-%m-%d")) == "string")
-                assert(clock:precision() == "minutes")
-                clock:set_precision("seconds")
-                clock:set_enabled(false)
-                assert(clock:enabled() == false)
             "#,
         )
         .unwrap();
-    assert_eq!(runtime.take_watch_files_change(), Some(false));
-    assert_eq!(runtime.take_watch_files_change(), None);
 }
 
 #[test]
@@ -136,9 +110,8 @@ fn core_menu_models_nested_entries_and_activation() {
         .execute(
             "menu.lua",
             br#"
-                local core = require("morf.core")
                 local triggered = false
-                local menu = core.menu {
+                local menu = morf.window.menu {
                     { id = "open", text = "Open", icon = "folder", on_triggered = function()
                         triggered = true
                     end },
@@ -170,63 +143,13 @@ fn core_menu_models_nested_entries_and_activation() {
 }
 
 #[test]
-fn color_quantizer_returns_native_palette_values() {
-    let path = std::env::temp_dir().join(format!("morf-colors-{}.svg", std::process::id()));
-    fs::write(
-        &path,
-        br##"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="1"><rect width="1" height="1" fill="#ff0000"/><rect x="1" width="1" height="1" fill="#0000ff"/></svg>"##,
-    )
-    .unwrap();
-    let source = format!(
-        r##"
-            local core = require("morf.core")
-            -- One name for this, not two: the quantizer object answers the
-            -- one-shot question as well as the live one.
-            local colors = core.color_quantizer {{
-                source = {:?},
-                depth = 1,
-                rescale_size = 2,
-            }}:colors()
-            assert(#colors == 2)
-            assert(
-                (colors[1] == "#ff0000" and colors[2] == "#0000ff") or
-                (colors[1] == "#0000ff" and colors[2] == "#ff0000")
-            )
-            local quantizer = core.color_quantizer {{
-                source = {:?},
-                depth = 0,
-                rescale_size = 2,
-            }}
-            assert(quantizer:source() == {:?})
-            assert(quantizer:depth() == 0 and #quantizer:colors() == 1)
-            quantizer:set_depth(1)
-            assert(quantizer:depth() == 1 and #quantizer:colors() == 2)
-            quantizer:set_rect({{ x = 0, y = 0, width = 1, height = 1 }})
-            assert(quantizer:rect().width == 1)
-            assert(#quantizer:colors() == 1 and quantizer:colors()[1] == "#ff0000")
-            quantizer:set_rect(nil)
-            quantizer:set_rescale_size(0)
-            quantizer:refresh()
-            assert(quantizer:rect() == nil and quantizer:rescale_size() == 0)
-            assert(#quantizer:colors() == 2)
-        "##,
-        path.to_string_lossy(),
-        path.to_string_lossy(),
-        path.to_string_lossy(),
-    );
-    let mut runtime = Runtime::default();
-    runtime.execute("colors.lua", source.as_bytes()).unwrap();
-    fs::remove_file(path).unwrap();
-}
-
-#[test]
 fn json_codec_preserves_arrays_objects_and_null() {
     let mut runtime = Runtime::default();
     runtime
         .execute(
             "json.lua",
             br#"
-                local json = require("morf.io.json")
+                local json = require("morf.json")
                 local value = json.decode('{"array":[],"null":null,"object":{},"values":[1,true,"x"]}')
                 assert(value.values[1] == 1)
                 assert(value.values[2] == true)
@@ -248,8 +171,7 @@ fn file_view_tracks_state_and_atomic_writes() {
     let _ = std::fs::remove_file(&path);
     let source = format!(
         r#"
-            local io = require("morf.io")
-            local file = io.file_view {{ path = {:?}, preload = false }}
+            local file = morf.fs.view {{ path = {:?}, preload = false }}
             assert(file:path() == {:?})
             assert(not file:preload())
             assert(file:loaded() == false)
@@ -265,9 +187,9 @@ fn file_view_tracks_state_and_atomic_writes() {
             assert(file:set_text("world"))
             assert(file:reload())
             assert(file:text() == "world")
-            local json = require("morf.io.json")
-            assert(json.write_file(file, {{ answer = 42, values = json.array({{ 1, 2 }}) }}))
-            local decoded = json.read_file(file)
+            local json = require("morf.json")
+            assert(file:set_text(json.encode({{ answer = 42, values = json.array({{ 1, 2 }}) }})))
+            local decoded = json.decode(file:text())
             assert(decoded.answer == 42)
             assert(decoded.values[2] == 2)
             assert(file:set_path(""))
@@ -294,8 +216,7 @@ fn process_view_applies_launch_context_and_restarts() {
     let directory = std::env::temp_dir();
     let source = format!(
         r#"
-            local io = require("morf.io")
-            local process = io.process_view {{
+            local process = morf.process.view {{
                 command = {{ "sh", "-c", "printf '%s:%s' \"$PWD\" \"$MORF_LUA_PROCESS\"" }},
                 environment = {{ MORF_LUA_PROCESS = "ok" }},
                 working_directory = {:?},
@@ -363,8 +284,7 @@ fn desktop_entries_scan_and_lookup_native_data() {
     .unwrap();
     let source = format!(
         r#"
-            local core = require("morf.core")
-            local entries = core.desktop_entries({{{:?}}})
+            local entries = morf.apps.entries({{{:?}}})
             local applications = entries:applications()
             assert(#applications == 1)
             assert(applications[1].name == "Browser")
@@ -375,8 +295,7 @@ fn desktop_entries_scan_and_lookup_native_data() {
             assert(entries:heuristic_lookup("BROWSER").id == "browser")
             assert(entries:by_id("missing") == nil)
             assert(not entries:refresh())
-            local io = require("morf.io")
-            local added = io.file_view {{ path = {:?}, preload = false }}
+            local added = morf.fs.view {{ path = {:?}, preload = false }}
             assert(added:set_text("[Desktop Entry]\nType=Application\nName=Editor\nExec=editor\n"))
             assert(entries:refresh())
             assert(#entries:applications() == 2)

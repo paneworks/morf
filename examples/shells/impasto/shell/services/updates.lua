@@ -51,7 +51,7 @@ function M.aur() s.revision:get() return state.aur end
 local function ask()
   if asked then return end
   asked = true
-  morf.timer(1, function() M.refresh() end, false)
+  morf.time.timer(1, function() M.refresh() end, false)
 end
 
 function M.updates() ask() s.revision:get() return state.updates end
@@ -90,7 +90,7 @@ end
 --- checkupdates nor pacman answered.
 local function repositories(callback)
   local function with_pacman()
-    morf.run({ pacman, "-Qu" }, { timeout_ms = 120000, env = { LANG = "C", LC_ALL = "C" } }, function(result)
+    morf.process.run({ pacman, "-Qu" }, { timeout_ms = 120000, env = { LANG = "C", LC_ALL = "C" } }, function(result)
       -- 1 with a silent stderr is pacman's "nothing to report".
       if result.ok or (result.code == 1 and (result.stderr or ""):match("^%s*$")) then
         local rows = {}
@@ -101,7 +101,7 @@ local function repositories(callback)
     end)
   end
   if not checkupdates then return with_pacman() end
-  morf.run({ checkupdates, "--nocolor" }, { timeout_ms = 120000, env = { LANG = "C", LC_ALL = "C" } },
+  morf.process.run({ checkupdates, "--nocolor" }, { timeout_ms = 120000, env = { LANG = "C", LC_ALL = "C" } },
     function(result)
       -- 2 is checkupdates for "no updates", which is an answer.
       if result.ok or result.code == 2 then
@@ -132,7 +132,7 @@ end
 --- `callback(nil)` when the AUR did not answer. One the AUR has never heard
 --- of is a local build, with nothing to compare against.
 local function aur(callback)
-  morf.run({ pacman, "-Qm" }, { timeout_ms = 30000 }, function(result)
+  morf.process.run({ pacman, "-Qm" }, { timeout_ms = 30000 }, function(result)
     if not (result.ok or result.code == 1) then return callback({}) end
     local mine, names = M.parse_foreign(result.stdout)
     if #names == 0 then return callback({}) end
@@ -151,7 +151,7 @@ local function aur(callback)
       end
       local parts = {}
       for index = start, math.min(#names, start + M.AUR_BATCH - 1) do
-        parts[#parts + 1] = "arg[]=" .. morf.http.url_encode(names[index])
+        parts[#parts + 1] = "arg[]=" .. morf.encoding.url_encode(names[index])
       end
       start = start + M.AUR_BATCH
       local ok = pcall(morf.http.get, M.AUR_RPC .. "?" .. table.concat(parts, "&"),
@@ -205,8 +205,8 @@ function M.subscribe()
   watchers = watchers + 1
   ask()
   if not poller then
-    poller = morf.timer(M.POLL_MS, function() M.refresh() end, true)
-    ager = morf.timer(60000, function() s.minute:set(s.minute:get() + 1) end, true)
+    poller = morf.time.timer(M.POLL_MS, function() M.refresh() end, true)
+    ager = morf.time.timer(60000, function() s.minute:set(s.minute:get() + 1) end, true)
   end
 end
 function M.release()

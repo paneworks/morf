@@ -93,12 +93,11 @@ fn transform_watcher_dispatches_after_rendered_geometry_changes() {
             "transform.lua",
             br#"
                 local morf = require("morf")
-                local core = require("morf.core")
                 local ui = require("morf.ui")
                 local calls = morf.signal("transform.calls", 0)
                 local child = ui.Item { implicit_width = 20, implicit_height = 10 }
                 local root = ui.Item { child }
-                local watcher = core.transform_watcher {
+                local watcher = morf.transform_watcher {
                   a = root,
                   b = child,
                   common_parent = root,
@@ -146,11 +145,10 @@ fn transform_watcher_dispatches_after_rendered_geometry_changes() {
         .execute(
             "invalid-transform.lua",
             br#"
-                local core = require("morf.core")
                 local ui = require("morf.ui")
                 local a = ui.Item {}
                 local b = ui.Item {}
-                core.transform_watcher { a = a, b = b, common_parent = a }
+                morf.transform_watcher { a = a, b = b, common_parent = a }
             "#,
         )
         .unwrap_err();
@@ -169,10 +167,9 @@ fn cached_layout_still_observes_transforms_without_relaying_out() {
             "cached-transform.lua",
             br#"
         local ui = require("morf.ui")
-        local core = require("morf.core")
         local child = ui.Item { width=20, height=10 }
         local root = ui.Item { child }
-        core.transform_watcher { a=root, b=child, common_parent=root,
+        morf.transform_watcher { a=root, b=child, common_parent=root,
             on_changed=function() end }
     "#,
         )
@@ -239,7 +236,7 @@ fn clock_service_recomputes_text_bindings() {
             br#"
                 local morf = require("morf")
                 local ui = require("morf.ui")
-                ui.Text { text = function() return morf.clock:get() end }
+                ui.Text { text = function() return morf.time.clock:get() end }
             "#,
         )
         .unwrap();
@@ -279,26 +276,6 @@ fn pam_callbacks_return_asynchronously_to_lua() {
         runtime.scene().string_value(root, "text").unwrap(),
         "service contains a null byte"
     );
-}
-
-#[test]
-fn failed_pam_authentication_cannot_request_unlock() {
-    let mut runtime = Runtime::default();
-    runtime
-        .execute(
-            "unlock.lua",
-            br#"
-                local morf = require("morf")
-                morf.pam.authenticate_unlock("morf\0test", "user", "secret", function() end)
-            "#,
-        )
-        .unwrap();
-    let deadline = std::time::Instant::now() + Duration::from_secs(1);
-    while !runtime.poll_services() && std::time::Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(1));
-    }
-
-    assert!(!runtime.take_session_unlock_request());
 }
 
 #[test]

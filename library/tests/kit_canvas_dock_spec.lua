@@ -1,4 +1,4 @@
--- lib.kit.canvas and lib.kit.dock with a plain skin: items picked, moved
+-- lib.kit.archetypes.canvas and lib.kit.archetypes.dock with a plain skin: items picked, moved
 -- on a grid and banded; the view panned by the middle button and zoomed
 -- by Ctrl and the wheel; a wire pulled between ports; a polygon drawn; a
 -- dock's tab dragged onto another stack's edge, closed, and walked by keys.

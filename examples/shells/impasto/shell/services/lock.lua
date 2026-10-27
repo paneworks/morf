@@ -108,7 +108,7 @@ local function watch(pid)
   if watch_timer then watch_timer:cancel() end
   s.locked:set(true)
   announce(true)
-  watch_timer = morf.timer(250, function()
+  watch_timer = morf.time.timer(250, function()
     if alive(pid) then
       if not s.secure:get() and exists(M.held_path) then s.secure:set(true) end
       return
@@ -130,8 +130,8 @@ local function launch()
   if not s.pending:get() then return end
   s.pending:set(false)
   fs.remove(M.held_path)
-  local ok, pid = pcall(morf.exec_detached, {
-    morf.executable or "morf", morf.shell_path("init.lua"), "--", "lock",
+  local ok, pid = pcall(morf.process.detach, {
+    morf.executable or "morf", morf.paths.shell("init.lua"), "--", "lock",
   })
   if not ok then
     morf.log("error", "impasto: could not start the lock: " .. tostring(pid))
@@ -160,7 +160,7 @@ local function adopt()
   -- Still photographing: look again shortly.
   local tries = 0
   local timer
-  timer = morf.timer(250, function()
+  timer = morf.time.timer(250, function()
     tries = tries + 1
     local now = (fs.read(claim_file) or ""):match("^(%d+)$")
     if now and alive(now) then
@@ -214,7 +214,7 @@ function M.lock()
     settle = theme.duration_morph() + 60
   end
   -- Lock anyway if the picture never comes.
-  morf.timer(settle + 2500, function()
+  morf.time.timer(settle + 2500, function()
     if s.pending:get() then
       morf.log("warn", "impasto: the desk did not come back in time; locking without it")
       launch()
@@ -224,7 +224,7 @@ function M.lock()
   -- closed island to be what is on screen. Every output is photographed,
   -- so each lock surface lies over its own desk; the lock goes up once the
   -- last picture is blurred (or failed).
-  morf.timer(settle, function()
+  morf.time.timer(settle, function()
     local outputs = {}
     for _, screen in ipairs(morf.screens or {}) do
       if screen.name and screen.name ~= "" then outputs[#outputs + 1] = screen.name end
@@ -298,7 +298,7 @@ local function now_ms() return morf.time.now_ms() end
 local function drowse()
   drowse_generation = drowse_generation + 1
   local mine = drowse_generation
-  morf.timer(M.AWAKE_FOR, function()
+  morf.time.timer(M.AWAKE_FOR, function()
     if mine ~= drowse_generation then return end
     -- A password being checked is not a screen left alone.
     if st.authenticating then drowse() else M.rest() end
@@ -352,7 +352,7 @@ function M.release()
   st.leaving = true
   clear()
   if face_session then face_session:cancel() face_session = nil end
-  morf.timer(theme.duration_morph(), function()
+  morf.time.timer(theme.duration_morph(), function()
     remove_pictures()
     fs.remove(M.held_path)
     morf.surface.session_lock = false
@@ -457,7 +457,7 @@ function M.scan()
   if not st.face_ready or st.leaving or st.face_matched or face_session then return end
   -- Only while the compositor says the session is hidden (upstream's
   -- `secure`): the camera is never for a lock that is not up.
-  if M.holding and morf.session_lock_state() ~= "locked" then return end
+  if M.holding and morf.lock.state:get() ~= "locked" then return end
   local conversation = morf.pam.session("impasto-face", account.user)
   face_session = conversation
   local looked = false
@@ -477,7 +477,7 @@ function M.scan()
       if st.leaving or not st.awake then return end
       if m.ok then
         st.face_matched = true
-        morf.timer(FACE_HOLD, M.release, false)
+        morf.time.timer(FACE_HOLD, M.release, false)
         return
       end
       -- A refusal with nothing said first is howdy declining to look (no
@@ -503,7 +503,7 @@ function M.begin_lock_process(hold)
   -- shell (which suspends only then). A refused lock, or one the
   -- compositor ends by itself, ends this process: the shell sees it go and
   -- knows the session is not hidden.
-  morf.on_session_lock_state(function(state)
+  morf.lock.on_state(function(state)
     if state == "locked" then
       fs.write(M.held_path, tostring(morf.process_id or ""))
     elseif state == "failed" or (state == "unlocked" and not st.leaving) then

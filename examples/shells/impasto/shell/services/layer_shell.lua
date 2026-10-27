@@ -13,7 +13,7 @@
 local M = {}
 
 M.available = morf.signal("impasto.layer_shell", false)
-morf.timer(1, function()
+morf.time.timer(1, function()
   local caps = morf.capabilities or {}
   M.available:set(caps.layer_surfaces == true or caps.layer_shell == true)
 end, false)

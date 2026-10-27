@@ -1,5 +1,5 @@
 -- A list of installed families, each row drawn in the family it names
--- (FontPicker). The families come from `morf.font_families()`, the faces
+-- (FontPicker). The families come from `morf.text.families()`, the faces
 -- the shaper can actually use, so a typed name can never look applied when
 -- it is not.
 --
@@ -32,7 +32,7 @@ local families
 local function all()
   if not families then
     families = {}
-    local ok, list = pcall(morf.font_families)
+    local ok, list = pcall(morf.text.families)
     for _, name in ipairs(ok and list or {}) do families[#families + 1] = name end
     table.sort(families, function(a, b) return a:lower() < b:lower() end)
   end

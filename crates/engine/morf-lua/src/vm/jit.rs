@@ -14,7 +14,7 @@ use crate::vm::types::Runtime;
 /// Whether `MORF_JIT` asks for the interpreter alone.
 #[cfg(feature = "jit")]
 fn wanted() -> bool {
-    !std::env::var("MORF_JIT").is_ok_and(|value| value == "off" || value == "0")
+    !morf_value::env::var("MORF_JIT").is_some_and(|value| value == "off" || value == "0")
 }
 
 /// Turns the native tier on for a fresh VM, when built in and wanted.

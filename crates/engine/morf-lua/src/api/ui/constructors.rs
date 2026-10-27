@@ -15,7 +15,7 @@ use crate::{
 
 mod views;
 
-pub(crate) use views::{construct_view, view_constructor};
+pub(crate) use views::view_constructor;
 
 pub(crate) fn element_constructor<'gc>(
     ctx: Context<'gc>,

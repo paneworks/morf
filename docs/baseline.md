@@ -74,7 +74,7 @@ lyrics with python3 on PATH.
 The desk layout, v0.2.8 against develop under identical conditions: caelestia
 in the sandbox with `MONITORS="3840x2160 3840x2160 3456x2160"`, one run per
 build per round, three rounds alternating, each run the same script
-(`cpu-active.steps` between two `@wakes` reads) with `MORF_FRAME_LOG=1`.
+(`cpu-active.steps` between two `@wakes` reads) with `MORF_LOG=frame`.
 Frames are the `frame on <output> took` lines, the first frame of a run left
 out; CPU is the process's share in each `cpu-active` phase.
 
@@ -135,7 +135,7 @@ was rung ~2950 times and B and C ~270 each.
 
 Each PLAN item on its own at the desk layout: the commit before it and the
 commit that adds it, the same script (`cpu-active.steps`, `cpu-idle.steps`
-for 4.3) with `MORF_FRAME_LOG=2 MORF_FRAME_SPLIT_MS=0`, two runs each; stage
+for 4.3) with `MORF_PROFILE=frame_split=0`, two runs each; stage
 totals over a run, CPU per frame on each output, the first frame left out.
 
 ```

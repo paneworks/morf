@@ -80,22 +80,6 @@ pub(super) fn install_status_notifier<'gc>(
 
 /// Installs `morf.xkb`.
 pub(super) fn install_xkb<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
-    let xkb_compile = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let options: Table = stack.consume(ctx)?;
-        let rules = table_string(ctx, options, "rules", "").map_err(HostError)?;
-        let model = table_string(ctx, options, "model", "pc105").map_err(HostError)?;
-        let layout = table_string(ctx, options, "layout", "us").map_err(HostError)?;
-        let variant = table_string(ctx, options, "variant", "").map_err(HostError)?;
-        let xkb_options = match options.get_value(ctx, "options") {
-            LuaValue::Nil => None,
-            LuaValue::String(value) => Some(value.display_lossy().to_string()),
-            _ => return Err(HostError("XKB options must be a string".into()).into()),
-        };
-        let keymap = XkbKeymap::compile(&rules, &model, &layout, &variant, xkb_options.as_deref())
-            .map_err(|error| HostError(error.to_string()))?;
-        stack.replace(ctx, xkb_keymap_to_lua(ctx, &keymap));
-        Ok(CallbackReturn::Return)
-    });
     let xkb_include_paths = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
         let paths = Table::new(&ctx);
         for (index, path) in morf_system::xkb_include_paths().into_iter().enumerate() {
@@ -105,7 +89,6 @@ pub(super) fn install_xkb<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
         Ok(CallbackReturn::Return)
     });
     let xkb = Table::new(&ctx);
-    xkb.set_field(ctx, "compile", xkb_compile);
     xkb.set_field(ctx, "include_paths", xkb_include_paths);
     morf.set_field(ctx, "xkb", xkb);
 }

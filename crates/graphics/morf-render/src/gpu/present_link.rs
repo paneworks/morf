@@ -64,7 +64,7 @@ fn agreed(device: &wgpu::Device, sink: &dyn BufferSink, format: PresentFormat) -
     } else {
         shared
     };
-    if std::env::var_os("MORF_GPU_LOG").is_some() {
+    if morf_value::env::log("gpu") {
         eprintln!(
             "morf: gpu: {format:?} present modifiers: ours {}, the compositor's {}, used {}",
             dmabuf::modifier_names(&ours),

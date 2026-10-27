@@ -65,7 +65,7 @@ pub enum Turn {
 
 /// One output's windows on a backend.
 pub struct Host {
-    pub(crate) native_contacts: crate::host::provider::handoff::Contacts,
+    pub(crate) native_contacts: crate::provider::shell::handoff::Contacts,
     pub(crate) runtime_generation: u64,
     /// Witnessed the primary surface's configure on this backend generation.
     pub(crate) primary_configured: bool,
@@ -307,9 +307,6 @@ impl Host {
         for surface in self.state.windows.values_mut() {
             surface.layout = None;
         }
-        if self.desktop.capabilities().gamma_control {
-            let _ = self.desktop.reset_gamma(None);
-        }
         Ok(())
     }
 
@@ -351,7 +348,7 @@ impl Host {
         }
     }
 
-    /// `MORF_JIT_LOG`: what the native Lua tier has run, every ten seconds.
+    /// `MORF_LOG=jit`: what the native Lua tier has run, every ten seconds.
     fn report_jit(&mut self, runtime: &Runtime) {
         if jit_log_wanted()
             && self
@@ -396,12 +393,10 @@ fn complain_layout(name: &str, error: &str, last: &mut Option<Instant>) {
     eprintln!("morf: output {name}: frame skipped: {error}");
 }
 
-/// Whether `MORF_JIT_LOG` asks for the native Lua tier's counters.
+/// Whether `MORF_LOG=jit` asks for the native Lua tier's counters.
 fn jit_log_wanted() -> bool {
     static WANTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *WANTED.get_or_init(|| {
-        std::env::var_os("MORF_JIT_LOG").is_some_and(|value| !value.is_empty() && value != "0")
-    })
+    *WANTED.get_or_init(|| morf_value::env::log("jit"))
 }
 
 /// [`crate::host::run::slow`], when the host reports slow stages: a host

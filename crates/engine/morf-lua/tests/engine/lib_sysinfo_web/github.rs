@@ -52,7 +52,7 @@ fn github_reads_the_contributions_page() {
     let text = run(
         &format!(
             r##"
-            local github = require("lib.integrations.github")
+            local github = require("services.github_calendar")
             local octo = github.new {{ user = "octo", base_url = "{base}", cache_dir = "{cache}",
               today = function() return "2026-01-20" end }}
             local reported = false
@@ -71,7 +71,7 @@ fn github_reads_the_contributions_page() {
                 assert(calendar.today == 0 and calendar.max == 1200)
                 assert(#calendar.weeks == 3 and calendar.weeks[3][1].date == "2026-01-18")
                 assert(calendar.source == "page")
-                morf.timer(1, function()
+                morf.time.timer(1, function()
                   -- Fresh in the cache: a second reader asks nobody.
                   local again = github.new {{ user = "octo", base_url = "http://127.0.0.1:9",
                     cache_dir = "{cache}", today = function() return "2026-01-19" end }}
@@ -81,7 +81,7 @@ fn github_reads_the_contributions_page() {
                     if value.available and not seen_again then
                       seen_again = true
                       -- Yesterday's view: 1200 today, a streak of two.
-                      morf.timer(1, function()
+                      morf.time.timer(1, function()
                         note(value.total .. " " .. value.current_streak .. " " .. value.today)
                         note("done")
                       end, false)
@@ -120,7 +120,7 @@ fn github_asks_graphql_with_a_token() {
     let text = run(
         &format!(
             r##"
-            local github = require("lib.integrations.github")
+            local github = require("services.github_calendar")
             local octo = github.new {{ user = "octo", token = "secret", api_url = "{base}/graphql",
               cache_dir = "{cache}", today = function() return "2026-01-20" end }}
             local reported = false
@@ -129,7 +129,7 @@ fn github_asks_graphql_with_a_token() {
               if calendar.available and not reported then
                 reported = true
                 local d = calendar.days
-                morf.timer(1, function()
+                morf.time.timer(1, function()
                   note(calendar.source .. " " .. calendar.total .. " " .. #d .. " " .. d[2].level .. " "
                     .. calendar.current_streak .. " " .. calendar.longest_streak)
                   note("done")

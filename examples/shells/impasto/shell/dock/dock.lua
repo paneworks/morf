@@ -97,7 +97,7 @@ function M.on_hover(over)
     s.peeked:set(true)
     return
   end
-  morf.timer(350, function()
+  morf.time.timer(350, function()
     if mine == hover_generation then s.peeked:set(false) end
   end, false)
 end

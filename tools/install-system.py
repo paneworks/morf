@@ -103,7 +103,7 @@ def stage_runtime(directory, binary):
 
 def selected_example():
     root = Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'morf/default'
-    return root.resolve().name if root.is_symlink() else 'eva'
+    return root.resolve().name if root.is_symlink() else 'impasto'
 
 
 def stage_config(directory, example):

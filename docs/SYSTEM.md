@@ -24,8 +24,8 @@ platform   morf-app       our own windowing: window kinds, one event type,  valu
                           outputs, input, cursors; Wayland and headless
                           backends behind the Backend trait
 platform   morf-desktop   the desktop protocols behind the Desktop trait:   app value
-                          capture, gamma, data-control clipboard,
-                          workspaces, foreign toplevels, idle, output
+                          capture, data-control clipboard,
+                          foreign toplevels, idle, output
                           power; on their own Wayland queue, or headless
 platform   morf-io        processes, files, sockets, D-Bus, HTTP            value
 platform   morf-audio     PipeWire                                          io value
@@ -65,7 +65,7 @@ frames, pointer, keys, touch, drags. morf-host routes each to the window it
 names (`Windows`, one map keyed by `WindowId`) and hands input to the
 runtime. Handlers run; their writes mark effects dirty in the reactive
 graph, and one flush re-runs them. What a handler asked of the platform --
-a capture, the clipboard, gamma, a drag -- is queued as a request and
+a capture, the clipboard, a drag -- is queued as a request and
 carried out by the host against morf-app or morf-desktop. The host lays the
 scene out and paints the windows that owe a frame; morf-render draws into
 the `RenderTarget` the backend handed out, presenting dmabufs through the
@@ -95,7 +95,7 @@ that carries a test's clicks and keys to the host's own pointer and key
 paths, and a clock that moves only when told (with the runtime's virtual
 one), so the same spec fires the same timers and frame callbacks every run.
 The desktop protocols there are morf-desktop's `HeadlessDesktop`: no
-capabilities, empty workspace and window lists, every request it is
+capabilities, an empty window list, every request it is
 handed recorded.
 With no GPU the host's `Painter` is a text system: every window is laid
 out, observed and given its input region and frames, and nothing is drawn;
@@ -106,7 +106,7 @@ problems too.
 ## What a configuration may do
 
 A configuration is a program, run with your privileges. Nothing sandboxes
-it: it can start programs (`morf.run`, `morf.spawn`), read and write your
+it: it can start programs (`morf.process.run`, `morf.process.spawn`), read and write your
 files, open sockets and fetch from the network, talk to the session and
 system buses, and ask PAM to authenticate. Run one you would not run as a
 shell script.

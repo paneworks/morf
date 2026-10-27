@@ -254,7 +254,7 @@ function Checker:_aur(result, next)
       end
       local parts = {}
       for index = batch_start, math.min(#names, batch_start + 99) do
-        parts[#parts + 1] = "arg[]=" .. morf.http.url_encode(names[index])
+        parts[#parts + 1] = "arg[]=" .. morf.encoding.url_encode(names[index])
       end
       batch_start = batch_start + 100
       morf.http.get(self.aur_url .. "?" .. table.concat(parts, "&"), { timeout_ms = 20000 }, function(response)

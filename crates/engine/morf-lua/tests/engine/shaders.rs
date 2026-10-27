@@ -1,6 +1,6 @@
 use super::*;
 
-// `morf.shader` end to end through a configuration: registration, compilation,
+// `morf.shader.define` end to end through a configuration: registration, compilation,
 // attachment, and the two things the compiler derives that nothing declares.
 
 #[test]
@@ -12,7 +12,7 @@ fn a_configuration_registers_and_attaches_a_shader() {
             r#"
             local morf = require("morf")
             local ui = require("morf.ui")
-            morf.shader("tint", {
+            morf.shader.define("tint", {
               params = { level = 0.5 },
               fragment = [[
                 function fragment(uv, time, resolution, coverage, level)
@@ -71,7 +71,7 @@ fn a_shader_that_does_not_compile_fails_the_configuration() {
             "shader.lua",
             r#"
             local morf = require("morf")
-            morf.shader("broken", {
+            morf.shader.define("broken", {
               fragment = [[
                 function fragment(uv)
                   if uv.x then
@@ -114,7 +114,7 @@ fn shader_runtime(body: &str) -> Runtime {
             format!(
                 r#"
                 local morf = require("morf")
-                morf.shader("probe", {{ fragment = [[{body}]] }})
+                morf.shader.define("probe", {{ fragment = [[{body}]] }})
                 "#
             )
             .as_bytes(),
@@ -135,7 +135,7 @@ fn a_configuration_fills_a_data_block() {
             r#"
             local morf = require("morf")
             local ui = require("morf.ui")
-            morf.shader("bars", {
+            morf.shader.define("bars", {
               data = { levels = 4 },
               fragment = [[
                 function fragment(uv, time, resolution, coverage)
@@ -145,8 +145,8 @@ fn a_configuration_fills_a_data_block() {
               ]],
             })
             local node = ui.Rect { width = 40, height = 10, shader = "bars" }
-            morf.shader_data(node, "levels", { 0.25, 0.5, 0.75, 1.0 })
-            morf.ipc.push = function() morf.shader_data(node, "levels", { 1, 1, 1, 1 }) end
+            morf.shader.data(node, "levels", { 0.25, 0.5, 0.75, 1.0 })
+            morf.ipc.push = function() morf.shader.data(node, "levels", { 1, 1, 1, 1 }) end
             morf.ipc.nothing = function() end
             ui.Item { node }
             "#
@@ -167,7 +167,7 @@ fn pushing_to_a_block_that_does_not_exist_says_so() {
             r#"
             local morf = require("morf")
             local ui = require("morf.ui")
-            morf.shader("bars", {
+            morf.shader.define("bars", {
               data = { levels = 2 },
               fragment = [[
                 function fragment(uv, time, resolution, coverage)
@@ -176,7 +176,7 @@ fn pushing_to_a_block_that_does_not_exist_says_so() {
               ]],
             })
             local node = ui.Rect { width = 40, height = 10, shader = "bars" }
-            morf.shader_data(node, "mystery", { 1.0 })
+            morf.shader.data(node, "mystery", { 1.0 })
             ui.Item { node }
             "#
             .as_bytes(),
@@ -193,7 +193,7 @@ fn a_vertex_shader_is_compiled_beside_the_fragment_one() {
             "sway.lua",
             r#"
             local morf = require("morf")
-            morf.shader("sway", {
+            morf.shader.define("sway", {
               vertex = [[
                 function vertex(corner, size, time)
                   return corner + vec2(sin(time) * 4.0, 0.0)
@@ -226,7 +226,7 @@ fn a_texture_a_configuration_declares_is_carried_to_the_host() {
             "masked.lua",
             r#"
             local morf = require("morf")
-            morf.shader("masked", {
+            morf.shader.define("masked", {
               textures = { mask = "/tmp/morf-mask.png" },
               fragment = [[
                 function fragment(uv, time, resolution, coverage)

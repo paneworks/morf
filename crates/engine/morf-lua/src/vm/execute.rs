@@ -266,6 +266,31 @@ pub(crate) fn execute_handler_args(
     }
 }
 
+/// Runs a handler with `args`; whether it returned `true`.
+pub(crate) fn execute_handler_answer(
+    ctx: Context<'_>,
+    closure: &Handler,
+    args: &[IpcValue],
+    limits: Limits,
+) -> Result<bool, String> {
+    let args = Variadic(
+        args.iter()
+            .map(|value| value.to_lua(ctx))
+            .collect::<Vec<_>>(),
+    );
+    let function = ctx.fetch(&stashed(closure)?);
+    let _span =
+        crate::profile::span(|| format!("handler {}", crate::profile::closure_origin(function)));
+    let _stage = crate::profile::stage(crate::profile::Stage::Handlers);
+    let executor = Executor::start(ctx, function.into(), args);
+    drive_executor(ctx, executor, limits, limits.effect_fuel, "handler")?;
+    match executor.take_result::<LuaValue>(ctx) {
+        Ok(Ok(value)) => Ok(matches!(value, LuaValue::Boolean(true))),
+        Ok(Err(error)) => Err(error.to_string()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
 pub(crate) fn execute_screencopy_handler(
     ctx: Context<'_>,
     closure: &Handler,

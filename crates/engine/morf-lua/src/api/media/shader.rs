@@ -20,7 +20,7 @@ pub(crate) struct RegisteredShader {
     pub(crate) defaults: Vec<f32>,
 }
 
-/// Installs `morf.shader`.
+/// Installs `morf.shader.define`.
 ///
 /// Compilation happens here, while the configuration is loading and its author
 /// is watching, rather than lazily at first paint: a shader error must be
@@ -37,7 +37,7 @@ pub(crate) fn install_shader_api<'gc>(
         register(&state, ctx, &name, spec).map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "shader", shader);
+    crate::api::namespace::table(ctx, morf, "shader").set_field(ctx, "define", shader);
 
     let state_for_data = Rc::clone(&state_for_api);
     let shader_data = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
@@ -51,7 +51,7 @@ pub(crate) fn install_shader_api<'gc>(
         set_data(&state_for_data, ctx, node.handle, &block, values).map_err(HostError)?;
         Ok(CallbackReturn::Return)
     });
-    morf.set_field(ctx, "shader_data", shader_data);
+    crate::api::namespace::table(ctx, morf, "shader").set_field(ctx, "data", shader_data);
 }
 
 /// Fills one data block of the shader attached to a node.
@@ -311,12 +311,12 @@ pub(crate) fn attach_shader<'gc>(
     let borrowed = state.borrow();
     let Some(shader) = borrowed.shaders().get(name) else {
         return Err(format!(
-            "shader `{name}` was never registered; call morf.shader(\"{name}\", …) first"
+            "shader `{name}` was never registered; call morf.shader.define(\"{name}\", …) first"
         ));
     };
     let program = shader.compiled.hash;
     // A data block starts as zeros: the configuration fills it through
-    // `morf.shader_data`, and a shader reading one before it is written should
+    // `morf.shader.data`, and a shader reading one before it is written should
     // see nothing rather than whatever was in the buffer.
     let data_values: Vec<Vec<f32>> = shader
         .compiled

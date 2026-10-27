@@ -3,7 +3,7 @@
 //!
 //! The registry's binder does the binding; this is the entry point a
 //! configuration calls. It is gated under the `services` permission group,
-//! like `morf.run` under `run`, and `options.owner` ties the binding to a
+//! like `morf.process.run` under `run`, and `options.owner` ties the binding to a
 //! node: removing the node closes the binding, after the node's own
 //! `on_destroyed`. Everything the binding holds -- subscriptions, timers --
 //! belongs to the runtime as well, so a runtime that ends ends them too.

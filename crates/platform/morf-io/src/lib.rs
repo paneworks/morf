@@ -1,6 +1,5 @@
 //! Bounded process, file, socket, and timer primitives for morf.
 
-pub mod archive;
 mod broadcast;
 mod child_signals;
 pub mod codec;
@@ -23,7 +22,6 @@ mod reactor;
 mod reactor_core;
 mod socket_view;
 mod sockets;
-mod streams;
 mod timer;
 mod wake;
 mod watch;
@@ -52,7 +50,6 @@ pub use process_view::*;
 pub use reactor::*;
 pub use socket_view::*;
 pub use sockets::*;
-pub use streams::*;
 pub use timer::*;
 pub use wake::*;
 pub use watch::*;

@@ -83,7 +83,7 @@ morf.effect("impasto.launcher.reset", function()
   first:set(1)
   if keep then
     -- Outside the effect, so it does not follow the count.
-    morf.timer(1, function() select(math.max(1, math.min(keep, L.count:get()))) end, false)
+    morf.time.timer(1, function() select(math.max(1, math.min(keep, L.count:get()))) end, false)
   end
 end)
 
@@ -98,12 +98,12 @@ morf.effect("impasto.launcher.lifecycle", function()
   close_generation = close_generation + 1
   local mine = close_generation
   if open then
-    morf.timer(1, function()
+    morf.time.timer(1, function()
       L.refresh()
       workspaces.reload()
     end, false)
   else
-    morf.timer(theme.duration_morph() + 60, function()
+    morf.time.timer(theme.duration_morph() + 60, function()
       if mine == close_generation and island.state.open_panel() ~= "launcher" then
         L.query:set("")
       end

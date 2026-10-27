@@ -11,6 +11,7 @@ pub(crate) mod kit;
 pub(crate) mod media;
 pub(crate) mod module;
 pub(crate) mod motion;
+pub(crate) mod namespace;
 pub(crate) mod system;
 pub(crate) mod time;
 pub(crate) mod ui;

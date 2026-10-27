@@ -53,7 +53,7 @@ fn packages_asks_pacman_the_aur_and_flatpak() {
                 local key = table.concat(argv, " ")
                 ran[#ran + 1] = key
                 local answer = answers[key] or {{ ok = false, code = 1, stdout = "", stderr = "unknown " .. key }}
-                morf.timer(1, function() on_done(answer) end, false)
+                morf.time.timer(1, function() on_done(answer) end, false)
               end,
             }}
             local reported = false
@@ -69,7 +69,7 @@ fn packages_asks_pacman_the_aur_and_flatpak() {
                 assert(state.aur.updates[1].name == "yay" and state.aur.updates[1].new == "12.4.2-1")
                 assert(state.flatpak.installed == 3 and state.flatpak.count == 1)
                 assert(state.flatpak.updates[1].name == "org.b.App" and state.flatpak.updates[1].new == "3.1")
-                morf.timer(1, function()
+                morf.time.timer(1, function()
                   note(state.total)
                   note(table.concat(ran, "|"))
                   note("done")
@@ -118,7 +118,7 @@ fn packages_without_checkupdates_falls_back_to_pacman_qu() {
               -- pacman -Qu says "nothing" by exiting 1 with no output.
               answer = { ok = false, code = 1, stdout = "", stderr = "" }
             end
-            morf.timer(1, function() on_done(answer) end, false)
+            morf.time.timer(1, function() on_done(answer) end, false)
           end,
         }
         local reported = false
@@ -126,7 +126,7 @@ fn packages_without_checkupdates_falls_back_to_pacman_qu() {
           local state = checker:get()
           if not state.checking and not reported then
             reported = true
-            morf.timer(1, function()
+            morf.time.timer(1, function()
               note(state.pacman.via .. " " .. state.pacman.count .. " " .. state.total .. " " .. #state.errors
                 .. " " .. tostring(state.flatpak) .. " " .. tostring(state.aur))
               note("done")

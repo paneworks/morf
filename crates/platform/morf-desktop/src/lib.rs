@@ -1,7 +1,7 @@
 //! The desktop protocols a shell uses, on the same Wayland connection as its
 //! windows but on an event queue of its own: screen capture (outputs
-//! and windows, into shared memory or dmabufs), gamma ramps, the clipboard
-//! over data control, workspaces, foreign toplevels (listed and acted on),
+//! and windows, into shared memory or dmabufs), the clipboard over data
+//! control, foreign toplevels (listed and acted on),
 //! idle notification and output power.
 //!
 //! The queue is its own because every protocol handler of smithay's toolkit
@@ -16,13 +16,11 @@
 mod capture;
 mod data_control;
 mod desktop;
-mod gamma;
 mod headless;
 mod idle;
 mod output_power;
 mod toplevels;
 mod wayland;
-mod workspaces;
 
 use std::collections::{HashMap, VecDeque};
 
@@ -54,15 +52,10 @@ use wayland_protocols_wlr::screencopy::v1::client::zwlr_screencopy_manager_v1::Z
 
 pub use capture::{CaptureBuffer, ScreencopyFormat, ScreencopyFrame};
 pub use desktop::{Desktop, DesktopCapabilities, IdleTimeout};
-pub use gamma::{
-    GammaSettings, NEUTRAL as NEUTRAL_TEMPERATURE, TEMPERATURE_RANGE, ramps as gamma_ramps,
-    white_point,
-};
 pub use headless::{DesktopRequest, HeadlessDesktop};
 pub use output_power::OutputPowerMode;
 pub use toplevels::{ToplevelAction, ToplevelInfo};
 pub use wayland::connect;
-pub use workspaces::WorkspaceInfo;
 
 /// What the desktop protocols tell the host.
 #[derive(Clone, Debug, PartialEq)]
@@ -125,9 +118,7 @@ pub struct DesktopState {
     /// The output the shell's own surface sits on, by name, when the host
     /// has said: what a request naming no output is for.
     own_output: Option<String>,
-    gamma: gamma::GammaState,
     output_power: output_power::OutputPowerState,
-    workspaces: workspaces::WorkspaceState,
     idle: idle::IdleState,
     clipboard: data_control::ClipboardState,
     /// Shared memory for captures that are not dmabufs.
@@ -191,9 +182,7 @@ impl WaylandDesktop {
             seats: SeatState::new(&globals, &qh),
             events: VecDeque::new(),
             own_output: None,
-            gamma: gamma::GammaState::bind(&globals, &qh),
             output_power: output_power::OutputPowerState::bind(&globals, &qh),
-            workspaces: workspaces::WorkspaceState::bind(&globals, &qh),
             idle: idle::IdleState::bind(&globals, &qh),
             clipboard: data_control::ClipboardState::bind(&globals, &qh),
             shm: Shm::bind(&globals, &qh).ok(),
@@ -289,25 +278,6 @@ impl DesktopState {
                 .is_some_and(|candidate| candidate == name)
         })
     }
-
-    /// The outputs a request is for: the one named, or the one the shell
-    /// sits on, or else every output.
-    fn targets(&self, output: Option<&str>) -> Result<Vec<wl_output::WlOutput>, String> {
-        match output.or(self.own_output.as_deref()) {
-            Some(name) => self
-                .output_named(name)
-                .map(|output| vec![output])
-                .ok_or_else(|| format!("no output named `{name}`")),
-            None => Ok(self.outputs.outputs().collect()),
-        }
-    }
-
-    fn output_name(&self, output: &wl_output::WlOutput) -> String {
-        self.outputs
-            .info(output)
-            .and_then(|info| info.name)
-            .unwrap_or_default()
-    }
 }
 
 impl OutputHandler for DesktopState {
@@ -329,7 +299,6 @@ impl OutputHandler for DesktopState {
         _: &QueueHandle<Self>,
         output: wl_output::WlOutput,
     ) {
-        self.gamma.forget(&output);
         self.output_power.forget(&output);
     }
 }

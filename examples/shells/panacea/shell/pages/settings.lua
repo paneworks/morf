@@ -52,7 +52,7 @@ local function apply()
   local ok = config.save(changes)
   require("notify").silent:set(draft.notifDnd)
   page.saved:set(ok and "Saved. Sizes, fonts and colours apply at the next start." or "Could not write settings.json")
-  morf.timer(4000, function() page.saved:set("") end, false)
+  morf.time.timer(4000, function() page.saved:set("") end, false)
 end
 
 local function reset()

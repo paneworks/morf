@@ -1,12 +1,10 @@
 use luna::{Callback, CallbackReturn, Context, Table, UserData, UserRef, Value as LuaValue};
-use morf_io::{ServerView, SocketView, SplitParser, StreamCollector};
+use morf_io::{ServerView, SocketView};
 use std::cell::RefCell;
 
 use std::rc::Rc;
 
-use crate::{
-    api::ui::scene::*, runtime::state::*, value::lua::*, value::table::*, vm::permissions::gated,
-};
+use crate::{api::ui::scene::*, runtime::state::*, value::lua::*, vm::permissions::gated};
 
 pub(crate) fn install_socket_api<'gc>(
     ctx: Context<'gc>,
@@ -165,7 +163,7 @@ pub(crate) fn install_socket_api<'gc>(
         ctx,
         &state,
         "socket",
-        "morf.socket_server",
+        "morf.socket.server",
         move |ctx, _, mut stack| {
             let path: String = stack.consume(ctx)?;
             let server = ServerView::bind(path).map_err(HostError::from)?;
@@ -180,12 +178,12 @@ pub(crate) fn install_socket_api<'gc>(
             Ok(CallbackReturn::Return)
         },
     );
-    morf.set_field(ctx, "socket_server", socket_server);
+    crate::api::namespace::table(ctx, morf, "socket").set_field(ctx, "server", socket_server);
     let socket = gated(
         ctx,
         &state,
         "socket",
-        "morf.socket",
+        "morf.socket.open",
         move |ctx, _, mut stack| {
             let path: String = stack.consume(ctx)?;
             let socket = SocketView::connect(path).map_err(HostError::from)?;
@@ -200,152 +198,5 @@ pub(crate) fn install_socket_api<'gc>(
             Ok(CallbackReturn::Return)
         },
     );
-    morf.set_field(ctx, "socket", socket);
-
-    let split_push = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (parser, chunk): (UserRef<SplitParserToken>, String) = stack.consume(ctx)?;
-        let values = parser
-            .parser
-            .borrow_mut()
-            .push(chunk.as_bytes())
-            .into_iter()
-            .map(|value| String::from_utf8_lossy(&value).into_owned());
-        stack.replace(ctx, string_table(ctx, values));
-        Ok(CallbackReturn::Return)
-    });
-    let split_finish = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let parser: UserRef<SplitParserToken> = stack.consume(ctx)?;
-        match parser.parser.borrow_mut().finish() {
-            Some(value) => stack.replace(ctx, String::from_utf8_lossy(&value).as_ref()),
-            None => stack.replace(ctx, LuaValue::Nil),
-        }
-        Ok(CallbackReturn::Return)
-    });
-    let split_delimiter = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let parser: UserRef<SplitParserToken> = stack.consume(ctx)?;
-        stack.replace(
-            ctx,
-            String::from_utf8_lossy(parser.parser.borrow().delimiter()).as_ref(),
-        );
-        Ok(CallbackReturn::Return)
-    });
-    let split_set_delimiter = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (parser, delimiter): (UserRef<SplitParserToken>, String) = stack.consume(ctx)?;
-        let values = parser
-            .parser
-            .borrow_mut()
-            .set_delimiter(delimiter.into_bytes())
-            .into_iter()
-            .map(|value| String::from_utf8_lossy(&value).into_owned());
-        stack.replace(ctx, string_table(ctx, values));
-        Ok(CallbackReturn::Return)
-    });
-    let split_methods = Table::new(&ctx);
-    split_methods.set_field(ctx, "push", split_push);
-    split_methods.set_field(ctx, "finish", split_finish);
-    split_methods.set_field(ctx, "delimiter", split_delimiter);
-    split_methods.set_field(ctx, "set_delimiter", split_set_delimiter);
-    let split_metatable = Table::new(&ctx);
-    split_metatable.set_field(ctx, "__index", split_methods);
-    let split_metatable = ctx.stash(split_metatable);
-    let split_parser = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let delimiter: String = stack.consume(ctx)?;
-        let parser = SplitParser::new(delimiter.into_bytes());
-        let userdata = UserData::new_static(
-            &ctx,
-            SplitParserToken {
-                parser: RefCell::new(parser),
-            },
-        );
-        userdata.set_metatable(ctx, Some(ctx.fetch(&split_metatable)));
-        stack.replace(ctx, userdata);
-        Ok(CallbackReturn::Return)
-    });
-    morf.set_field(ctx, "split_parser", split_parser);
-
-    let collector_push = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (collector, chunk): (UserRef<StreamCollectorToken>, String) = stack.consume(ctx)?;
-        let changed = collector
-            .collector
-            .borrow_mut()
-            .push(chunk.as_bytes())
-            .map_err(|error| HostError(error.to_string()))?;
-        stack.replace(ctx, changed);
-        Ok(CallbackReturn::Return)
-    });
-    let collector_finish = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let collector: UserRef<StreamCollectorToken> = stack.consume(ctx)?;
-        stack.replace(ctx, collector.collector.borrow_mut().finish());
-        Ok(CallbackReturn::Return)
-    });
-    let collector_text = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let collector: UserRef<StreamCollectorToken> = stack.consume(ctx)?;
-        stack.replace(ctx, collector.collector.borrow().text());
-        Ok(CallbackReturn::Return)
-    });
-    let collector_data = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let collector: UserRef<StreamCollectorToken> = stack.consume(ctx)?;
-        stack.replace(ctx, ctx.intern(collector.collector.borrow().data()));
-        Ok(CallbackReturn::Return)
-    });
-    let collector_waiting = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let collector: UserRef<StreamCollectorToken> = stack.consume(ctx)?;
-        stack.replace(ctx, collector.collector.borrow().wait_for_end());
-        Ok(CallbackReturn::Return)
-    });
-    let collector_set_waiting = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let (collector, waiting): (UserRef<StreamCollectorToken>, bool) = stack.consume(ctx)?;
-        collector.collector.borrow_mut().set_wait_for_end(waiting);
-        Ok(CallbackReturn::Return)
-    });
-    let collector_finished = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let collector: UserRef<StreamCollectorToken> = stack.consume(ctx)?;
-        stack.replace(ctx, collector.collector.borrow().finished());
-        Ok(CallbackReturn::Return)
-    });
-    let collector_reset = Callback::from_fn(&ctx, |ctx, _, mut stack| {
-        let collector: UserRef<StreamCollectorToken> = stack.consume(ctx)?;
-        collector.collector.borrow_mut().reset();
-        Ok(CallbackReturn::Return)
-    });
-    let collector_methods = Table::new(&ctx);
-    collector_methods.set_field(ctx, "push", collector_push);
-    collector_methods.set_field(ctx, "finish", collector_finish);
-    collector_methods.set_field(ctx, "text", collector_text);
-    collector_methods.set_field(ctx, "data", collector_data);
-    collector_methods.set_field(ctx, "wait_for_end", collector_waiting);
-    collector_methods.set_field(ctx, "set_wait_for_end", collector_set_waiting);
-    collector_methods.set_field(ctx, "finished", collector_finished);
-    collector_methods.set_field(ctx, "reset", collector_reset);
-    let collector_metatable = Table::new(&ctx);
-    collector_metatable.set_field(ctx, "__index", collector_methods);
-    let collector_metatable = ctx.stash(collector_metatable);
-    let stream_collector = Callback::from_fn(&ctx, move |ctx, _, mut stack| {
-        let options: Table = stack.consume(ctx)?;
-        let maximum = match options.get_value(ctx, "maximum_bytes") {
-            LuaValue::Nil => morf_io::DEFAULT_BUFFER,
-            LuaValue::Integer(value) => {
-                morf_io::buffer_limit(value, "stream collector").map_err(HostError::from)?
-            }
-            _ => {
-                return Err(
-                    HostError("stream collector maximum_bytes must be an integer".into()).into(),
-                );
-            }
-        };
-        let wait_for_end =
-            table_bool(ctx, options, "wait_for_end", true).map_err(HostError::from)?;
-        let collector = StreamCollector::new(maximum, wait_for_end)
-            .map_err(|error| HostError(error.to_string()))?;
-        let userdata = UserData::new_static(
-            &ctx,
-            StreamCollectorToken {
-                collector: RefCell::new(collector),
-            },
-        );
-        userdata.set_metatable(ctx, Some(ctx.fetch(&collector_metatable)));
-        stack.replace(ctx, userdata);
-        Ok(CallbackReturn::Return)
-    });
-    morf.set_field(ctx, "stream_collector", stream_collector);
+    crate::api::namespace::table(ctx, morf, "socket").set_field(ctx, "open", socket);
 }

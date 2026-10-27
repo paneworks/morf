@@ -20,11 +20,6 @@ pub const ARCHETYPES: &[&str] = &[
     "Shell",
     "Canvas",
     "Dock",
-    "Transform",
-    "Sheet",
-    "Roving",
-    "Form",
-    "Overflow",
 ];
 
 /// An archetype's slots, in the order they are stacked: the first lowest.
@@ -52,43 +47,9 @@ pub fn slots_of(archetype: &str) -> Option<&'static [&'static str]> {
             "content",
         ],
         "Plane" => &["background", "field", "crosshair", "handle", "content"],
-        // The world's layers, lowest first: a grid, the items (a builder:
-        // the configuration's, or a skin's for a kind of item), the wires,
-        // the selection's outline and handles, the draft, the band, a
-        // crosshair under the pointer, and overlaid controls (zoom buttons,
-        // a minimap, a scale).
         // `tab`, `stack` and `floating` are builders: a tab's look, a
         // stack's frame round its tabs and panel, a floating panel's frame.
         // `divider` is a builder too: the handle between a split's parts.
-        // The box's ground, its frame, the handles (a builder: one per
-        // handle name), the turning handle, a guide while it moves.
-        "Transform" => &[
-            "background",
-            "frame",
-            "handle",
-            "rotate_handle",
-            "guide",
-            "content",
-        ],
-        // `cell` and `header` are builders: a cell's look, a row's or a
-        // column's header; `cursor` the current cell's ring, `range` the
-        // selected range, `editor` the field an edit happens in.
-        "Sheet" => &[
-            "background",
-            "cell",
-            "header",
-            "range",
-            "cursor",
-            "editor",
-            "content",
-        ],
-        // The group's ground and the ring round the member with focus.
-        "Roving" => &["background", "indicator", "separator", "content"],
-        // A form's ground, its summary of what is wrong, and a field's
-        // message (a builder: name, message).
-        "Form" => &["background", "summary", "message", "content"],
-        // The "more" button and its menu's look.
-        "Overflow" => &["background", "more", "menu", "content"],
         "Dock" => &[
             "background",
             "tab",
@@ -98,6 +59,11 @@ pub fn slots_of(archetype: &str) -> Option<&'static [&'static str]> {
             "drop_indicator",
             "content",
         ],
+        // The world's layers, lowest first: a grid, the items (a builder:
+        // the configuration's, or a skin's for a kind of item), the wires,
+        // the selection's outline and handles, the draft, the band, a
+        // crosshair under the pointer, and overlaid controls (zoom buttons,
+        // a minimap, a scale).
         "Canvas" => &[
             "background",
             "grid",

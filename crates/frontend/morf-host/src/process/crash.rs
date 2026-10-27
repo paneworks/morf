@@ -55,12 +55,12 @@ static REPORTED: AtomicBool = AtomicBool::new(false);
 
 /// Installs the panic hook.
 ///
-/// `MORF_DISABLE_CRASH_HANDLER` turns it off, for the case where an outer
+/// `MORF_DEBUG=no_crash_handler` turns it off, for the case where an outer
 /// harness — a debugger, a test runner, a coredump handler — wants the default
-/// behaviour instead. `MORF_CRASH_CORE` asks for a core dump as well as the
+/// behaviour instead. `MORF_DEBUG=crash_core` asks for a core dump as well as the
 /// report, subject to the usual `ulimit -c`.
 pub fn install() {
-    if std::env::var_os("MORF_DISABLE_CRASH_HANDLER").is_some() {
+    if morf_value::env::debug("no_crash_handler") {
         return;
     }
     let previous = panic::take_hook();
@@ -97,7 +97,7 @@ pub fn install() {
         // is the kind where that is the difference between a fix and a guess.
         // Opt-in, because a core of a process holding a GPU context is large
         // and the kernel's own limits decide whether one appears at all.
-        if std::env::var_os("MORF_CRASH_CORE").is_some() {
+        if morf_value::env::debug("crash_core") {
             // SAFETY: a plain signal to ourselves, with no memory arguments.
             unsafe { libc::abort() };
         }
@@ -114,7 +114,7 @@ pub fn install() {
 /// socket is stale and the replacement reclaims it. Opt-in, because a crash
 /// screen on top of a crash is only right when there is a screen to draw on.
 fn show_screen(report: &Path) {
-    let Some(config) = std::env::var_os("MORF_CRASH_SCREEN") else {
+    let Some(config) = morf_value::env::path("MORF_CRASH_SCREEN") else {
         return;
     };
     let Ok(executable) = std::env::current_exe() else {

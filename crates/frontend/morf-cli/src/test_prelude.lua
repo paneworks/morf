@@ -201,7 +201,7 @@ function test.wait(predicate, timeout_ms, message)
 end
 
 -- What the configuration waits on from outside: `pending`, the
--- `morf.request_socket` answers and `morf.connect` connects under way, and
+-- `morf.socket.request` answers and `morf.socket.connect` connects under way, and
 -- `synced`, by path, the last `__morf_test.sync>>` line each connection read.
 function test.io() return host.ipc("__morf_test.io") end
 
@@ -406,7 +406,7 @@ function test.frames() return host.frames() end
 function test.logs(level) return host.logs(level or "debug") end
 function test.clear_logs() host.clear_logs() end
 
--- Fakes what `morf.run` answers for a program, by its name or path:
+-- Fakes what `morf.process.run` answers for a program, by its name or path:
 -- `test.stub_run("nmcli", { stdout = "..." })`, or just the stdout.
 function test.stub_run(program, result)
   if type(result) == "string" then result = { stdout = result } end
@@ -419,7 +419,7 @@ function test.clear_stubs() host.clear_stubs() end
 -- name, in the run's own approvals; the next `test.load` runs it approved.
 function test.approve(name) return host.approve(name) end
 
--- Every command the configuration asked `morf.run` for, stubbed or not.
+-- Every command the configuration asked `morf.process.run` for, stubbed or not.
 function test.runs() return host.runs() end
 
 -- A picture of a surface (default the primary; "screen" for all of them),

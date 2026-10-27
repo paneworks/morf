@@ -142,7 +142,7 @@ pub(crate) fn install_animation_api<'gc>(
 /// Every entry takes the same curve names a behavior's `easing` field accepts,
 /// including a cubic Bezier table.
 pub(crate) fn install_easing_api<'gc>(ctx: Context<'gc>, morf: Table<'gc>) {
-    let easing = Table::new(&ctx);
+    let easing = crate::api::namespace::table(ctx, morf, "easing");
 
     let value = Callback::from_fn(&ctx, |ctx, _, mut stack| {
         let (curve, progress): (LuaValue, f64) = stack.consume(ctx)?;

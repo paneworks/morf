@@ -11,7 +11,7 @@ package.preload.morf = function() return {
     return login
   end},
 } end
-local auth=dofile('library/lib/util/auth.lua')
+local auth=dofile('library/lib/shell/auth/init.lua')
 local function door(opts)
   opts=opts or {}
   opts.user='test-user';opts.session={command={'true'},environment={}}

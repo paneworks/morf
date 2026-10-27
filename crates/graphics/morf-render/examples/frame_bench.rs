@@ -1,6 +1,6 @@
 //! Run with `nixVulkanIntel cargo run --release -p morf-render --example
 //! frame_bench`. Times whole frames through the GPU backend on the dashboard
-//! the draw-list bench paints; `MORF_FRAME_LOG=2 MORF_RENDER_SPLIT_MS=0`
+//! the draw-list bench paints; `MORF_PROFILE=frame_split,render_split=0`
 //! prints where each frame's render went.
 
 use std::time::{Duration, Instant};

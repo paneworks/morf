@@ -1,4 +1,4 @@
-//! `morf.spawn`, `morf.run`, `morf.connect` and `morf.request_socket`: output
+//! `morf.process.spawn`, `morf.process.run`, `morf.socket.connect` and `morf.socket.request`: output
 //! arriving as callbacks, pumped through `poll_services` as the loop does.
 //!
 //! Only real programs with argv, never a shell: `printf`, `cat`, `sleep`,
@@ -52,7 +52,7 @@ fn spawn_delivers_lines_then_the_exit() {
     let mut runtime = start(
         r#"
         lines, exited = {}, nil
-        child = morf.spawn {
+        child = morf.process.spawn {
             command = { "printf", "one\ntwo\n\nlast" },
             on_stdout = function(line) lines[#lines + 1] = line end,
             on_exit = function(code, signal, timed_out)
@@ -80,7 +80,7 @@ fn spawn_writes_stdin_and_reads_it_back_in_chunks() {
     let mut runtime = start(
         r#"
         got, done = "", false
-        cat = morf.spawn {
+        cat = morf.process.spawn {
             command = { "cat" }, stdin = "pipe", lines = false,
             on_stdout = function(chunk) got = got .. chunk end,
             on_exit = function() done = true end,
@@ -101,13 +101,13 @@ fn run_collects_output_codes_and_failures() {
     let mut runtime = start(
         r#"
         results = {}
-        morf.run({ "printf", "%s-%s", "a", "b" }, function(r) results.printf = r end)
-        morf.run({ "false" }, function(r) results.fail = r end)
-        morf.run({ "cat" }, { stdin = "from stdin" }, function(r) results.cat = r end)
-        morf.run({ "/nonexistent/program" }, function(r) results.missing = r end)
+        morf.process.run({ "printf", "%s-%s", "a", "b" }, function(r) results.printf = r end)
+        morf.process.run({ "false" }, function(r) results.fail = r end)
+        morf.process.run({ "cat" }, { stdin = "from stdin" }, function(r) results.cat = r end)
+        morf.process.run({ "/nonexistent/program" }, function(r) results.missing = r end)
         -- Started from inside a callback: no pool, no pre-made views.
-        morf.run({ "printf", "outer" }, function(r)
-            morf.run({ "printf", r.stdout .. "+inner" }, function(n) results.nested = n end)
+        morf.process.run({ "printf", "outer" }, function(r)
+            morf.process.run({ "printf", r.stdout .. "+inner" }, function(n) results.nested = n end)
         end)
         "#,
     );
@@ -131,8 +131,8 @@ fn run_times_out_and_kill_ends_a_child() {
     let mut runtime = start(
         r#"
         results = {}
-        morf.run({ "sleep", "30" }, { timeout_ms = 50 }, function(r) results.slow = r end)
-        sleeper = morf.spawn {
+        morf.process.run({ "sleep", "30" }, { timeout_ms = 50 }, function(r) results.slow = r end)
+        sleeper = morf.process.spawn {
             command = { "sleep", "30" },
             on_exit = function(code, signal) results.killed = { code = code, signal = signal } end,
         }
@@ -158,16 +158,16 @@ fn kill_signals_a_process_by_its_id() {
     let mut runtime = start(
         r#"
         ended = nil
-        sleeper = morf.spawn {
+        sleeper = morf.process.spawn {
             command = { "sleep", "30" },
             on_exit = function(code, signal) ended = signal end,
         }
         -- As a shell that lost the handle would: by the id alone.
-        assert(morf.kill(sleeper:pid(), "INT") == true)
-        assert(require("morf.io").kill == morf.kill)
-        assert(not pcall(morf.kill, 1), "init is refused")
-        assert(not pcall(morf.kill, 0), "a process group is refused")
-        assert(not pcall(morf.kill, sleeper:pid(), "NOPE"), "an unknown signal is an error")
+        assert(morf.process.kill(sleeper:pid(), "INT") == true)
+        assert(require("morf.process").kill == morf.process.kill)
+        assert(not pcall(morf.process.kill, 1), "init is refused")
+        assert(not pcall(morf.process.kill, 0), "a process group is refused")
+        assert(not pcall(morf.process.kill, sleeper:pid(), "NOPE"), "an unknown signal is an error")
         "#,
     );
     wait_for(&mut runtime, "assert(ended == 2, tostring(ended))");
@@ -175,7 +175,7 @@ fn kill_signals_a_process_by_its_id() {
         .execute(
             "gone.lua",
             br#"
-            local ok, err = morf.kill(sleeper_pid_gone or 2147483000, "TERM")
+            local ok, err = morf.process.kill(sleeper_pid_gone or 2147483000, "TERM")
             assert(ok == false and type(err) == "string", "a missing process says why")
             "#,
         )
@@ -189,10 +189,10 @@ fn spawn_strips_ld_library_path_unless_given() {
     let mut runtime = start(
         r#"
         results = {}
-        morf.run({ "env" }, function(r) results.plain = r.stdout end)
-        morf.run({ "env" }, { env = { LD_LIBRARY_PATH = "/mine", MORF_X = "1" } },
+        morf.process.run({ "env" }, function(r) results.plain = r.stdout end)
+        morf.process.run({ "env" }, { env = { LD_LIBRARY_PATH = "/mine", MORF_X = "1" } },
             function(r) results.given = r.stdout end)
-        morf.run({ "env" }, { clear_env = true, env = { ONLY = "this" } },
+        morf.process.run({ "env" }, { clear_env = true, env = { ONLY = "this" } },
             function(r) results.clear = r.stdout end)
         "#,
     );
@@ -215,7 +215,7 @@ fn many_lines_arrive_in_order_across_turns() {
         r#"
         count, ordered, done = 0, true, false
         -- head over a pipe from printf would need a shell; seq is argv too.
-        morf.spawn {
+        morf.process.spawn {
             command = { "seq", "1", "5000" },
             on_stdout = function(line)
                 count = count + 1
@@ -238,10 +238,10 @@ fn huge_output_is_bounded() {
     let mut runtime = start(
         r#"
         results = {}
-        morf.run({ "head", "-c", "20000000", "/dev/zero" }, { max_output = 1000 },
+        morf.process.run({ "head", "-c", "20000000", "/dev/zero" }, { max_output = 1000 },
             function(r) results.capped = r end)
         seen = 0
-        morf.spawn {
+        morf.process.spawn {
             command = { "head", "-c", "3000000", "/dev/zero" }, lines = false,
             max_output = 5000,
             on_stdout = function(chunk) seen = seen + #chunk end,
@@ -264,7 +264,7 @@ fn a_closed_handle_calls_back_no_more() {
     let mut runtime = start(
         r#"
         calls = 0
-        child = morf.spawn {
+        child = morf.process.spawn {
             command = { "seq", "1", "100000" },
             on_stdout = function() calls = calls + 1; child:close() end,
             on_exit = function() calls = calls + 1000 end,
@@ -285,8 +285,8 @@ fn a_closed_handle_calls_back_no_more() {
 fn children_die_with_the_runtime() {
     let runtime = start(
         r#"
-        child = morf.spawn { command = { "sleep", "30" } }
-        kept = morf.spawn { command = { "sleep", "30" }, detached = true }
+        child = morf.process.spawn { command = { "sleep", "30" } }
+        kept = morf.process.spawn { command = { "sleep", "30" }, detached = true }
         require("morf.ui").Text { text = child:pid() .. " " .. kept:pid() }
         "#,
     );
@@ -342,7 +342,7 @@ fn connect_reads_lines_and_chunks_sends_and_sees_the_close() {
         r#"
         events = {{}}
         local function note(text) events[#events + 1] = text end
-        lines = morf.connect {{
+        lines = morf.socket.connect {{
             path = {path:?},
             on_connect = function() note("connect"); lines:send("hello\n") end,
             on_line = function(line) note(line) end,
@@ -364,7 +364,7 @@ fn connect_reads_lines_and_chunks_sends_and_sees_the_close() {
             format!(
                 r#"
                 chunks = ""
-                again = morf.connect {{
+                again = morf.socket.connect {{
                     path = {path:?},
                     on_connect = function() again:send("hello\n") end,
                     on_data = function(chunk) chunks = chunks .. chunk end,
@@ -413,12 +413,12 @@ fn request_socket_answers_refuses_and_times_out() {
     let mut runtime = start(&format!(
         r#"
         got = {{}}
-        morf.request_socket({path:?}, "j/monitors", function(reply, err) got.ok = {{ reply, err }} end)
-        morf.request_socket({path:?}, "silent", function(reply, err) got.slow = {{ reply, err }} end,
+        morf.socket.request({path:?}, "j/monitors", function(reply, err) got.ok = {{ reply, err }} end)
+        morf.socket.request({path:?}, "silent", function(reply, err) got.slow = {{ reply, err }} end,
             {{ timeout_ms = 60 }})
-        morf.request_socket({path:?}, "big", function(reply, err) got.big = {{ reply, err }} end,
+        morf.socket.request({path:?}, "big", function(reply, err) got.big = {{ reply, err }} end,
             {{ max_bytes = 100 }})
-        morf.request_socket({missing:?}, "x", function(reply, err) got.missing = {{ reply, err }} end)
+        morf.socket.request({missing:?}, "x", function(reply, err) got.missing = {{ reply, err }} end)
         "#
     ));
     wait_for(
@@ -451,8 +451,8 @@ fn malformed_calls_raise() {
     }
 }
 
-/// The panacea example's `proc` module, now a thin layer over `morf.run`
-/// and `morf.spawn` with no pool and no tick.
+/// The panacea example's `proc` module, now a thin layer over `morf.process.run`
+/// and `morf.process.spawn` with no pool and no tick.
 #[test]
 fn panacea_proc_runs_and_streams_without_a_tick() {
     let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

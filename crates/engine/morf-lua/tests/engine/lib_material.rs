@@ -1,4 +1,4 @@
-//! `library/lib/util/material.lua`: Material 3 schemes over `morf.color`'s
+//! `library/lib/theme/material.lua`: Material 3 schemes over `morf.color`'s
 //! HCT, and the source colour of a picture.
 
 use std::path::Path;
@@ -14,7 +14,7 @@ fn runtime(source: &str) -> Runtime {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../library"),
     ]);
     let prelude = r#"
-        local material = require("lib.util.material")
+        local material = require("lib.theme.material")
         results = {}
         morf.ipc.result = function(key) return results[key] end
     "#;

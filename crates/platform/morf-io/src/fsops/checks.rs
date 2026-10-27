@@ -105,34 +105,6 @@ pub fn path_is(path: &Path, test: PathTest) -> bool {
     }
 }
 
-/// A piece of a path's text.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PathPart {
-    Basename,
-    /// The parent, `.` for a bare name.
-    Dirname,
-    Extension,
-    Stem,
-}
-
-/// `part` of `path`, empty when it has none.
-pub fn path_part(path: &Path, part: PathPart) -> String {
-    let lossy = |text: &std::ffi::OsStr| text.to_string_lossy().into_owned();
-    let answer = match part {
-        PathPart::Basename => path.file_name().map(lossy),
-        PathPart::Dirname => path.parent().map(|parent| {
-            if parent.as_os_str().is_empty() {
-                ".".to_owned()
-            } else {
-                parent.to_string_lossy().into_owned()
-            }
-        }),
-        PathPart::Extension => path.extension().map(lossy),
-        PathPart::Stem => path.file_stem().map(lossy),
-    };
-    answer.unwrap_or_default()
-}
-
 impl Entry {
     /// A folder, or a link to one.
     pub fn is_dir(&self) -> bool {
@@ -186,14 +158,7 @@ mod tests {
     }
 
     #[test]
-    fn path_parts() {
-        let path = Path::new("dir/name.tar.gz");
-        assert_eq!(path_part(path, PathPart::Basename), "name.tar.gz");
-        assert_eq!(path_part(path, PathPart::Dirname), "dir");
-        assert_eq!(path_part(path, PathPart::Extension), "gz");
-        assert_eq!(path_part(path, PathPart::Stem), "name.tar");
-        assert_eq!(path_part(Path::new("bare"), PathPart::Dirname), ".");
-        assert_eq!(path_part(Path::new("/"), PathPart::Basename), "");
+    fn path_tests() {
         assert!(path_is(Path::new("/"), PathTest::Dir));
         assert!(!path_is(Path::new("/no/such/path"), PathTest::Exists));
     }

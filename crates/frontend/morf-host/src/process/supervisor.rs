@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, mpsc};
 use std::thread::{self};
 use std::time::{Duration, Instant};
@@ -101,8 +101,7 @@ pub fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> Result<(
     let mut source: Arc<[u8]> = source.into();
     let (tx, rx) = mpsc::channel();
     let reload_roots = runtimepath_roots(&path, policy.external_roots);
-    let watch_files = Arc::new(AtomicBool::new(true));
-    let watcher_enabled = Arc::clone(&watch_files);
+    let watcher_enabled = Arc::new(AtomicBool::new(true));
     let reload_tx = tx.clone();
     thread::spawn(move || {
         follow_lua_files(&reload_roots, &watcher_enabled, |_| {
@@ -131,7 +130,7 @@ pub fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> Result<(
         Err(error) => (None, 0, Some(error)),
     };
     let mut workers = BTreeMap::new();
-    // The runtime that does what must be done once (`morf.primary()`).
+    // The runtime that does what must be done once (`morf.window.primary()`).
     let mut primary: Option<String> = None;
     let mut daemon_logs = Vec::new();
     let mut closures = VecDeque::new();
@@ -377,9 +376,6 @@ pub fn supervise(path: PathBuf, source: Vec<u8>, policy: LoadPolicy) -> Result<(
                 stop_workers(workers);
                 drop(server);
                 return Ok(());
-            }
-            Ok(SupervisorMessage::WatchFiles(enabled)) => {
-                watch_files.store(enabled, Ordering::Release);
             }
             Err(_) => return Err("all output workers stopped".to_owned()),
         }

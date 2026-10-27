@@ -73,7 +73,7 @@ pub struct WorkerStart {
     pub seed: Option<Seed>,
     /// Where this worker leaves its own when it ends.
     pub handover: Handover,
-    /// Whether its runtime starts as the primary one (`morf.primary()`).
+    /// Whether its runtime starts as the primary one (`morf.window.primary()`).
     pub primary: bool,
     /// What its commands ring, claimed by the thread that runs it.
     pub alarm: crate::lock::WorkerAlarm,
@@ -156,7 +156,7 @@ pub fn reconcile_workers(
     );
 }
 
-/// Which runtime is the primary one (`morf.primary()`), given the one that
+/// Which runtime is the primary one (`morf.window.primary()`), given the one that
 /// is now and the runtimes there are to be.
 ///
 /// Exactly one while there is any runtime at all: the one that is stays, so

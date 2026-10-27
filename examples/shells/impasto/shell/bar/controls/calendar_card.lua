@@ -26,7 +26,7 @@ M.WEEKDAYS = { "M", "T", "W", "T", "F", "S", "S" }
 -- Today, as "YYYY-MM-DD": nothing here changes sooner than midnight, so
 -- the grid follows this rather than the second hand.
 M.today = morf.signal("impasto.calendar.today", morf.time.format("%Y-%m-%d"))
-morf.timer(30000, function()
+morf.time.timer(30000, function()
   local now = morf.time.format("%Y-%m-%d")
   if now ~= M.today:get() then M.today:set(now) end
 end, true)

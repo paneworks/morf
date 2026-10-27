@@ -98,7 +98,7 @@ impl Drop for Fixture {
 /// Lua source for a harmless spawn: `touch` the marker.
 pub(super) fn touch(marker: &Path) -> String {
     format!(
-        r#"morf.spawn {{ command = {{ "touch", "{}" }} }}"#,
+        r#"morf.process.spawn {{ command = {{ "touch", "{}" }} }}"#,
         marker.display()
     )
 }

@@ -3,7 +3,7 @@
 
 use morf_app::Backend;
 use morf_desktop::{Desktop, DesktopEvent, ToplevelAction};
-use morf_lua::{Runtime, Toplevel, Workspace, WorkspaceRequest};
+use morf_lua::{Runtime, Toplevel};
 use morf_paint::RenderEngine;
 use morf_render::WgpuBackend;
 
@@ -11,8 +11,8 @@ use crate::capture::{
     OfferedCapture, answer_capture_offer, apply_screencopy_requests, dispatch_screencopy,
 };
 use crate::process::services::{
-    apply_clipboard_requests, apply_gamma_requests, apply_input_method_requests,
-    apply_output_power_requests, apply_text_input_requests, apply_virtual_keyboard_requests,
+    apply_clipboard_requests, apply_input_method_requests, apply_output_power_requests,
+    apply_text_input_requests, apply_virtual_keyboard_requests,
 };
 
 /// The desktop protocols on `client`'s connection; a request naming no
@@ -114,11 +114,8 @@ pub fn apply_service_requests(
     // The rest is the desktop protocols'. Each is taken from the queue
     // whatever the desktop can do, and handed on only where it can.
     apply_output_power_requests(runtime, desktop);
-    apply_gamma_requests(runtime, desktop);
     apply_screencopy_requests(runtime, desktop);
     publish_windows(runtime, desktop);
-    publish_workspaces(runtime, desktop);
-    apply_workspace_requests(runtime, desktop);
     apply_toplevel_requests(runtime, desktop);
 }
 
@@ -151,34 +148,6 @@ fn publish_windows(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
     runtime.set_windows(&windows);
 }
 
-/// Hands the compositor's workspace list to the configuration, when it changed.
-///
-/// The same contract as the window list above, and rebuilt the same way for the
-/// same reason.
-fn publish_workspaces(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
-    if !desktop.capabilities().workspaces || !desktop.take_workspaces_changed() {
-        return;
-    }
-    let workspaces: Vec<Workspace> = desktop
-        .workspaces()
-        .into_iter()
-        .map(|workspace| Workspace {
-            key: workspace.key,
-            id: workspace.id,
-            name: workspace.name,
-            coordinates: workspace.coordinates,
-            output: workspace.output,
-            active: workspace.active,
-            urgent: workspace.urgent,
-            hidden: workspace.hidden,
-            activatable: workspace.activatable,
-            removable: workspace.removable,
-            assignable: workspace.assignable,
-        })
-        .collect();
-    runtime.set_workspaces(&workspaces);
-}
-
 /// Acts on other windows, if the configuration asked.
 fn apply_toplevel_requests(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
     let requests = runtime.take_toplevel_requests();
@@ -204,20 +173,5 @@ fn apply_toplevel_requests(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
             _ => continue,
         };
         desktop.control_toplevel(&request.identifier, action);
-    }
-}
-
-/// Acts on workspaces, if the configuration asked.
-fn apply_workspace_requests(runtime: &mut Runtime, desktop: &mut dyn Desktop) {
-    let requests = runtime.take_workspace_requests();
-    if !desktop.capabilities().workspaces {
-        return;
-    }
-    for request in requests {
-        match request {
-            WorkspaceRequest::Activate(key) => desktop.activate_workspace(&key),
-            WorkspaceRequest::Remove(key) => desktop.remove_workspace(&key),
-            WorkspaceRequest::Assign { key, output } => desktop.assign_workspace(&key, &output),
-        };
     }
 }

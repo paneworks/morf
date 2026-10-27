@@ -11,15 +11,14 @@ pub(super) fn install_changes<'gc>(
     fs: Table<'gc>,
     state: &std::rc::Rc<StateCell<ReactiveState>>,
 ) {
-    let write = |append: bool| {
-        let api = if append {
-            "morf.fs.append"
-        } else {
-            "morf.fs.write"
-        };
-        gated_write(ctx, state, api, &[0], move |ctx, _, mut stack| {
+    let write = gated_write(
+        ctx,
+        state,
+        "morf.fs.write",
+        &[0],
+        move |ctx, _, mut stack| {
             let (path, data, opts): (LuaValue, LuaValue, LuaValue) = stack.consume(ctx)?;
-            let what = if append { "fs.append" } else { "fs.write" };
+            let what = "fs.write";
             let path = path_of(path, what)?;
             let data = bytes_of(data, what)?;
             ops::check_write(data, what).map_err(HostError::from)?;
@@ -28,8 +27,9 @@ pub(super) fn install_changes<'gc>(
                 .map(ops::file_mode)
                 .transpose()
                 .map_err(HostError::from)?;
+            let append = flag(ctx, opts, "append", false)?;
             let write_options = ops::WriteOptions {
-                append: append || flag(ctx, opts, "append", false)?,
+                append,
                 atomic: flag(ctx, opts, "atomic", !append)?,
                 parents: flag(ctx, opts, "parents", true)?,
                 mode,
@@ -39,10 +39,9 @@ pub(super) fn install_changes<'gc>(
                 Err(error) => fail!(stack, ctx, error),
             }
             Ok(CallbackReturn::Return)
-        })
-    };
-    fs.set_field(ctx, "write", write(false));
-    fs.set_field(ctx, "append", write(true));
+        },
+    );
+    fs.set_field(ctx, "write", write);
 
     fs.set_field(
         ctx,
@@ -126,18 +125,15 @@ pub(super) fn install_changes<'gc>(
         }),
     );
 
-    for (name, realpath) in [("read_link", false), ("realpath", true)] {
+    {
+        let name = "read_link";
         fs.set_field(
             ctx,
             name,
             Callback::from_fn(&ctx, move |ctx, _, mut stack| {
                 let path: LuaValue = stack.consume(ctx)?;
                 let path = path_of(path, name)?;
-                let result = if realpath {
-                    ops::realpath(&path)
-                } else {
-                    ops::read_link(&path)
-                };
+                let result = ops::read_link(&path);
                 match result {
                     Ok(found) => stack.replace(ctx, text(&found)),
                     Err(error) => fail!(stack, ctx, error),

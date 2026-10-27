@@ -41,7 +41,7 @@ fn a_busy_timer_is_charged_to_handlers_and_not_to_the_flush() {
             br#"
                 local fired = 0
                 morf.ipc.fired = function() return fired end
-                morf.timer(16, function()
+                morf.time.timer(16, function()
                     local sum = 0
                     for i = 1, 200000 do sum = sum + i end
                     fired = fired + 1
@@ -78,7 +78,7 @@ fn bindings_a_timer_wakes_are_charged_to_the_flush() {
                         return tostring(tick:get() + sum % 2)
                     end,
                 }
-                morf.timer(16, function() tick:set(tick:get() + 1) end)
+                morf.time.timer(16, function() tick:set(tick:get() + 1) end)
             "#,
         )
         .unwrap();

@@ -1,6 +1,6 @@
 local test=morf.test
 local HOST=[[
-  local db=require("lib.services.dbus_client")
+  local db=require("lib.services.dbus")
   local NM="org.freedesktop.NetworkManager"
   local ROOT="/org/freedesktop/NetworkManager"
   local MM="org.freedesktop.ModemManager1"
@@ -44,7 +44,6 @@ local HOST=[[
   end
   db.new=function() return client end
   local net=require("lib.services.networkmanager").connect()
-  local modem=require("lib.services.modem").connect()
   local answer
   morf.ipc.create=function()
     local ok,err=net.connect_mobile(function(value) answer=value end)
@@ -53,14 +52,10 @@ local HOST=[[
   morf.ipc.change=function(what)
     if what=="saved" then saved=true net.refresh()
     elseif what=="no-device" then device=false net.refresh()
-    elseif what=="device-back" then device=true net.refresh()
-    elseif what=="no-sim" then modem_props.Sim="/" properties[MP](MM..".Modem",{Sim="/"},{})
-    elseif what=="manager-gone" then owned=false watches[NM]()
-    elseif what=="manager-back" then owned=true watches[NM]() end
+    elseif what=="device-back" then device=true net.refresh() end
   end
   morf.ipc.read=function()
-    return {available=modem.state.available,profile=net.state.known_connections:get(1),sim=modem.state.sim_present,
-      roaming=modem.state.roaming,data=modem.state.data}
+    return {profile=net.state.known_connections:get(1)}
   end
 ]]
 test.it("mobile setup types its D-Bus arguments and reuses an existing GSM profile",function()
@@ -82,21 +77,9 @@ test.it("mobile setup types its D-Bus arguments and reuses an existing GSM profi
   test.eq(result.calls[2].method,"ActivateConnection")
   test.eq(result.calls[2].args[1].value,"/org/freedesktop/NetworkManager/Settings/1")
 end)
-test.it("cached engines detect modems despite unsupported UnlockRetries dictionaries",function()
-  test.load("mobile-service-fixture.lua",{source=HOST,size={20,20},env={MOBILE_LEGACY="1"}})
-  test.truthy(test.ipc("read").available) test.truthy(test.ipc("read").sim)
-  test.ipc("change","no-device") test.advance(10001)
-  test.falsy(test.ipc("read").available)
-  test.ipc("change","device-back") test.advance(10001)
-  test.truthy(test.ipc("read").available)
-end)
-test.it("mobile setup refuses absent hardware and modem follows SIM and manager changes",function()
+test.it("mobile setup refuses absent hardware",function()
   test.load("mobile-service-fixture.lua",{source=HOST,size={20,20}})
   test.ipc("change","no-device")
   local result=test.ipc("create")
   test.falsy(result.ok) test.eq(result.error,"no managed modem") test.eq(#result.calls,0)
-  test.truthy(test.ipc("read").sim) test.truthy(test.ipc("read").roaming)
-  test.ipc("change","no-sim") test.falsy(test.ipc("read").sim)
-  test.ipc("change","manager-gone") test.falsy(test.ipc("read").data)
-  test.ipc("change","manager-back") test.truthy(test.ipc("read").data)
 end)

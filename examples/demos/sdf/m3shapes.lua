@@ -1,10 +1,10 @@
--- Material 3's expressive shapes from lib/util/m3shapes.lua: every one, and one
+-- Material 3's expressive shapes from lib/theme/shapes.lua: every one, and one
 -- that morphs through them all.
 --
 --   morf render examples/demos/sdf/m3shapes.lua -o shapes.png
 
 local ui = require("morf.ui")
-local shapes = require("lib.util.m3shapes")
+local shapes = require("lib.theme.shapes")
 
 local COLS, CELL = 8, 110
 local rows = math.ceil(#shapes.NAMES / COLS) + 1
@@ -29,7 +29,7 @@ end
 
 -- One shape stepping through the library, a second at a time.
 local step = morf.signal("m3shapes.step", 1)
-morf.timer(1000, function() step:set(step:get() % #shapes.NAMES + 1) end, true)
+morf.time.timer(1000, function() step:set(step:get() % #shapes.NAMES + 1) end, true)
 cells[#cells + 1] = shapes.Shape {
   x = 10, y = 10 + (rows - 1) * CELL, width = 90, height = 90,
   id = "morphing", shape = function() return shapes.NAMES[step:get()] end,

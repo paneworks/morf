@@ -43,20 +43,20 @@ impl SessionLockState {
 
 /// The session's signals, and what each holds.
 pub struct Session {
-    /// `morf.session_lock`: the lock's state by name.
+    /// `morf.lock.state`: the lock's state by name.
     pub lock: SignalId,
-    /// `morf.primary()`: its signal, and whether this runtime is primary.
+    /// `morf.window.primary()`: its signal, and whether this runtime is primary.
     pub primary: Option<(SignalId, bool)>,
-    /// `morf.screens_revision()`: its signal, and how many times the output
+    /// `morf.window.screens_revision()`: its signal, and how many times the output
     /// list has changed.
     pub screens_revision: Option<(SignalId, i64)>,
     /// What the output list last was ([`screens_signature`]).
     pub screens_signature: String,
     /// Told when the lock changes, each with whether it wants only `locked`.
     pub session_lock_callbacks: Vec<(Handler, bool)>,
-    /// `morf.lock_surface`: builds one output's lock tree, given its screen.
+    /// `morf.lock.surface`: builds one output's lock tree, given its screen.
     pub lock_surface_builder: Option<Handler>,
-    /// `morf.on_primary(fn)`: called with the new value when it changes.
+    /// `morf.window.on_primary(fn)`: called with the new value when it changes.
     pub primary_callbacks: Vec<Handler>,
 }
 
@@ -141,7 +141,7 @@ impl Session {
 }
 
 impl Session {
-    /// Moves `morf.screens_revision` though the outputs are the same: what is
+    /// Moves `morf.window.screens_revision` though the outputs are the same: what is
     /// read off them changed (their size in morf's pixels, with the density).
     pub fn touch_screens(&mut self, reactive: &mut Reactive) {
         let Some((signal, count)) = self.screens_revision else {
@@ -153,7 +153,7 @@ impl Session {
     }
 }
 
-/// What makes two output lists the same for `morf.screens_revision`.
+/// What makes two output lists the same for `morf.window.screens_revision`.
 pub fn screens_signature(screens: &[Screen]) -> String {
     screens
         .iter()

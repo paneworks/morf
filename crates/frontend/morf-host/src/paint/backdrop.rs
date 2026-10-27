@@ -8,7 +8,7 @@
 //! synchronisation. Its input region is the whole output minus the shell's
 //! own surface while `morf.surface.backdrop` is true, and empty otherwise,
 //! so it is inert until a page opens. A press on it reaches the
-//! configuration as `morf.on_backdrop_click`.
+//! configuration as `morf.window.on_backdrop_click`.
 //!
 //! It is created when the configuration declares `morf.surface.backdrop` at
 //! all, since a layer surface's place in its layer is fixed at creation.

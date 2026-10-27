@@ -1,4 +1,4 @@
--- lib.kit.text_field and lib.kit.scroll on the TextField and Scroll
+-- lib.kit.archetypes.text_field and lib.kit.archetypes.scroll on the TextField and Scroll
 -- archetypes, with a plain skin: validation, Return only when acceptable,
 -- revert on Escape, a clear button, and a page the keys scroll with a
 -- scroll bar that is a kit Range.
@@ -17,7 +17,7 @@ local HOST = [[
     TextField = function(t, spec, _, send)
       return { error = ui.Rect { id = (spec.id or "f") .. "-error", anchors = { left = true, right = true, bottom = true },
           height = 2, color = "#ff0000", visible = function() return not t.acceptable end },
-        trailing = spec.clear and w.push { id = (spec.id or "f") .. "-clear", width = 20, height = 20,
+        trailing = spec.clear and w.button { id = (spec.id or "f") .. "-clear", width = 20, height = 20,
           anchors = { right = true }, on_clicked = function() send("clear") end } or nil }
     end,
     Range = function(t, spec) return { track = ui.Item { anchors = { fill = true } },
@@ -25,7 +25,7 @@ local HOST = [[
         y = function() return t.visual_position * (t.height - 20) end } } end,
     Scroll = function(t, spec)
       local flick = spec.flick
-      return { scroll_bar_y = w.scroll_bar { id = "bar", width = 8, orientation = "vertical", inverted = true,
+      return { scroll_bar_y = w.scrollbar { id = "bar", width = 8, orientation = "vertical", inverted = true,
         anchors = { right = true, top = true, bottom = true }, visible = function() return t.bar_y end,
         value = function() return t.position_y end,
         on_moved = function(v) flick.content_y = v * math.max(0, t.content_height - t.viewport_height) end } }
@@ -35,11 +35,11 @@ local HOST = [[
   local log = {}
   local rows = {}
   for i = 1, 40 do rows[i] = ui.Text { text = "Row " .. i, height = 20 } end
-  local port_node, port = w.numeric_entry { id = "port", x = 10, y = 10, width = 200, height = 30,
+  local port_node, port = w.entry { id = "port", validator = "number", x = 10, y = 10, width = 200, height = 30,
     minimum = 1, maximum = 1024, revert_on_escape = true, text = "80", clear = true,
     on_accepted = function(text) log[#log + 1] = "accepted:" .. text end,
     on_invalid = function(text) log[#log + 1] = "invalid:" .. text end }
-  local page_node, page = w.scroll_view { id = "page", x = 10, y = 60, width = 300, height = 200, clip = true, focus_policy = "tab",
+  local page_node, page = w.scrolled_window { id = "page", x = 10, y = 60, width = 300, height = 200, clip = true, focus_policy = "tab",
     ui.Column(rows) }
   ui.Item { width = 600, height = 400, port_node, page_node }
   morf.ipc.log = function() local s = table.concat(log, ","); log = {}; return s end

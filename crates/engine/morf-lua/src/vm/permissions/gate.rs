@@ -93,7 +93,7 @@ impl Gate {
 }
 
 /// Returns `nil, reason` from the enclosing native when the gate refuses
-/// it: `gate!(ctx, &state, stack, "run", "morf.spawn")`.
+/// it: `gate!(ctx, &state, stack, "run", "morf.process.spawn")`.
 macro_rules! gate {
     ($ctx:expr, $state:expr, $stack:expr, $group:expr, $api:expr) => {
         if $crate::vm::permissions::refused($ctx, $state, &mut $stack, $group, $api) {
