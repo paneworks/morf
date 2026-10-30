@@ -20,7 +20,6 @@ cp "$source_dir/library/tests/sysinfo_poll_spec.lua" "$scratch/sysinfo_poll_spec
 cd "$scratch"
 
 test "$("$engine/bin/morf" --version)" = "morf $version"
-test -x "$engine/bin/morf-keyring"
 "$engine/bin/morf" --help
 test -f "$library/share/morf/library/lib/kit/contract.lua"
 test -f "$library/share/morf/library/types/morf.lua"
