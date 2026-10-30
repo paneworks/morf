@@ -190,9 +190,9 @@ layout from Hyprland's sockets), `proc.lua`, `media.lua`, `field.lua`,
 `weather.lua`, `lib/services/notifications.lua`.
 
 Not here: the file manager, the media viewer, the password vault, the
-agents panel and the lock screen. The login
-shell eva carries a lock of its own, which the lock button runs with
-`morf lock -c eva` when it is installed.
+agents panel and the lock screen. The lock button runs the installed
+shell's lock with `morf lock` when there is one (`morf/default/lock` in the
+config folder or in `/etc/xdg`), else hyprlock.
 
 Needs: `wpctl`, `pactl`, `nmcli` or `iwctl`; optionally `wf-recorder`,
 `cliphist`, `wl-copy`, `upower`, `power-profiles-daemon`, `curl`.

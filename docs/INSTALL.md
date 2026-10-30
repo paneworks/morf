@@ -6,7 +6,7 @@ Shell, lock and greeter run the same executable:
 morf shell                 # bare morf also starts the shell
 morf lock
 morf greet
-morf lock -c eva           # choose a named configuration
+morf lock -c NAME          # choose a named configuration
 morf lock -- window preview
 morf greet -- preview
 ```
