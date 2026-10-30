@@ -2,8 +2,8 @@
   description = "morf Rust development shell";
 
   nixConfig = {
-    extra-substituters = [ "https://paneworks.cachix.org" ];
-    extra-trusted-public-keys = [ "paneworks.cachix.org-1:5XAOHaQHgDEM4dL1Cpu56zcKZxUWYP7zmv8GD3Siy0Q=" ];
+    extra-substituters = [ "https://cache.bresilla.com/bresilla" ];
+    extra-trusted-public-keys = [ "bresilla:zsecaZYIrjCJQS4AuGPmEVU5PRkiMmB/Mds3KaCzTvE=" ];
   };
 
   inputs = {

@@ -5,7 +5,7 @@ interfaces. GCR implements the encrypted secret exchange with GNOME Keyring.
 This is independent of polkit and does not modify PAM or stored keyrings.
 
 The Nix `morf` package includes this bridge in its runtime closure. The existing
-`morf-x86_64-linux` and `morf-aarch64-linux` Cachix pins therefore distribute it
+`morf-x86_64-linux` and `morf-aarch64-linux` cache pins therefore distribute it
 alongside the engine; no separate pin or local compilation is needed when the
 release is cached. `programs.morf.enable` keeps GNOME Keyring as secret storage,
 unlocks it through greetd/lock PAM, and adds sudo progress markers. Morf supplies

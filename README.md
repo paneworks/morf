@@ -105,16 +105,20 @@ nix build .#morf-library --no-link --print-out-paths
 After a release's cache workflow succeeds, replace `vX.Y.Z` below with that tag:
 
 ```sh
-cachix use paneworks
 nix build github:paneworks/morf/vX.Y.Z
 nix run github:paneworks/morf/vX.Y.Z -- --help
 nix build github:paneworks/morf/vX.Y.Z#morf-library
 ```
 
-The flake also advertises `https://paneworks.cachix.org` and its public signing
+The flake advertises `https://cache.bresilla.com/bresilla` and its public signing
 key; direct users can accept them with `--accept-flake-config`. When using Morf
 as an input, configure the cache on the consuming machine or top-level flake:
-an input's cache settings are not automatically inherited.
+an input's cache settings are not automatically inherited. In `/etc/nix/nix.conf`:
+
+```ini
+extra-substituters = https://cache.bresilla.com/bresilla
+extra-trusted-public-keys = bresilla:zsecaZYIrjCJQS4AuGPmEVU5PRkiMmB/Mds3KaCzTvE=
+```
 
 For another flake:
 
@@ -149,11 +153,15 @@ this flake; it belongs to the system configuration that installs a shell.
 ### Cache publishing and retention
 
 Only pushed `v*` tags publish, not ordinary branch pushes or pull requests.
-CI builds natively on both architectures, uploads the runtime closures, and
-checks both outputs on fresh runners with all builders disabled. Installed Lua
-tests run outside the checkout with isolated user directories and D-Bus disabled.
+CI builds natively on both architectures; the shared
+[`attic-push`](https://github.com/bresilla/nixos/tree/main/.github/actions/attic-push)
+action uploads only the paths cache.nixos.org does not have and sets the pins,
+then both outputs are checked on fresh runners with all builders disabled.
+Installed Lua tests run outside the checkout with isolated user directories and
+D-Bus disabled.
 
-Stable pins retain the five newest revisions each:
+Stable pins, listed at <https://cache.bresilla.com/-/pins>, keep only the pinned
+build each:
 
 ```text
 morf-x86_64-linux
@@ -162,10 +170,11 @@ morf-library-x86_64-linux
 morf-library-aarch64-linux
 ```
 
-All use `--keep-revisions 5`. Package versions remain in the immutable store
-paths; there are no version-named pins or `latest` aliases. Older unprotected
-revisions become eligible for Cachix garbage collection and may need rebuilding.
+Package versions remain in the immutable store paths; there are no version-named
+pins or `latest` aliases. Builds that are no longer pinned are removed from the
+cache and may need rebuilding.
 
-Repository setup requires a **Paneworks cache-scoped write token** stored as the
-GitHub Actions secret `CACHIX_AUTH_TOKEN`. No personal/admin token is required.
-Do not reuse Termworks credentials or publish either cache's private tokens.
+Repository setup requires the organization Actions secrets `ATTIC_TOKEN` (an
+Attic token that may push to the `bresilla` cache) and `PIN_TOKEN` (the cache's
+pins API token); `NETBIRD_SETUP_KEY` is only needed for uploads over 95 MB. Do
+not publish these tokens.
