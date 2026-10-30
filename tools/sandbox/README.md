@@ -1,8 +1,8 @@
 # sandbox
 
-Runs a shell under test -- morf with `examples/shells/impasto`, upstream impasto on
-Quickshell, or caelestia-dots/shell on Quickshell, the last two as references
--- inside a nested Hyprland that is itself a client of a headless cage,
+Runs a shell under test -- morf with `examples/shells/impasto` or another
+configuration, upstream impasto on Quickshell as a reference, or a kind a
+shell brings of its own -- inside a nested Hyprland that is itself a client of a headless cage,
 sealed off from the session of whoever runs it: private runtime dir and
 Wayland/Hyprland sockets, a session bus that activates nothing, no system bus
 (for the compositor and the shell alike; `inner.sh` refuses to run if it
@@ -12,7 +12,7 @@ are logged in `stubbed.log`, never run.
 
     tools/sandbox/nested.sh morf NAME steps-file
     tools/sandbox/nested.sh upstream NAME steps-file    # needs UPSTREAM=<clone>
-    tools/sandbox/nested.sh caelestia NAME steps-file   # needs CAELESTIA, CAELESTIA_PKG
+    tools/sandbox/nested.sh path/to/kind.sh NAME steps-file
 
 A steps file is shell, sourced inside: `open PANEL`, `close`, `shot LABEL`,
 `film LABEL N` (back-to-back frames with timestamps; `FILM_GEOMETRY="x,y WxH"`
@@ -26,11 +26,10 @@ on as a screen reader would switch it on (the bus launcher keeps its
 switches in memory: no dconf in here; its registry is started by hand: no
 systemd), before the shell starts. The step `a11y LABEL` then writes what a
 screen reader sees -- every application's tree over AT-SPI, through
-libatspi (`a11ydump.py`) -- to `a11y-LABEL.txt` (`$EVA` is the directory of
-eva, the shell these steps were written for):
+libatspi (`a11ydump.py`) -- to `a11y-LABEL.txt`:
 
-    A11Y=1 MORF_CONFIG=$EVA/shell/init.lua MORF_ENV="EVA_DRY_RUN=1" \
-      tools/sandbox/nested.sh morf a11y tools/sandbox/caelestia-a11y.steps
+    A11Y=1 MORF_CONFIG=path/to/shell/init.lua \
+      tools/sandbox/nested.sh morf a11y path/to/a11y.steps
 
 `wlproxy.py` sits between cage and the nested Hyprland: cage 0.3 offers
 `xdg_wm_base` v5 and Hyprland binds v6, which only adds a state a compositor
@@ -42,59 +41,21 @@ compositor for the whole run, fed through a FIFO. A pointer made per command
 binding its `wl_pointer` on the flip misses the click that follows; a
 cursor warp alone moves the cursor but enters no surface.
 
-## caelestia
+## A shell's own kind
 
-caelestia-dots/shell wants git Quickshell and a native QML plugin built
-against the same Qt, plus libqalculate, aubio, cava, fftw, Qt ShaderTools,
-qt6-imageformats (webp), the m3shapes QML module and its fonts. Arch's
-Quickshell 0.3.1 and Qt 6.11 lack ShaderTools, imageformats' webp and the C
-libraries, so everything comes from the clone's own flake instead, into the
-nix store -- nothing system-wide:
+A shell that is not a morf configuration -- a reference to compare against,
+say -- brings a kind file, passed as the SHELL argument (a path, with a `/`
+in it). `nested.sh` sources it, then calls `kind_setup` before the session
+(with `H`, the scratch HOME, `OUT` and `KIND_DIR`, the file's own folder, set:
+more stubs in `$H/shim`, seeded config) and puts what `kind_start` prints
+into the inner script, where it starts the shell as `S` and defines `open`,
+`close`, `ipc` and `notify` for the steps. Such a shell paints its own
+wallpaper. Output lands in `$WORK/out/<file name>-<NAME>/`.
 
-    git clone https://github.com/caelestia-dots/shell caelestia
-    nix build ./caelestia#caelestia-shell --out-link caelestia-pkg
-
-That builds Quickshell from its git flake input (with `qtimageformats` and
-m3shapes), the plugin and the helper library against nixpkgs' Qt, and a
-launcher. The launcher is never run: it puts the real `ddcutil`,
-`brightnessctl`, `nmcli`, ... first on PATH. `caelestia-env.sh` reads its
-environment back out of the two nix wrappers (QML import path for the plugin
-and m3shapes via `NIXPKGS_QT6_QML_IMPORT_PATH`, Qt plugin path, fonts.conf
-with Material Symbols, Rubik and CaskaydiaCove, `CAELESTIA_LIB_DIR`, xkb
-rules), drops PATH, and the sandbox starts Quickshell's own `qs` under it,
-under `nixGLIntel` (`NIXGL`) for nix's GL driver, with `-p` the clone.
-
-The scratch HOME gets `~/.config/caelestia/shell.json` (`CAEL_CONFIG`, else
-one naming a fixed weather place so it never geolocates the machine),
-optionally `~/.local/state/caelestia/scheme.json` (`CAEL_SCHEME`; without
-it the built-in palette), `~/Pictures/Wallpapers`, and
-`~/.local/state/caelestia/wallpaper/path.txt` (`WALLPAPER`, else its own
-`assets/wallpaper.webp`). caelestia paints its own wallpaper; no `awww`.
-
-- `open NAME` dispatches `hl.dsp.global("caelestia:NAME")` -- dashboard,
-  sidebar, utilities, session, showall, lock, nexus, ... -- except launcher,
-  which toggles on the key's release (a dispatched global only presses) and
-  so goes through its IPC. `close [D]` toggles drawer D, or every open one,
-  over IPC (the dashboard does not close on Escape).
-- `ipc ARGS` is `qs ipc call ARGS`: `ipc drawers toggle osd`,
-  `ipc toaster info T M ICON`, `ipc nexus open`.
-- `notify ARGS` is a real `notify-send`: the shell is the notification
-  server on the private bus.
-- Stubbed besides the common set: its `caelestia` CLI (which still records
-  `wallpaper -f P`), swappy, gpu-screen-recorder, nvidia-smi, lspci,
-  glxinfo, warp-cli, tailscale, netbird, wg-quick, ping, asdbctl,
-  fprintd-list (answers "nothing enrolled"), logout, hibernate, suspend,
-  app2unit.
-
-`caelestia-gallery.steps` shoots rest, launcher (apps, search, actions,
-wallpapers), each dashboard tab, sidebar, utilities, session, osd, the bar's
-popouts, notifications, a toast, showall, nexus and the lock screen;
-`caelestia-films.steps` films drawers opening and closing, cropped to each.
-
-Not there in the sandbox: audio (no PipeWire, so the osd and media show
-nothing), Bluetooth, UPower and power profiles (no system bus), networks
-(nmcli is a stub), media players, and unlocking (PAM from nix finds no
-modules; nothing is typed). The weather comes from the network.
+Not there in the sandbox: audio (no PipeWire), Bluetooth, UPower and power
+profiles (no system bus), networks (nmcli is a stub), media players other
+than `fakeplayer.py`, and unlocking (PAM from nix finds no modules; nothing
+is typed).
 
 ## Watching it
 
@@ -102,12 +63,10 @@ modules; nothing is typed). The weather comes from the network.
 instead of under a headless cage, so you can watch and use the session
 under test. Only that window touches your session; the runtime dir, bus,
 HOME and stubs stay private. `EXTRA_FONTS=DIR` adds a font folder to the
-scratch HOME. `caelestia-show.steps` is a short tour of the caelestia port
-that then leaves the session to you until `TIMEOUT`:
+scratch HOME. A long `TIMEOUT` leaves the session to you once the steps are
+done:
 
-    VISIBLE=1 TIMEOUT=3600 MORF_CONFIG=$EVA/shell/init.lua \
-      MORF_ENV="EVA_WALLPAPER=/path/to/wallpaper" \
-      tools/sandbox/nested.sh morf show tools/sandbox/caelestia-show.steps
+    VISIBLE=1 TIMEOUT=3600 tools/sandbox/nested.sh morf island tools/sandbox/impasto-island.steps
 
 ## headless
 

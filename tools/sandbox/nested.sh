@@ -9,22 +9,21 @@
 #     (power, root, other people's programs, the network and audio stacks):
 #     each call is logged in OUT/stubbed.log and does nothing.
 #
-# SHELL is "morf" (examples/shells/impasto from the repo, or MORF_REPO), "upstream"
-# (impasto on Quickshell, from UPSTREAM: a clone of
-# github.com/andreumassanet/impasto) or "caelestia" (caelestia-dots/shell, from
-# CAELESTIA: a clone, on the Quickshell its flake builds, CAELESTIA_PKG: the
-# output of `nix build CAELESTIA#caelestia-shell` -- see README.md). STEPS is
-# a file sourced inside, with:
-#   open PANEL   the same panel word for either impasto; for caelestia one of
-#                its global shortcuts (launcher dashboard sidebar utilities
-#                session showall lock nexus ...)
-#   close [D]    close whatever is open (Escape; caelestia: drawer D, else
-#                every open drawer)
+# SHELL is "morf" (examples/shells/impasto from the repo, or MORF_REPO, or
+# MORF_CONFIG), "upstream" (impasto on Quickshell, from UPSTREAM: a clone of
+# github.com/andreumassanet/impasto), or a kind file a shell brings: a path
+# (with a / in it) to a script sourced here, which defines
+#   kind_setup   run before the session, with H, OUT and KIND_DIR set
+#   kind_start   prints the inner script's lines that start the shell (as S)
+#                and define open, close, ipc and notify
+# and paints its own wallpaper. STEPS is a file sourced inside, with:
+#   open PANEL   the same panel word for either impasto
+#   close        close whatever is open (Escape)
 #   point X Y    move the nested pointer to X,Y (hover)
 #   click X Y [B] move it there and click B (left, right, middle)
 #   scroll N     N wheel steps where the pointer is (negative: up)
-#   ipc ARGS     caelestia: `qs ipc call ARGS`, e.g. `ipc drawers toggle osd`
-#   notify ARGS  caelestia: a real notify-send, on the private bus only
+#   ipc ARGS     the shell's IPC (`morf ipc call ARGS`)
+#   notify ARGS  a real notify-send, on the private bus only
 #   shot LABEL   a screenshot of the nested output
 #   film LABEL N N screenshots back to back (timestamps in film-LABEL.times)
 #   hc ARGS      hyprctl on the nested instance only (refuses otherwise)
@@ -35,10 +34,7 @@
 # UPSTREAM, MORF_REPO, MORF_CONFIG (the configuration the morf kind runs,
 # default examples/shells/impasto/shell/init.lua; MORF_ENV adds NAME=value pairs), BOOT (s before the steps), TIMEOUT, WALLPAPER,
 # RENDER_NODE (cage renders with GL here; pixman screenshots can be stale),
-# AWWW_BIN, INTER_DIR, WTYPE (tools taken from these when not on PATH),
-# CAELESTIA, CAELESTIA_PKG, CAEL_CONFIG (a shell.json to seed), CAEL_SCHEME (a
-# scheme.json to seed; without one caelestia keeps its built-in palette),
-# NIXGL (GL wrapper for the nix-built Quickshell, default nixGLIntel), NESTED_SCALE
+# AWWW_BIN, INTER_DIR, WTYPE (tools taken from these when not on PATH), NESTED_SCALE
 # (the visible window's output scale), POINTER_SIZE ("W H" of the virtual
 # pointer's area, default "1920 1080"), HYPR_EXTRA (Lua appended to the
 # nested Hyprland's config), A11Y
@@ -49,14 +45,18 @@ REPO=${MORF_REPO:-$(cd "$HERE/../.." && pwd)}
 KIND=$1; NAME=$2; STEPS=$3
 case "$STEPS" in /*) ;; *) STEPS=$PWD/$STEPS;; esac
 WORK=${WORK:-${TMPDIR:-/tmp}/morf-sandbox}
+KIND_FILE=""
+case "$KIND" in
+  */*) KIND_FILE=$(cd "$(dirname "$KIND")" && pwd)/$(basename "$KIND")
+       KIND_DIR=$(dirname "$KIND_FILE"); KIND=$(basename "$KIND" .sh)
+       . "$KIND_FILE";;
+esac
 UPSTREAM=${UPSTREAM:-$WORK/impasto}
 OUT=$WORK/out/$KIND-$NAME; rm -rf "$OUT"; mkdir -p "$OUT"
 H=$WORK/home-$KIND; chmod -R u+w "$H" 2>/dev/null || true; rm -rf "$H"; mkdir -p "$H"
 UPHOME=$UPSTREAM/home
 WTYPE=${WTYPE:-$(command -v wtype || true)}
 NOTIFY_SEND=${NOTIFY_SEND:-$(command -v notify-send || echo /usr/bin/notify-send)}
-CAELESTIA=${CAELESTIA:-$WORK/caelestia}
-CAELESTIA_PKG=${CAELESTIA_PKG:-$WORK/caelestia-pkg}
 
 # Both shells stand on the same ground: upstream's wallpapers and fonts, and
 # the person's own fonts read in place (their icons live in Nerd Fonts).
@@ -64,7 +64,7 @@ mkdir -p "$H/.config" "$H/.local/share/fonts" "$H/.local/state" "$H/.cache" "$H/
 if [ -d "$UPHOME/.local/share/wallpapers" ]; then
   cp -r "$UPHOME/.local/share/wallpapers" "$UPHOME/.local/share/impasto" "$H/.local/share/"
   cp -r "$UPHOME/.local/share/fonts/." "$H/.local/share/fonts/"
-# caelestia, and a morf configuration other than impasto, bring their own.
+# A kind file, and a morf configuration other than impasto, bring their own.
 elif [ "$KIND" = upstream ] || { [ "$KIND" = morf ] && [ -z "${MORF_CONFIG:-}" ]; }; then
   echo "no upstream impasto clone at $UPSTREAM" >&2; exit 1
 fi
@@ -75,7 +75,7 @@ fi
 [ -n "${EXTRA_FONTS:-}" ] && cp -r "$EXTRA_FONTS" "$H/.local/share/fonts/extra"
 [ -f "$HOME/.config/fontconfig/fonts.conf" ] && mkdir -p "$H/.config/fontconfig" && cp "$HOME/.config/fontconfig/fonts.conf" "$H/.config/fontconfig/"
 [ "$KIND" = upstream ] && cp -r "$UPHOME/.config/quickshell" "$H/.config/"
-if [ "$KIND" = caelestia ]; then WALLPAPER=${WALLPAPER:-}
+if [ -n "$KIND_FILE" ]; then WALLPAPER=${WALLPAPER:-}
 else WALLPAPER=${WALLPAPER:-$H/.local/share/wallpapers/japanese-castle-full-moon.jpeg}; fi
 
 mkdir -p "$H/shim"
@@ -86,44 +86,7 @@ for c in systemctl loginctl pkexec sudo pkill killall kill kitten reboot powerof
   chmod +x "$H/shim/$c"
 done
 
-if [ "$KIND" = caelestia ]; then
-  [ -f "$CAELESTIA/shell.qml" ] || { echo "no caelestia clone at $CAELESTIA" >&2; exit 1; }
-  [ -x "$CAELESTIA_PKG/bin/caelestia-shell" ] || { echo "no caelestia build at $CAELESTIA_PKG" >&2; exit 1; }
-  # caelestia's own reach into the machine: its CLI (wallpaper, schemes,
-  # recording, screenshots), GPU probes, VPN clients, fingerprint and face
-  # unlock probe (it answers "nothing enrolled"), ping, the session commands.
-  for c in swappy gpu-screen-recorder nvidia-smi lspci glxinfo warp-cli tailscale \
-           netbird wg-quick ping asdbctl fprintd-list logout hibernate suspend app2unit; do
-    code=0; [ "$c" = fprintd-list ] && code=1
-    printf '#!/bin/sh\necho "%s $*" >> "%s/stubbed.log"\nexit %s\n' "$c" "$OUT" "$code" > "$H/shim/$c"
-    chmod +x "$H/shim/$c"
-  done
-  # Only logged, except that `caelestia wallpaper -f P` records P where the
-  # shell reads the current wallpaper, as the real CLI would.
-  cat > "$H/shim/caelestia" <<CAEL
-#!/bin/sh
-echo "caelestia \$*" >> "$OUT/stubbed.log"
-[ "\$1 \$2" = "wallpaper -f" ] && printf '%s' "\$3" > "$H/.local/state/caelestia/wallpaper/path.txt"
-exit 0
-CAEL
-  chmod +x "$H/shim/caelestia"
-  # Notifications stay real: the shell under test is the notification
-  # server, and notify-send only reaches the private bus.
-  rm "$H/shim/notify-send"
-  mkdir -p "$H/.config/caelestia" "$H/.local/state/caelestia/wallpaper" "$H/Pictures/Wallpapers"
-  if [ -n "${CAEL_CONFIG:-}" ]; then cp "$CAEL_CONFIG" "$H/.config/caelestia/shell.json"
-  # A fixed weather place, so it never looks the machine up by its address.
-  else echo '{ "services": { "weatherLocation": "Reykjavik" } }' > "$H/.config/caelestia/shell.json"; fi
-  [ -n "${CAEL_SCHEME:-}" ] && cp "$CAEL_SCHEME" "$H/.local/state/caelestia/scheme.json"
-  # Its own wallpaper unless WALLPAPER says otherwise; the switcher lists
-  # ~/Pictures/Wallpapers.
-  cp "$CAELESTIA/assets/wallpaper.webp" "$H/Pictures/Wallpapers/"
-  [ -d "$H/.local/share/wallpapers" ] && cp "$H/.local/share/wallpapers/"* "$H/Pictures/Wallpapers/"
-  printf '%s' "${WALLPAPER:-$H/Pictures/Wallpapers/wallpaper.webp}" > "$H/.local/state/caelestia/wallpaper/path.txt"
-  # Never the flake's launcher (it puts the real ddcutil, brightnessctl,
-  # nmcli first on PATH): its environment minus PATH, and qs under it.
-  "$HERE/caelestia-env.sh" "$CAELESTIA_PKG" > "$H/caelestia-env"
-fi
+[ -z "$KIND_FILE" ] || kind_setup
 
 # A nested Hyprland config of our own -- never the person's, and not
 # upstream's either (its autostart starts daemons and a polkit agent) --
@@ -263,7 +226,7 @@ else hc -j monitors | grep -q '"name"' || hc output create wayland >> \$OUT/hc.l
 sleep 1
 # awww paints impasto's wallpaper; a morf configuration of its own paints
 # its own, and a black awww layer would cover it.
-if [ "$KIND" != caelestia ] && { [ "$KIND" != morf ] || [ -z "${MORF_CONFIG:-}" ]; }; then
+if [ -z "$KIND_FILE" ] && { [ "$KIND" != morf ] || [ -z "${MORF_CONFIG:-}" ]; }; then
   awww-daemon > \$OUT/awww.log 2>&1 &
   AW=\$!
   sleep 1
@@ -291,35 +254,9 @@ if [ -n "${A11Y:-}" ]; then
   busctl --user get-property org.a11y.Bus /org/a11y/bus org.a11y.Status IsEnabled >> \$OUT/atspi.log 2>&1
 fi
 a11y() { asked a11y; timeout 60 /usr/bin/python3 "$HERE/a11ydump.py" \$OUT/a11y-\$1.txt >> \$OUT/atspi.log 2>&1; }
-if [ "$KIND" = caelestia ]; then
-  # caelestia paints its own wallpaper. Its Quickshell and Qt come from nix,
-  # so it needs nix's GL driver too.
-  . "$H/caelestia-env"
-  \${NIXGL:-nixGLIntel} "\$QS" -p "$CAELESTIA" > \$OUT/shell.log 2>&1 &
-  S=\$!
-  qsipc() { timeout 10 "\$QS" -p "$CAELESTIA" ipc call "\$@" 2>> \$OUT/hc.log; }
-  # Its global shortcuts, as its keybinds send them -- except the launcher,
-  # which toggles on the key's release, and a dispatched global only
-  # presses: that one goes through its IPC toggle instead.
-  open() {
-    asked open
-    if [ "\$1" = launcher ]; then qsipc drawers toggle launcher >> \$OUT/hc.log
-    else hc dispatch "hl.dsp.global(\\"caelestia:\$1\\")" >> \$OUT/hc.log 2>&1; fi
-  }
-  # Not every drawer closes on Escape (the dashboard closes on leave), so
-  # drawers are toggled shut over IPC: the one named (one call, for films),
-  # or every open one (found first; the request is stamped after).
-  close() {
-    if [ -n "\${1:-}" ]; then asked close; qsipc drawers toggle \$1 >> \$OUT/hc.log; return; fi
-    open_ones=""
-    for d in \$(qsipc drawers list); do
-      [ "\$(qsipc drawers isOpen \$d)" = 1 ] && open_ones="\$open_ones \$d"
-    done
-    asked close
-    for d in \$open_ones; do qsipc drawers toggle \$d >> \$OUT/hc.log; done
-  }
-  ipc() { asked ipc; qsipc "\$@" >> \$OUT/hc.log; }
-  notify() { asked notify; timeout 10 "$NOTIFY_SEND" "\$@" >> \$OUT/hc.log 2>&1; }
+if [ -n "$KIND_FILE" ]; then
+  :
+$([ -z "$KIND_FILE" ] || kind_start)
 elif [ "$KIND" = upstream ]; then
   quickshell -p \$HOME/.config/quickshell > \$OUT/shell.log 2>&1 &
   S=\$!
