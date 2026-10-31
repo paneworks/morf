@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.2] - 2026-10-31
+
+### <!-- 2 -->🚜 Refactor
+
+- [**breaking**] Drop the separate morf-library
+- Let a shell bring its own kind
+- [**breaking**] Move the shell helpers to eva
+
+### <!-- 3 -->📚 Documentation
+
+- Name no particular shell in examples
+- Drop links to the deleted eva repo
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- Publish to cache.bresilla.com
+
 ## [0.6.1] - 2026-10-27
 
 ### <!-- 1 -->🐛 Bug Fixes
