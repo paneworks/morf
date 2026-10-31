@@ -2,7 +2,7 @@
 set -euo pipefail
 
 engine=$(realpath -e "${1:?engine output required}")
-library=$(realpath -e "${2:?library output required}")
+library="$engine/share/morf/library"
 source_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$source_dir/Cargo.toml")
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/morf-nix-smoke.XXXXXXXX")
@@ -21,18 +21,17 @@ cd "$scratch"
 
 test "$("$engine/bin/morf" --version)" = "morf $version"
 "$engine/bin/morf" --help
-test -f "$library/share/morf/library/lib/kit/contract.lua"
-test -f "$library/share/morf/library/types/morf.lua"
-test -f "$library/share/morf/library/types/morf/ui.lua"
-test -f "$library/share/morf/library/luarc.template.json"
-test "$(realpath "$engine/share/morf/library")" = "$library/share/morf/library"
+test -f "$library/lib/kit/contract.lua"
+test -f "$library/types/morf.lua"
+test -f "$library/types/morf/ui.lua"
+test -f "$library/luarc.template.json"
 "$engine/bin/morf" types "$scratch/types"
-diff -r "$library/share/morf/library/types" "$scratch/types"
+diff -r "$library/types" "$scratch/types"
 
 # The bundled docs: stamped with this version, headed by `morf --version`, and
 # the package's own bundle printed over a stale one in the data folders.
 reported=$("$engine/bin/morf" --version)
-test "$(cat "$library/share/morf/library/docs/VERSION")" = "$version"
+test "$(cat "$library/docs/VERSION")" = "$version"
 mkdir -p "$XDG_DATA_HOME/morf/library/docs"
 printf 'STALE GUIDE\n' > "$XDG_DATA_HOME/morf/library/docs/UI.md"
 printf '0.0.1-stale\n' > "$XDG_DATA_HOME/morf/library/docs/VERSION"
