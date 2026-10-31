@@ -518,9 +518,9 @@ make.alias("v", "verify")
 
 make.recipe{
   name = "nix-build",
-  desc = "build the Nix engine and Lua library outputs",
+  desc = "build the Nix package: the engine and its Lua library",
   run = function()
-    sh.nix("build", "--accept-flake-config", "--no-update-lock-file", ".#morf", ".#morf-library")
+    sh.nix("build", "--accept-flake-config", "--no-update-lock-file", ".#morf")
   end,
 }
 

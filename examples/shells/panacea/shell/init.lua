@@ -76,15 +76,15 @@ for _, name in ipairs { "main", "shade", "power", "battery", "record", "wifi", "
   end
 end
 
---- Locks the screen with what the config names, else with the login
---- example's own lock if it is installed, else hyprlock.
+--- Locks the screen with what the config names, else with the installed
+--- shell's own lock (`morf lock`) if there is one, else hyprlock.
 function island.lock()
   island.close()
   local command = config.lockCommand
   if command == "" then
     local root = morf.env("XDG_CONFIG_HOME") or (morf.fs.home() .. "/.config")
-    if morf.fs.exists(root .. "/morf/eva/lock/init.lua") or morf.fs.exists("/etc/xdg/morf/eva/lock/init.lua") then
-      command = "morf lock -c eva"
+    if morf.fs.exists(root .. "/morf/default/lock/init.lua") or morf.fs.exists("/etc/xdg/morf/default/lock/init.lua") then
+      command = "morf lock"
     else command = "hyprlock" end
   end
   system.launch(command)

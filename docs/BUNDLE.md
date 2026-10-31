@@ -84,7 +84,7 @@ morf lock
 morf greet
 ```
 
-Select a named configuration with `morf lock -c eva`, or preview it
+Select a named configuration with `morf lock -c NAME`, or preview it
 without locking or authenticating with `morf lock -- window preview`.
 See [system installation](INSTALL.md) for greetd setup and migration.
 
@@ -99,7 +99,7 @@ See [system installation](INSTALL.md) for greetd setup and migration.
 - **What is read at run time stays on the machine.** A bundle carries code
   and fonts, not state. The lock still reads your lule colours and
   wallpaper (it runs as you); the greeter reads the system's accounts and
-  sessions and an optional `/etc/morf/eva-accent`. PAM stacks,
-  greetd's config and anything in `/etc` are the machine's.
+  sessions. PAM stacks, greetd's config and anything in `/etc` are the
+  machine's.
 - **Rebuild after changing the parts or the library.** The bundle is a
   snapshot. Normal shell, lock and greeter installations load Lua from disk.

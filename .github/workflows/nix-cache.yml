@@ -27,37 +27,44 @@ jobs:
     steps:
       - name: Check publishing credentials
         env:
-          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
+          PIN_TOKEN: ${{ secrets.PIN_TOKEN }}
         run: |
-          if [ -z "$CACHIX_AUTH_TOKEN" ]; then
-            echo "::error::Add a paneworks cache write token as CACHIX_AUTH_TOKEN."
+          if [ -z "$ATTIC_TOKEN" ] || [ -z "$PIN_TOKEN" ]; then
+            echo "::error::Add the ATTIC_TOKEN and PIN_TOKEN Actions secrets for cache.bresilla.com."
             exit 1
           fi
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
       - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866
         with:
-          name: paneworks
-          skipPush: true
-      - name: Build engine and Lua library with install checks
+          extra_nix_config: |
+            extra-substituters = https://cache.bresilla.com/bresilla
+            extra-trusted-public-keys = bresilla:zsecaZYIrjCJQS4AuGPmEVU5PRkiMmB/Mds3KaCzTvE=
+      - name: Build the engine and its Lua library with install checks
         run: |
-          for package in morf morf-library; do
-            nix build --accept-flake-config --no-update-lock-file --print-build-logs \
-              --no-link --print-out-paths ".#$package" > "$RUNNER_TEMP/$package-store-paths"
-            test "$(wc -l < "$RUNNER_TEMP/$package-store-paths")" -eq 1
-          done
-      - name: Publish runtime closures and retain five revisions
+          nix build --accept-flake-config --no-update-lock-file --print-build-logs \
+            --no-link --print-out-paths .#morf > "$RUNNER_TEMP/morf-store-paths"
+          test "$(wc -l < "$RUNNER_TEMP/morf-store-paths")" -eq 1
+      - name: Collect store paths and pins
+        id: release
         env:
-          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
           SYSTEM: ${{ matrix.system }}
         run: |
-          for package in morf morf-library; do
-            cachix push paneworks < "$RUNNER_TEMP/$package-store-paths"
-            path=$(cat "$RUNNER_TEMP/$package-store-paths")
-            cachix pin paneworks "$package-$SYSTEM" "$path" --keep-revisions 5
-          done
+          path=$(cat "$RUNNER_TEMP/morf-store-paths")
+          echo "$path" >> "$RUNNER_TEMP/push-paths"
+          echo "morf-$SYSTEM $path" >> "$RUNNER_TEMP/push-pins"
+          { echo "paths<<EOF"; cat "$RUNNER_TEMP/push-paths"; echo EOF
+            echo "pins<<EOF"; cat "$RUNNER_TEMP/push-pins"; echo EOF; } >> "$GITHUB_OUTPUT"
+      # Only paths cache.nixos.org lacks; see bresilla/nixos .github/actions/attic-push.
+      - uses: bresilla/nixos/.github/actions/attic-push@main
+        with:
+          paths: ${{ steps.release.outputs.paths }}
+          pins: ${{ steps.release.outputs.pins }}
+          attic-token: ${{ secrets.ATTIC_TOKEN }}
+          pin-token: ${{ secrets.PIN_TOKEN }}
+          netbird-setup-key: ${{ secrets.NETBIRD_SETUP_KEY }}
 
   verify-download:
     needs: publish
@@ -72,16 +79,12 @@ jobs:
         with:
           persist-credentials: false
       - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866
         with:
-          name: paneworks
-          skipPush: true
-      - name: Download both outputs without builders and exercise Lua consumers
+          extra_nix_config: |
+            extra-substituters = https://cache.bresilla.com/bresilla
+            extra-trusted-public-keys = bresilla:zsecaZYIrjCJQS4AuGPmEVU5PRkiMmB/Mds3KaCzTvE=
+      - name: Download the package without builders and exercise Lua consumers
         run: |
-          library=$(nix build --accept-flake-config --no-update-lock-file \
-            --max-jobs 0 --builders '' --no-link --print-out-paths .#morf-library)
-          test -d "$library/share/morf/library"
-          test ! -e "$library/bin/morf"
           engine=$(nix build --accept-flake-config --no-update-lock-file \
             --max-jobs 0 --builders '' --no-link --print-out-paths .#morf)
-          bash tools/nix-smoke.sh "$engine" "$library"
+          bash tools/nix-smoke.sh "$engine"

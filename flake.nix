@@ -2,8 +2,8 @@
   description = "morf Rust development shell";
 
   nixConfig = {
-    extra-substituters = [ "https://paneworks.cachix.org" ];
-    extra-trusted-public-keys = [ "paneworks.cachix.org-1:5XAOHaQHgDEM4dL1Cpu56zcKZxUWYP7zmv8GD3Siy0Q=" ];
+    extra-substituters = [ "https://cache.bresilla.com/bresilla" ];
+    extra-trusted-public-keys = [ "bresilla:zsecaZYIrjCJQS4AuGPmEVU5PRkiMmB/Mds3KaCzTvE=" ];
   };
 
   inputs = {
@@ -130,32 +130,6 @@
           rustc = pkgs.rust-bin.stable.latest.minimal;
         };
 
-        morfKeyring = pkgs.stdenv.mkDerivation {
-          pname = "morf-keyring";
-          version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
-          src = ./tools/keyring;
-          nativeBuildInputs = [ pkgs.pkg-config ];
-          buildInputs = with pkgs; [ gcr_4 glib json-glib ];
-          strictDeps = true;
-          buildPhase = ''
-            runHook preBuild
-            $CC -std=gnu11 -O2 -Wall -Wextra -Werror morf-keyring.c \
-              $(pkg-config --cflags --libs gcr-4 gio-unix-2.0 json-glib-1.0) \
-              -o morf-keyring
-            runHook postBuild
-          '';
-          installPhase = ''
-            runHook preInstall
-            install -Dm755 morf-keyring "$out/bin/morf-keyring"
-            runHook postInstall
-          '';
-          meta = {
-            description = "Morf dialog bridge for GNOME Keyring";
-            license = pkgs.lib.licenses.mit;
-            platforms = pkgs.lib.platforms.linux;
-          };
-        };
-
         # `nix build` -- the `morf` binary, and the Lua library it ships with
         # under share/morf/library, where morf finds it through XDG_DATA_DIRS
         # (a NixOS system profile and a user profile both put their share/
@@ -163,7 +137,6 @@
         morf = rustPlatform.buildRustPackage {
           pname = "morf";
           version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
-          outputs = [ "out" "library" ];
           src = pkgs.lib.cleanSourceWith {
             src = ./.;
             # Build outputs and research notes are no part of the source.
@@ -190,25 +163,21 @@
             "--package" "morf-shader"
           ];
           postInstall = ''
-            mkdir -p $library/share/morf/library $out/share/morf
-            cp -r library/lib library/README.md library/luarc.template.json $library/share/morf/library/
-            mkdir -p $library/share/morf/library/docs
-            cp docs/UI.md docs/IO.md $library/share/morf/library/docs/
-            $out/bin/morf --version | cut -d' ' -f2 > $library/share/morf/library/docs/VERSION
-            substituteInPlace $library/share/morf/library/luarc.template.json \
-              --replace-fail '~/.local/share/morf/library' "$library/share/morf/library"
-            $out/bin/morf types $library/share/morf/library/types
-            ln -s $library/share/morf/library $out/share/morf/library
-            ln -s ${morfKeyring}/bin/morf-keyring $out/bin/morf-keyring
+            mkdir -p $out/share/morf/library/docs
+            cp -r library/lib library/README.md library/luarc.template.json $out/share/morf/library/
+            cp docs/UI.md docs/IO.md $out/share/morf/library/docs/
+            $out/bin/morf --version | cut -d' ' -f2 > $out/share/morf/library/docs/VERSION
+            substituteInPlace $out/share/morf/library/luarc.template.json \
+              --replace-fail '~/.local/share/morf/library' "$out/share/morf/library"
+            $out/bin/morf types $out/share/morf/library/types
             wrapProgram $out/bin/morf \
-              --set-default MORF_KEYRING_HELPER $out/bin/morf-keyring \
               --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath runtimeLibs} \
               --suffix XDG_DATA_DIRS : $out/share
           '';
           doInstallCheck = true;
           installCheckPhase = ''
             runHook preInstallCheck
-            bash tools/nix-smoke.sh "$out" "$library"
+            bash tools/nix-smoke.sh "$out"
             runHook postInstallCheck
           '';
           meta = {
@@ -217,7 +186,6 @@
             license = pkgs.lib.licenses.mit;
             mainProgram = "morf";
             platforms = pkgs.lib.platforms.linux;
-            outputsToInstall = [ "out" ];
           };
         };
       in
@@ -306,8 +274,6 @@
         packages = {
           default = morf;
           inherit morf;
-          morf-library = morf.library;
-          morf-keyring = morfKeyring;
         };
         apps.default = flake-utils.lib.mkApp { drv = morf; };
         apps.morf = flake-utils.lib.mkApp { drv = morf; };
