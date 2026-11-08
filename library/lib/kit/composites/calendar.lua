@@ -4,7 +4,7 @@
 --       id = "planner", width = 280,
 --       value = function() return day:get() end,        -- "YYYY-MM-DD"
 --       on_changed = function(date) day:set(date) end,  -- the current day moved
---       on_picked = function(date) end,                 -- a press or Return chose it
+--       on_picked = function(date) end,                 -- a click or Return chose it
 --       marked = function(date) return count(date) > 0 end,
 --     }
 --     cal.step(1) ; cal.show("2026-12") ; cal.month() --> "2026-10"
@@ -21,7 +21,7 @@
 -- arrows by the title then only ask, through `on_month(month, delta)`.
 -- `first_weekday` (1 Monday .. 7 Sunday), `cell_height`, `header_height`,
 -- `band` (a binding to `from, to` dates drawn as a run, for a range) and
--- `press_activates` (a press picks, not only moves) are optional; the
+-- `press_activates` (a click picks, not only moves) are optional; the
 -- calendar is as tall as the month's weeks unless `fit = false`. Ids:
 -- `<id>-previous`, `<id>-next`, `<id>-month-title`, `<id>-day-<date>`.
 local ui = require("morf.ui")

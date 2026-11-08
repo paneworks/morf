@@ -1807,7 +1807,11 @@ along their `drag_axis` (`"x"`, `"y"` or `"both"`, the default): a pan across
 a horizontal slider or a reorderable tab row goes on to what holds it. The kit
 sets it on its sliders, drags and reorderable entries, and holds a finger's
 press on them until the drag is plainly theirs, so a pan across one leaves its
-value as it was; a tap still sets it.
+value as it was; a tap still sets it. The kit's lists, grids, tabs and
+swatches choose an entry on its click -- a tap, or a press let go over it
+without a drag -- never on the press, under a finger and a mouse alike, so a
+pan or a drag that starts on one chooses nothing; the press still shows it
+down.
 A Flickable that can scroll in the movement direction takes the drag; at its
 boundary it can yield to a containing panel. Ordinary taps remain clicks.
 
@@ -2752,8 +2756,11 @@ entry area's own properties (`x`, `width`, `layout`, ...), and
 `orientation` otherwise). `spec.item_id(index, value)` names each
 entry's area; `spec.delegate(index, value, s)`, when given, draws the
 entries instead of the skin (a layout's own swatches); and
-`spec.press_activates` makes one press activate an entry, not only
-choose it. A table entry's `accessible_role` overrides the role its
+`spec.press_activates` makes one tap activate an entry, not only
+choose it. An entry is chosen by a completed click or tap: a press only
+shows it down (`s.down()`), and a press that becomes a drag or a pan
+chooses nothing. A reorderable entry dragged past a neighbour is chosen as
+it moves. A table entry's `accessible_role` overrides the role its
 area takes (a padding cell's "generic"). The live state adds `current_x`,
 `current_y`, `current_width`, `current_height`: the current entry's box
 within the control.
@@ -3132,7 +3139,7 @@ local node, cal = composites.calendar {
   id = "planner", width = 280,
   value = function() return day:get() end,        -- "YYYY-MM-DD"
   on_changed = function(date) day:set(date) end,  -- the current day moved
-  on_picked = function(date) end,                 -- a press or Return chose it
+  on_picked = function(date) end,                 -- a click or Return chose it
   marked = function(date) return count(date) > 0 end,
 }
 cal.step(1) ; cal.show("2026-12") ; cal.month() --> "2026-10"
@@ -3150,7 +3157,7 @@ binding to either) makes the shown month the configuration's: the
 arrows by the title then only ask, through `on_month(month, delta)`.
 `first_weekday` (1 Monday .. 7 Sunday), `cell_height`, `header_height`,
 `band` (a binding to `from, to` dates drawn as a run, for a range) and
-`press_activates` (a press picks, not only moves) are optional; the
+`press_activates` (a click picks, not only moves) are optional; the
 calendar is as tall as the month's weeks unless `fit = false`. Ids:
 `<id>-previous`, `<id>-next`, `<id>-month-title`, `<id>-day-<date>`.
 
@@ -3174,7 +3181,7 @@ A `color_plane` (a Plane) holds saturation across and value up, under a
 hue scale and an alpha scale (dragged, or stepped by the arrows once
 focused); a hex entry (Return takes what is typed, Escape gives it back)
 beside a sample of the color; and a `swatch_grid` (a Selection: the
-arrows walk it, a press or Return takes a swatch). Without `swatches` it
+arrows walk it, a click or Return takes a swatch). Without `swatches` it
 offers twelve hues and greys. `trailing` (a node) goes at the end of the
 hex row; `popup = true` makes it a button showing the color that opens
 it in a popover. Ids: `<id>-plane`, `<id>-hue`, `<id>-alpha`, `<id>-hex`,
@@ -3209,7 +3216,7 @@ drop.open() drop.close() drop.selected() drop.set(3)
 
 Items are strings or tables (`label`, `icon`, ...). The button opens on a
 press, Space, Return and Alt+Down; the list's arrows move, Return or a
-press picks, Escape closes, and focus goes back to the button. Other
+click picks, Escape closes, and focus goes back to the button. Other
 fields: `x`, `y`, `height` (34), `icon` (leading), `item_height` (36),
 `visible_items` (8), `list_width`, `placement` ("bottom-start"),
 `header` (a node over the list), `item_id(index, item)` (each entry's
@@ -3232,7 +3239,7 @@ local node, chooser = composites.emoji_chooser {
 ```
 
 A search entry over a toggle group of categories (each its icon) and an
-`emoji_grid` (a Selection: the arrows walk it, a press or Return picks)
+`emoji_grid` (a Selection: the arrows walk it, a click or Return picks)
 in a scrolled window, with the emoji the grid is on named under it.
 Typing searches every category by name and keywords, fuzzily; Down from
 the search goes to the grid, Return there picks the first match. `emoji`
@@ -3289,7 +3296,7 @@ that folder) and the path as an entry (Return goes there). Each folder is
 a page of a `navigation_view` (going into a folder pushes it, Back and
 Alt+Left pop, a folder's button or a place goes straight there), and
 lists its entries in a `list_view` (a Collection: the arrows walk it,
-typing jumps, a press chooses, Return or a double press opens a folder
+typing jumps, a click chooses, Return or a double click opens a folder
 or accepts a file; BackSpace goes up). Under the files: the name to save
 as (save), the filter (a drop-down) and Cancel and the accepting button.
 Folders list first, then files the filter lets through (none in folder
@@ -3317,7 +3324,7 @@ local node, chooser = composites.font_chooser {
 ```
 
 A search entry over the families, a list view (a Collection: the arrows
-walk it, typing jumps, Return or a press picks) whose rows set each
+walk it, typing jumps, Return or a click picks) whose rows set each
 family's name in the theme's face and a line in the family itself, and
 under them the family the list is on in a larger sample (`sample =
 false` leaves it out). The families are `fonts`, or `morf.text.families()`

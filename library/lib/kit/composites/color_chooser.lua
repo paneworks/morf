@@ -12,7 +12,7 @@
 -- hue scale and an alpha scale (dragged, or stepped by the arrows once
 -- focused); a hex entry (Return takes what is typed, Escape gives it back)
 -- beside a sample of the color; and a `swatch_grid` (a Selection: the
--- arrows walk it, a press or Return takes a swatch). Without `swatches` it
+-- arrows walk it, a click or Return takes a swatch). Without `swatches` it
 -- offers twelve hues and greys. `trailing` (a node) goes at the end of the
 -- hex row; `popup = true` makes it a button showing the color that opens
 -- it in a popover. Ids: `<id>-plane`, `<id>-hue`, `<id>-alpha`, `<id>-hex`,
