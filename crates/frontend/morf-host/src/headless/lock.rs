@@ -69,7 +69,9 @@ impl HeadlessLock {
             self.backend.request_frame(WindowId::Lock(index));
         }
         self.backend.advance(delta);
+        runtime.hold_long_press(self.backend.has_queued_events());
         runtime.poll_services();
+        runtime.hold_long_press(false);
         runtime.take_window_surface_change();
         runtime.take_layer_surface_change();
         if self.session.wants_unlock(runtime) {
@@ -80,6 +82,10 @@ impl HeadlessLock {
             self.laid.clear();
             self.unlocked = true;
             return;
+        }
+        let input = &mut self.session.input;
+        if let Err(error) = crate::input::stitch::flush(runtime, input, &self.session.outputs) {
+            problems.push(error);
         }
         while let Some(event) = self.backend.next_event() {
             let step = self
@@ -106,6 +112,7 @@ impl HeadlessLock {
                 problems.push(error);
             }
         }
+        runtime.poll_long_press();
         self.lay_out(runtime, text, problems);
         answer_new_containment(runtime, &self.session.input, &self.session.outputs);
     }

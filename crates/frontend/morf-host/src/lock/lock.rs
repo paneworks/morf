@@ -222,6 +222,10 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
                 .update_clock(&clock)
                 .map_err(|error| error.to_string())?;
         }
+        match crate::input::stitch::flush(&mut runtime, &mut lock.input, &lock.outputs) {
+            Ok(painted) => repaint |= painted,
+            Err(error) => runtime.warn(format!("lock input: {error}")),
+        }
         while let Some(event) = client.next_event() {
             follow_up = true;
             match lock.handle(&mut runtime, &mut client, event)? {

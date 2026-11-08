@@ -75,9 +75,30 @@ pub struct Gestures {
     swallow_click: Option<NodeHandle>,
     /// A due long press waits while the host has input queued.
     held: bool,
+    /// When a lifted tap the host holds back is due to be delivered.
+    touch_held: Option<Duration>,
 }
 
 impl Gestures {
+    /// The finger of the press under way lifted while the host holds its
+    /// release back: it can no longer become a long press.
+    pub fn lift(&mut self) {
+        if let Some(press) = &mut self.press {
+            press.moved = true;
+        }
+    }
+
+    /// When the tap the host holds back is due (on the gestures' clock), or
+    /// none, so the loop wakes to deliver it.
+    pub fn hold_touch(&mut self, until: Option<Duration>) {
+        self.touch_held = until;
+    }
+
+    /// When the tap the host holds back is due, if one is held.
+    pub fn touch_held(&self) -> Option<Duration> {
+        self.touch_held
+    }
+
     /// Whether the press held on `node` became a long press. The rest of
     /// that contact is the node's: no pan may take it.
     pub fn long_pressed(&self, node: NodeHandle) -> bool {

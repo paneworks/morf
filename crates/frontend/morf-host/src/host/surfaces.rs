@@ -90,6 +90,9 @@ pub struct PointerInput {
     pub touch_origins: HashMap<i32, (f64, f64)>,
     pub suppressed_taps: HashSet<i32>,
     pub touch_overlay_origins: HashMap<i32, (WindowId, f64, f64)>,
+    /// A tap whose release waits to see whether its finger lands again
+    /// (`input::stitch`).
+    pub lifted: Option<crate::input::stitch::Lifted>,
 }
 
 impl Default for PointerInput {
@@ -106,6 +109,7 @@ impl Default for PointerInput {
             touch_origins: HashMap::new(),
             suppressed_taps: HashSet::new(),
             touch_overlay_origins: HashMap::new(),
+            lifted: None,
             gestures: Default::default(),
         }
     }

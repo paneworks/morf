@@ -4,6 +4,7 @@ mod command_line;
 mod config_paths;
 mod docs;
 mod headless;
+mod held_touch;
 mod input_region;
 mod layout_cache;
 mod lock_input;

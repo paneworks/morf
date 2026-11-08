@@ -55,6 +55,24 @@ impl Runtime {
         self.poll_gestures()
     }
 
+    /// The gestures' clock: the virtual one under a test runner, the wall's
+    /// otherwise. What a host holding a tap back times it on.
+    pub fn gesture_clock(&self) -> std::time::Duration {
+        clock(self.reactive.borrow().timers().virtual_now())
+    }
+
+    /// The finger of the press under way lifted, and the host holds its
+    /// release back until `until` on [`Runtime::gesture_clock`] (none: no
+    /// longer): the press can no longer become a long press, and the loop
+    /// wakes when the tap is due.
+    pub fn hold_touch(&mut self, until: Option<std::time::Duration>) {
+        let mut state = self.reactive.borrow_mut();
+        if until.is_some() {
+            state.gestures_mut().lift();
+        }
+        state.gestures_mut().hold_touch(until);
+    }
+
     /// Watches one pointer event. Returns false for a click a long press
     /// took, which is then not delivered.
     pub(crate) fn watch_gesture(

@@ -15,7 +15,8 @@ use morf_scene::{Element, NodeHandle};
 use crate::host::surfaces::{PointerInput, SurfaceLayouts};
 
 const SLOP: f64 = 8.0;
-const EDGE: f64 = 20.0;
+/// How near a surface's edge a finger lands for an edge pan to take it.
+pub(crate) const EDGE: f64 = 20.0;
 
 enum Owner {
     Handler(NodeHandle, Option<&'static str>),
@@ -150,6 +151,21 @@ impl TouchPan {
             candidate = scene.parent(node).ok().flatten();
         }
         None
+    }
+}
+
+/// Whether finger `id`'s pan has not yet decided whose it is.
+pub fn undecided(input: &PointerInput, id: i32) -> bool {
+    input
+        .pan
+        .as_ref()
+        .is_some_and(|pan| pan.finger == id && !pan.decided)
+}
+
+/// Finger `from`'s pan goes on as finger `to`'s, from where it began.
+pub fn carry_on(input: &mut PointerInput, from: i32, to: i32) {
+    if let Some(pan) = input.pan.as_mut().filter(|pan| pan.finger == from) {
+        pan.finger = to;
     }
 }
 

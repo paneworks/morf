@@ -1828,6 +1828,22 @@ handler along the swipe's axis, a text input, or a terminal keeps the
 gesture; panel navigation does not take over sliders or text selection.
 Canceling a touch does not complete a swipe.
 
+Some touchscreens report a fast finger as a short contact, lifted a few
+milliseconds after it landed, and then a new contact a little further on.
+So a tap a pan could still take its finger from -- under a panel or a
+scrolling view, or within 20 px of an edge the surface's root pulls from --
+waits 60 ms before its release, its click
+and its tap outside an overlay are delivered. A contact that lands within
+320 px in that time is held until it shows what it is: once it has moved
+8 px it is the same finger going on, the tap clicks nothing, and the pan
+counts from where the finger first landed, with no new press; lifted where
+it landed, or resting there past 60 ms, it was a finger of its own, and the
+tap and then it are delivered in order, so quick separate taps and double
+taps stay what they were. Raw touch handlers still hear the two contacts the
+screen reported. A tap where no pan reaches, or on a node that keeps every
+drag itself (a text input, a terminal, an on-screen keyboard's keys), clicks
+at once.
+
 ### Overlays
 
 `morf.overlay.open(content, options)` shows `content` over everything else

@@ -399,8 +399,8 @@ impl Headless {
     }
 
     /// Advances a frame at a time until nothing moves -- no animation
-    /// running, no layout still converging, no turn still owed -- or `limit`
-    /// has passed. Returns the virtual time it took.
+    /// running, no layout still converging, no turn still owed, no tap held
+    /// back -- or `limit` has passed. Returns the virtual time it took.
     pub fn settle(&mut self, limit: Duration) -> Duration {
         let started = self.now;
         let mut quiet = 0;
@@ -412,7 +412,8 @@ impl Headless {
             self.frame(FRAME);
             let moving = self.runtime.has_motion()
                 || self.runtime.scene().layout_revision() != revision
-                || self.surfaces.iter().any(|surface| !surface.stable);
+                || self.surfaces.iter().any(|surface| !surface.stable)
+                || self.input().lifted.is_some();
             quiet = if moving { 0 } else { quiet + 1 };
             // Two quiet frames: one can be the frame a change lands in.
             if quiet >= 2 {

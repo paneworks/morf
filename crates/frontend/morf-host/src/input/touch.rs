@@ -9,10 +9,37 @@ use crate::host::surfaces::*;
 // `touches` map and shares nothing with the pointer path but the hit test.
 
 /// How far a finger may wander and still be a tap, in logical pixels.
-const TAP_TRAVEL: f64 = 10.0;
+pub(crate) const TAP_TRAVEL: f64 = 10.0;
 /// A finger is the primary button: it presses, releases and clicks as
 /// `left`, and a MouseArea that takes only another button lets it through.
-const TOUCH_BUTTON: u32 = 0x110;
+pub(crate) const TOUCH_BUTTON: u32 = 0x110;
+
+/// A tap at `(x, y)` outside the overlays open on `layout`'s surface, which
+/// closes those it is outside of.
+pub(crate) fn outside_tap(
+    runtime: &mut Runtime,
+    layout: &morf_layout::Layout,
+    x: f64,
+    y: f64,
+) -> Result<bool, String> {
+    let mut repaint = false;
+    let hit = layout
+        .hit_test_accepting(&runtime.scene(), x, y, &|node| {
+            runtime.accepts_pointer_button(node, TOUCH_BUTTON)
+        })
+        .map_err(|error| error.to_string())?;
+    for root in runtime.overlay_roots() {
+        if layout.geometry(root).is_some() {
+            let inside: Vec<NodeHandle> = runtime
+                .overlay_nodes(root)
+                .into_iter()
+                .filter(|node| layout.contains_point(&runtime.scene(), *node, x, y))
+                .collect();
+            repaint |= runtime.overlay_press(root, hit.map(|hit| hit.node), &inside);
+        }
+    }
+    Ok(repaint)
+}
 
 pub fn handle_touch_event(
     runtime: &mut Runtime,
@@ -29,6 +56,13 @@ pub fn handle_touch_event(
             y,
             time_ms,
         } => {
+            // Perhaps a held tap's finger landing again (`stitch`).
+            let (kept, changed) =
+                super::stitch::landed(runtime, input, layouts, surface, id, (x, y), time_ms)?;
+            repaint |= changed;
+            if kept {
+                return Ok(repaint);
+            }
             let Some(hit_layout) = layouts.layout_of(surface) else {
                 return Ok(false);
             };
@@ -67,6 +101,11 @@ pub fn handle_touch_event(
         Event::TouchMotion {
             id, x, y, time_ms, ..
         } => {
+            let (kept, changed) = super::stitch::moved(runtime, input, layouts, id, (x, y));
+            repaint |= changed;
+            if kept {
+                return Ok(repaint);
+            }
             if input
                 .touch_overlay_origins
                 .get(&id)
@@ -112,7 +151,9 @@ pub fn handle_touch_event(
             y,
             time_ms,
         } => {
-            input.touch_origins.remove(&id);
+            // A held landing lifting where it landed was a finger of its own.
+            repaint |= super::stitch::parted(runtime, input, layouts, id)?;
+            let origin = input.touch_origins.remove(&id);
             let suppress_tap = input.suppressed_taps.remove(&id);
             let (owned, changed) = super::two_finger::up(runtime, input, id, x, y);
             repaint |= changed;
@@ -128,6 +169,20 @@ pub fn handle_touch_event(
             {
                 repaint |= super::pan::motion(runtime, input, layouts, id, x, y, time_ms).1;
             }
+            // A tap a pan could still take its finger from waits (`stitch`).
+            if super::stitch::hold(
+                runtime,
+                input,
+                layouts,
+                surface,
+                id,
+                (x, y),
+                origin,
+                suppress_tap,
+            )? {
+                repaint |= crate::input::gesture::finger_up(runtime, input, Some(id));
+                return Ok(repaint);
+            }
             let (claimed, changed) = super::pan::up(runtime, input, Some(id), time_ms);
             repaint |= changed;
             repaint |= crate::input::gesture::finger_up(runtime, input, Some(id));
@@ -138,21 +193,7 @@ pub fn handle_touch_event(
                 && (x - sx).hypot(y - sy) <= TAP_TRAVEL
                 && let Some(layout) = layouts.layout_of(surface)
             {
-                let hit = layout
-                    .hit_test_accepting(&runtime.scene(), x, y, &|node| {
-                        runtime.accepts_pointer_button(node, TOUCH_BUTTON)
-                    })
-                    .map_err(|error| error.to_string())?;
-                for root in runtime.overlay_roots() {
-                    if layout.geometry(root).is_some() {
-                        let inside: Vec<NodeHandle> = runtime
-                            .overlay_nodes(root)
-                            .into_iter()
-                            .filter(|node| layout.contains_point(&runtime.scene(), *node, x, y))
-                            .collect();
-                        repaint |= runtime.overlay_press(root, hit.map(|hit| hit.node), &inside);
-                    }
-                }
+                repaint |= outside_tap(runtime, layout, x, y)?;
             }
             if claimed {
                 input.touches.remove(&id);
@@ -207,6 +248,7 @@ pub fn handle_touch_event(
             }
         }
         Event::TouchCancel => {
+            repaint |= super::stitch::cancel(runtime, input, layouts)?;
             input.touch_origins.clear();
             repaint |= super::two_finger::cancel(runtime, input);
             input.touch_overlay_origins.clear();
