@@ -9,6 +9,7 @@ mod layout_cache;
 mod lock_input;
 mod lock_ipc;
 mod lock_trees;
+mod long_press_touch;
 mod motion_turn;
 mod operations;
 mod permission_cost;

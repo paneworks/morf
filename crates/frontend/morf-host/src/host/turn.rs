@@ -197,7 +197,10 @@ impl Host {
         // is now, not as it was when the loop last woke.
         repaint |= self.update_clock(runtime)?;
         self.report_jit(runtime);
+        // A long press due now waits for the input already queued.
+        runtime.hold_long_press(events.iter().any(steps::is_input));
         repaint |= self.poll_stage(runtime);
+        runtime.hold_long_press(false);
         let mut recreate_surface = false;
         if let Some(links) = links {
             let mut queued = commands.into_iter();
@@ -248,6 +251,7 @@ impl Host {
         }
         repaint |= self.apply_runtime_changes(runtime)?;
         repaint |= self.handle_events(runtime, events, links, true)?;
+        repaint |= runtime.poll_long_press();
         self.finish_turn(runtime, repaint)
     }
 

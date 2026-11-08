@@ -192,8 +192,11 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
         let desktop_repaint = dispatch_desktop(&mut runtime, &mut *desktop, None)?;
         wake.drain();
         log_wake("lock", woke, &sleep, slept);
+        // A long press due now waits for the input already queued.
+        runtime.hold_long_press(client.has_queued_events());
         let mut repaint =
             std::mem::take(&mut repaint_next) | desktop_repaint | runtime.poll_services();
+        runtime.hold_long_press(false);
         repaint |= ipc.serve(&mut runtime);
         apply_service_requests(&mut runtime, &mut client, &mut *desktop);
         apply_idle_timeouts(&mut runtime, &mut *desktop);
@@ -265,6 +268,7 @@ pub fn run_lock(mut runtime: Runtime, path: &std::path::Path) -> Result<(), Stri
                 }
             }
         }
+        repaint |= runtime.poll_long_press();
         if lock.locked
             && let Some(provider) = &provider
         {

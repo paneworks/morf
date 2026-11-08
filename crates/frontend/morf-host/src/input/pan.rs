@@ -1,5 +1,7 @@
 //! Continuous, exclusively owned touch drags. Handlers can decline `begin`;
 //! once accepted, motion stays with that owner even as its geometry moves.
+//! A contact whose press became a long press is never offered: it is the
+//! long-pressed node's to drag.
 use std::{
     sync::OnceLock,
     time::{Duration, Instant},
@@ -237,7 +239,12 @@ pub fn motion(
         let dy = (y - pan.origin.1).abs();
         if dx.max(dy) >= dx.min(dy) * 1.2 {
             pan.decided = true;
-            pan.owner = pan.choose(runtime, layouts);
+            // A long press has made the contact its node's.
+            pan.owner = if runtime.long_pressed(pan.node) {
+                None
+            } else {
+                pan.choose(runtime, layouts)
+            };
             pan.claimed = pan.owner.is_some();
             first = pan.claimed;
             if first {

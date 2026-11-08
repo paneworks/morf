@@ -1783,7 +1783,7 @@ Gestures are events like any other, on any node that takes the pointer:
 | handler | when |
 |---|---|
 | `on_double_clicked(x, y, local_x, local_y)` | a second click within 400 ms and 8 px of the first, after that click's `on_clicked` |
-| `on_long_pressed(x, y, local_x, local_y)` | a press held within 8 px for half a second; the click its release would make is not delivered |
+| `on_long_pressed(x, y, local_x, local_y)` | a press held within 8 px for half a second; the click its release would make is not delivered, and the rest of the contact is the node's: a finger then dragged is its drag, never a pan's, and completes no swipe |
 | `on_swiped(direction, velocity_x, velocity_y)` | a press moved over 24 px and let go faster than 400 px/s, or a touch pulled at least 80 px along a dominant axis; `direction` is `left`, `right`, `up` or `down` |
 | `on_pinched(scale, phase, x, y)` | two fingers spreading or closing: `scale` against their first spread, `phase` `update` then `end`, `(x, y)` their midpoint |
 | `on_edge_swiped(edge)` | on a surface's root: a finger landing within 20 px of an edge and moving 48 px in |
@@ -1799,7 +1799,11 @@ from the initial touch in surface coordinates, so moving the panel does not
 change the measurement. `vx` and `vy` are recent logical pixels per second;
 holding still before release removes fling velocity. Update geometry directly
 while dragging and animate to a resting position on `end`. Restore the prior
-state on `cancel`, including when a second finger interrupts the pan.
+state on `cancel`, including when a second finger interrupts the pan. A
+contact whose press became a long press is offered to no pan: it is the
+long-pressed node's to drag, so a long press and then a drag arranges what
+was held rather than moving the panel under it. A move the shell has already
+been sent when the long press comes due counts first.
 
 An accepted pan cancels the child's press and suppresses its click and legacy
 swipe. Sliders, text selection and explicit child drag handlers keep ownership
