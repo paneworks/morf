@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.3] - 2026-11-08
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- One finger from a split contact
+- A long press keeps its contact from pans
+- Choose entries on click, not on press
+
 ## [0.6.2] - 2026-10-31
 
 ### <!-- 2 -->🚜 Refactor
