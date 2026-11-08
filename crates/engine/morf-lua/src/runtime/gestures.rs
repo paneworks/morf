@@ -36,6 +36,43 @@ impl Runtime {
         self.reactive.borrow_mut().gestures_mut().cancel();
     }
 
+    /// Whether the press held on `node` became a long press: what is left of
+    /// that contact is the node's, and a pan must not take it.
+    pub fn long_pressed(&self, node: NodeHandle) -> bool {
+        self.reactive.borrow().gestures().long_pressed(node)
+    }
+
+    /// While `on`, a due long press waits: a host with input queued says so
+    /// before [`Runtime::poll_services`] and lets go once it has handled it,
+    /// then calls [`Runtime::poll_long_press`], so a move that came before
+    /// the long press's time is seen first.
+    pub fn hold_long_press(&mut self, on: bool) {
+        self.reactive.borrow_mut().gestures_mut().hold(on);
+    }
+
+    /// Fires a long press whose time has come. Returns whether one ran.
+    pub fn poll_long_press(&mut self) -> bool {
+        self.poll_gestures()
+    }
+
+    /// The gestures' clock: the virtual one under a test runner, the wall's
+    /// otherwise. What a host holding a tap back times it on.
+    pub fn gesture_clock(&self) -> std::time::Duration {
+        clock(self.reactive.borrow().timers().virtual_now())
+    }
+
+    /// The finger of the press under way lifted, and the host holds its
+    /// release back until `until` on [`Runtime::gesture_clock`] (none: no
+    /// longer): the press can no longer become a long press, and the loop
+    /// wakes when the tap is due.
+    pub fn hold_touch(&mut self, until: Option<std::time::Duration>) {
+        let mut state = self.reactive.borrow_mut();
+        if until.is_some() {
+            state.gestures_mut().lift();
+        }
+        state.gestures_mut().hold_touch(until);
+    }
+
     /// Watches one pointer event. Returns false for a click a long press
     /// took, which is then not delivered.
     pub(crate) fn watch_gesture(

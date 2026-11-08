@@ -1783,7 +1783,7 @@ Gestures are events like any other, on any node that takes the pointer:
 | handler | when |
 |---|---|
 | `on_double_clicked(x, y, local_x, local_y)` | a second click within 400 ms and 8 px of the first, after that click's `on_clicked` |
-| `on_long_pressed(x, y, local_x, local_y)` | a press held within 8 px for half a second; the click its release would make is not delivered |
+| `on_long_pressed(x, y, local_x, local_y)` | a press held within 8 px for half a second; the click its release would make is not delivered, and the rest of the contact is the node's: a finger then dragged is its drag, never a pan's, and completes no swipe |
 | `on_swiped(direction, velocity_x, velocity_y)` | a press moved over 24 px and let go faster than 400 px/s, or a touch pulled at least 80 px along a dominant axis; `direction` is `left`, `right`, `up` or `down` |
 | `on_pinched(scale, phase, x, y)` | two fingers spreading or closing: `scale` against their first spread, `phase` `update` then `end`, `(x, y)` their midpoint |
 | `on_edge_swiped(edge)` | on a surface's root: a finger landing within 20 px of an edge and moving 48 px in |
@@ -1799,7 +1799,11 @@ from the initial touch in surface coordinates, so moving the panel does not
 change the measurement. `vx` and `vy` are recent logical pixels per second;
 holding still before release removes fling velocity. Update geometry directly
 while dragging and animate to a resting position on `end`. Restore the prior
-state on `cancel`, including when a second finger interrupts the pan.
+state on `cancel`, including when a second finger interrupts the pan. A
+contact whose press became a long press is offered to no pan: it is the
+long-pressed node's to drag, so a long press and then a drag arranges what
+was held rather than moving the panel under it. A move the shell has already
+been sent when the long press comes due counts first.
 
 An accepted pan cancels the child's press and suppresses its click and legacy
 swipe. Sliders, text selection and explicit child drag handlers keep ownership
@@ -1807,7 +1811,11 @@ along their `drag_axis` (`"x"`, `"y"` or `"both"`, the default): a pan across
 a horizontal slider or a reorderable tab row goes on to what holds it. The kit
 sets it on its sliders, drags and reorderable entries, and holds a finger's
 press on them until the drag is plainly theirs, so a pan across one leaves its
-value as it was; a tap still sets it.
+value as it was; a tap still sets it. The kit's lists, grids, tabs and
+swatches choose an entry on its click -- a tap, or a press let go over it
+without a drag -- never on the press, under a finger and a mouse alike, so a
+pan or a drag that starts on one chooses nothing; the press still shows it
+down.
 A Flickable that can scroll in the movement direction takes the drag; at its
 boundary it can yield to a containing panel. Ordinary taps remain clicks.
 
@@ -1819,6 +1827,22 @@ the nearest ancestor with `on_swiped`. A child with its own swipe/drag
 handler along the swipe's axis, a text input, or a terminal keeps the
 gesture; panel navigation does not take over sliders or text selection.
 Canceling a touch does not complete a swipe.
+
+Some touchscreens report a fast finger as a short contact, lifted a few
+milliseconds after it landed, and then a new contact a little further on.
+So a tap a pan could still take its finger from -- under a panel or a
+scrolling view, or within 20 px of an edge the surface's root pulls from --
+waits 60 ms before its release, its click
+and its tap outside an overlay are delivered. A contact that lands within
+320 px in that time is held until it shows what it is: once it has moved
+8 px it is the same finger going on, the tap clicks nothing, and the pan
+counts from where the finger first landed, with no new press; lifted where
+it landed, or resting there past 60 ms, it was a finger of its own, and the
+tap and then it are delivered in order, so quick separate taps and double
+taps stay what they were. Raw touch handlers still hear the two contacts the
+screen reported. A tap where no pan reaches, or on a node that keeps every
+drag itself (a text input, a terminal, an on-screen keyboard's keys), clicks
+at once.
 
 ### Overlays
 
@@ -2752,8 +2776,11 @@ entry area's own properties (`x`, `width`, `layout`, ...), and
 `orientation` otherwise). `spec.item_id(index, value)` names each
 entry's area; `spec.delegate(index, value, s)`, when given, draws the
 entries instead of the skin (a layout's own swatches); and
-`spec.press_activates` makes one press activate an entry, not only
-choose it. A table entry's `accessible_role` overrides the role its
+`spec.press_activates` makes one tap activate an entry, not only
+choose it. An entry is chosen by a completed click or tap: a press only
+shows it down (`s.down()`), and a press that becomes a drag or a pan
+chooses nothing. A reorderable entry dragged past a neighbour is chosen as
+it moves. A table entry's `accessible_role` overrides the role its
 area takes (a padding cell's "generic"). The live state adds `current_x`,
 `current_y`, `current_width`, `current_height`: the current entry's box
 within the control.
@@ -3132,7 +3159,7 @@ local node, cal = composites.calendar {
   id = "planner", width = 280,
   value = function() return day:get() end,        -- "YYYY-MM-DD"
   on_changed = function(date) day:set(date) end,  -- the current day moved
-  on_picked = function(date) end,                 -- a press or Return chose it
+  on_picked = function(date) end,                 -- a click or Return chose it
   marked = function(date) return count(date) > 0 end,
 }
 cal.step(1) ; cal.show("2026-12") ; cal.month() --> "2026-10"
@@ -3150,7 +3177,7 @@ binding to either) makes the shown month the configuration's: the
 arrows by the title then only ask, through `on_month(month, delta)`.
 `first_weekday` (1 Monday .. 7 Sunday), `cell_height`, `header_height`,
 `band` (a binding to `from, to` dates drawn as a run, for a range) and
-`press_activates` (a press picks, not only moves) are optional; the
+`press_activates` (a click picks, not only moves) are optional; the
 calendar is as tall as the month's weeks unless `fit = false`. Ids:
 `<id>-previous`, `<id>-next`, `<id>-month-title`, `<id>-day-<date>`.
 
@@ -3174,7 +3201,7 @@ A `color_plane` (a Plane) holds saturation across and value up, under a
 hue scale and an alpha scale (dragged, or stepped by the arrows once
 focused); a hex entry (Return takes what is typed, Escape gives it back)
 beside a sample of the color; and a `swatch_grid` (a Selection: the
-arrows walk it, a press or Return takes a swatch). Without `swatches` it
+arrows walk it, a click or Return takes a swatch). Without `swatches` it
 offers twelve hues and greys. `trailing` (a node) goes at the end of the
 hex row; `popup = true` makes it a button showing the color that opens
 it in a popover. Ids: `<id>-plane`, `<id>-hue`, `<id>-alpha`, `<id>-hex`,
@@ -3209,7 +3236,7 @@ drop.open() drop.close() drop.selected() drop.set(3)
 
 Items are strings or tables (`label`, `icon`, ...). The button opens on a
 press, Space, Return and Alt+Down; the list's arrows move, Return or a
-press picks, Escape closes, and focus goes back to the button. Other
+click picks, Escape closes, and focus goes back to the button. Other
 fields: `x`, `y`, `height` (34), `icon` (leading), `item_height` (36),
 `visible_items` (8), `list_width`, `placement` ("bottom-start"),
 `header` (a node over the list), `item_id(index, item)` (each entry's
@@ -3232,7 +3259,7 @@ local node, chooser = composites.emoji_chooser {
 ```
 
 A search entry over a toggle group of categories (each its icon) and an
-`emoji_grid` (a Selection: the arrows walk it, a press or Return picks)
+`emoji_grid` (a Selection: the arrows walk it, a click or Return picks)
 in a scrolled window, with the emoji the grid is on named under it.
 Typing searches every category by name and keywords, fuzzily; Down from
 the search goes to the grid, Return there picks the first match. `emoji`
@@ -3289,7 +3316,7 @@ that folder) and the path as an entry (Return goes there). Each folder is
 a page of a `navigation_view` (going into a folder pushes it, Back and
 Alt+Left pop, a folder's button or a place goes straight there), and
 lists its entries in a `list_view` (a Collection: the arrows walk it,
-typing jumps, a press chooses, Return or a double press opens a folder
+typing jumps, a click chooses, Return or a double click opens a folder
 or accepts a file; BackSpace goes up). Under the files: the name to save
 as (save), the filter (a drop-down) and Cancel and the accepting button.
 Folders list first, then files the filter lets through (none in folder
@@ -3317,7 +3344,7 @@ local node, chooser = composites.font_chooser {
 ```
 
 A search entry over the families, a list view (a Collection: the arrows
-walk it, typing jumps, Return or a press picks) whose rows set each
+walk it, typing jumps, Return or a click picks) whose rows set each
 family's name in the theme's face and a line in the family itself, and
 under them the family the list is on in a larger sample (`sample =
 false` leaves it out). The families are `fonts`, or `morf.text.families()`

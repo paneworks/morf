@@ -39,6 +39,8 @@ end)
 test.it("a tap remains a click and a child slider retains its drag",function()
   load()
   test.touch("down",0,100,100) test.touch("up",0,100,100)
+  -- Under a pan, the tap's click waits out the stitch gap.
+  test.eq(state().clicks,0) test.advance(80)
   test.eq(state().clicks,1) test.eq(#state().phases,0)
   test.swipe({100,300},{200,300})
   test.truthy(state().drags>0) test.eq(#state().phases,0)

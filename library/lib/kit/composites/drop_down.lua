@@ -14,7 +14,7 @@
 --
 -- Items are strings or tables (`label`, `icon`, ...). The button opens on a
 -- press, Space, Return and Alt+Down; the list's arrows move, Return or a
--- press picks, Escape closes, and focus goes back to the button. Other
+-- click picks, Escape closes, and focus goes back to the button. Other
 -- fields: `x`, `y`, `height` (34), `icon` (leading), `item_height` (36),
 -- `visible_items` (8), `list_width`, `placement` ("bottom-start"),
 -- `header` (a node over the list), `item_id(index, item)` (each entry's

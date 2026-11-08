@@ -23,7 +23,7 @@
 -- a page of a `navigation_view` (going into a folder pushes it, Back and
 -- Alt+Left pop, a folder's button or a place goes straight there), and
 -- lists its entries in a `list_view` (a Collection: the arrows walk it,
--- typing jumps, a press chooses, Return or a double press opens a folder
+-- typing jumps, a click chooses, Return or a double click opens a folder
 -- or accepts a file; BackSpace goes up). Under the files: the name to save
 -- as (save), the filter (a drop-down) and Cancel and the accepting button.
 -- Folders list first, then files the filter lets through (none in folder

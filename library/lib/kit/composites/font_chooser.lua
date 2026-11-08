@@ -9,7 +9,7 @@
 --     }
 --
 -- A search entry over the families, a list view (a Collection: the arrows
--- walk it, typing jumps, Return or a press picks) whose rows set each
+-- walk it, typing jumps, Return or a click picks) whose rows set each
 -- family's name in the theme's face and a line in the family itself, and
 -- under them the family the list is on in a larger sample (`sample =
 -- false` leaves it out). The families are `fonts`, or `morf.text.families()`

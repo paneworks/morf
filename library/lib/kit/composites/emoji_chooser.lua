@@ -7,7 +7,7 @@
 --     }
 --
 -- A search entry over a toggle group of categories (each its icon) and an
--- `emoji_grid` (a Selection: the arrows walk it, a press or Return picks)
+-- `emoji_grid` (a Selection: the arrows walk it, a click or Return picks)
 -- in a scrolled window, with the emoji the grid is on named under it.
 -- Typing searches every category by name and keywords, fuzzily; Down from
 -- the search goes to the grid, Return there picks the first match. `emoji`

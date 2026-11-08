@@ -21,7 +21,19 @@ pub fn handle_pointer_event(
     layouts: &dyn SurfaceLayouts,
     event: Event,
 ) -> Result<Result<bool, Event>, String> {
-    let mut repaint = false;
+    // A held tap whose time has passed goes first, and before a button
+    // whatever its time, so the events keep their order.
+    let mut repaint = match &event {
+        Event::PointerButton { .. } => crate::input::stitch::deliver(runtime, input, layouts)?,
+        Event::PointerMotion { .. }
+        | Event::PointerLeave { .. }
+        | Event::PointerAxis { .. }
+        | Event::TouchDown { .. }
+        | Event::TouchMotion { .. }
+        | Event::TouchUp { .. }
+        | Event::TouchCancel => crate::input::stitch::flush(runtime, input, layouts)?,
+        _ => false,
+    };
     if let Event::PointerButton { modifiers, .. } | Event::PointerAxis { modifiers, .. } = &event {
         runtime.set_held_modifiers(crate::input::keys::key_modifiers(*modifiers));
     }

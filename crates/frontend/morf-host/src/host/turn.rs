@@ -117,6 +117,22 @@ impl Host {
         self.follow_up = true;
         self.containment_repaint = true;
     }
+
+    /// Delivers a held tap whose time has passed (`input::stitch`).
+    fn flush_touch(&mut self, runtime: &mut Runtime) -> bool {
+        let layouts = LayerLayouts {
+            layout: &self.state.layout,
+            windows: &self.state.windows,
+        };
+        match crate::input::stitch::flush(runtime, &mut self.state.input, &layouts) {
+            Ok(repaint) => repaint,
+            Err(error) => {
+                runtime.warn(format!("held touch: {error}"));
+                false
+            }
+        }
+    }
+
     /// Waits until something is due: the backend sends something, a service
     /// thread rings `wake`, or the first thing on the clock. Nothing else: an
     /// idle shell sleeps until one of those.
@@ -197,7 +213,10 @@ impl Host {
         // is now, not as it was when the loop last woke.
         repaint |= self.update_clock(runtime)?;
         self.report_jit(runtime);
+        // A long press due now waits for the input already queued.
+        runtime.hold_long_press(events.iter().any(steps::is_input));
         repaint |= self.poll_stage(runtime);
+        runtime.hold_long_press(false);
         let mut recreate_surface = false;
         if let Some(links) = links {
             let mut queued = commands.into_iter();
@@ -247,7 +266,9 @@ impl Host {
             return Ok(Turn::Recreate);
         }
         repaint |= self.apply_runtime_changes(runtime)?;
+        repaint |= self.flush_touch(runtime);
         repaint |= self.handle_events(runtime, events, links, true)?;
+        repaint |= runtime.poll_long_press();
         self.finish_turn(runtime, repaint)
     }
 

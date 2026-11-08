@@ -23,7 +23,9 @@
 -- `s.expandable()`, `s.expanded()`; a table's cells come from the skin's
 -- `cell(row, column, s)` and its header from `header(column, t)`. A spec's
 -- own `delegate(row, s)` (returning node and updater too) draws the rows
--- instead.
+-- instead. A row is chosen by a completed click or tap, with the
+-- modifiers it was made with; a press only shows it down, and one that
+-- becomes a drag or a pan chooses nothing.
 local ui = require("morf.ui")
 local control = require("lib.kit.control")
 
@@ -236,7 +238,7 @@ function M.make(widget, spec)
       width = (layout == "grid" or layout == "flow") and cell_w or W,
       height = (layout == "grid" or layout == "flow") and cell_h or (spec.size_field and row[spec.size_field] or row_h),
       cursor = "pointer",
-      on_pressed = function(_, _, _, _, _, modifiers)
+      on_clicked = function(_, _, _, _, _, modifiers)
         if ctl then ctl.send("item_pressed", index_signal:get(), modifiers or "") end
       end,
       on_double_clicked = function() if ctl then ctl.send("item_activated", index_signal:get()) end end }

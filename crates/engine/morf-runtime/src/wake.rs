@@ -55,6 +55,8 @@ pub enum DeadlineCause {
     Preload,
     /// A press held still becomes a long press.
     LongPress,
+    /// A lifted tap the host held back is delivered.
+    HeldTouch,
 }
 
 impl DeadlineCause {
@@ -68,6 +70,7 @@ impl DeadlineCause {
             Self::Terminal => "terminal",
             Self::TrayRetry => "tray-retry",
             Self::LongPress => "long-press",
+            Self::HeldTouch => "held-touch",
         }
     }
 }

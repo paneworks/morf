@@ -43,6 +43,8 @@ end)
 test.it("dragging from a button scrolls without clicking but an ordinary tap clicks",function()
   load()
   test.touch("down",0,100,160) test.touch("up",0,100,160)
+  -- Under a pan, the tap's click waits out the stitch gap.
+  test.eq(test.ipc("state").clicks,0) test.advance(80)
   test.eq(test.ipc("state").clicks,1)
   drag(100,160,0,-100)
   test.near(test.ipc("state").offset,100,1) test.eq(test.ipc("state").clicks,1)

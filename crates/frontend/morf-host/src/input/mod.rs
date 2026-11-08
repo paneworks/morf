@@ -6,5 +6,6 @@ pub mod gesture;
 pub mod keys;
 pub mod pan;
 pub mod pointer;
+pub mod stitch;
 pub mod touch;
 pub mod two_finger;

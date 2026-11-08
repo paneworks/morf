@@ -10,8 +10,9 @@
 //!
 //! State: `current`, `selected` (indices), `count`.
 //!
-//! Events: the base's, `"item_pressed"` (index, modifiers: Ctrl toggles,
-//! Shift extends), `"item_activated"` (index: a double press), `"point"`
+//! Events: the base's, `"item_pressed"` (index, modifiers: an entry
+//! clicked or tapped; Ctrl toggles, Shift extends), `"item_activated"`
+//! (index: a double click), `"point"`
 //! (dx, dy, dead radius: a radial menu's pointer from its centre -- the
 //! item whose sector it is in becomes current, none inside the dead
 //! radius), `"point_release"` (the same, let go: that item is activated --

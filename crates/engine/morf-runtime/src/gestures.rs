@@ -4,7 +4,8 @@
 //!
 //! - long press: a press held within 8 px of where it began for half a
 //!   second. The click its release would make is not delivered: the press
-//!   was the long press's.
+//!   was the long press's, and so is the rest of the contact -- it completes
+//!   no swipe, and [`Gestures::long_pressed`] tells a pan not to take it.
 //! - double click: a second click on the same node within 400 ms and 8 px
 //!   of the first, after that click's own click.
 //! - swipe: a press that moved more than 24 px and was let go moving faster
@@ -72,9 +73,47 @@ pub struct Gestures {
     last_click: Option<(NodeHandle, Duration, f64, f64)>,
     /// The node whose next click a long press took.
     swallow_click: Option<NodeHandle>,
+    /// A due long press waits while the host has input queued.
+    held: bool,
+    /// When a lifted tap the host holds back is due to be delivered.
+    touch_held: Option<Duration>,
 }
 
 impl Gestures {
+    /// The finger of the press under way lifted while the host holds its
+    /// release back: it can no longer become a long press.
+    pub fn lift(&mut self) {
+        if let Some(press) = &mut self.press {
+            press.moved = true;
+        }
+    }
+
+    /// When the tap the host holds back is due (on the gestures' clock), or
+    /// none, so the loop wakes to deliver it.
+    pub fn hold_touch(&mut self, until: Option<Duration>) {
+        self.touch_held = until;
+    }
+
+    /// When the tap the host holds back is due, if one is held.
+    pub fn touch_held(&self) -> Option<Duration> {
+        self.touch_held
+    }
+
+    /// Whether the press held on `node` became a long press. The rest of
+    /// that contact is the node's: no pan may take it.
+    pub fn long_pressed(&self, node: NodeHandle) -> bool {
+        self.press
+            .as_ref()
+            .is_some_and(|press| press.node == node && press.long_fired)
+    }
+
+    /// Holds a due long press back while `on`, so input queued before its
+    /// time is seen first; [`Gestures::take_long_press`] answers nothing
+    /// until it is let go.
+    pub fn hold(&mut self, on: bool) {
+        self.held = on;
+    }
+
     /// Touch navigation can complete by distance even without a fast fling.
     pub fn touch(&mut self) {
         if let Some(press) = &mut self.press {
@@ -176,7 +215,10 @@ impl Gestures {
                 }
             }
             UiEvent::Released => {
-                let press = self.press.take().filter(|press| press.node == node)?;
+                let press = self
+                    .press
+                    .take()
+                    .filter(|press| press.node == node && !press.long_fired)?;
                 let (first, last) = (press.samples.front()?, press.samples.back()?);
                 let travelled = (point.surface_x - press.point.surface_x)
                     .hypot(point.surface_y - press.point.surface_y);
@@ -218,7 +260,8 @@ impl Gestures {
         wants_long_press: impl Fn(NodeHandle) -> bool,
     ) -> Option<(NodeHandle, EventPoint)> {
         let press = self.press.as_mut()?;
-        if press.moved
+        if self.held
+            || press.moved
             || press.long_fired
             || !wants_long_press(press.node)
             || now < press.at + LONG_PRESS
@@ -258,6 +301,47 @@ mod tests {
             "once"
         );
         assert!(!gestures.watch(ms(700), area, UiEvent::Clicked, at(10.0, 10.0)));
+    }
+
+    #[test]
+    fn a_long_press_owns_the_rest_of_its_contact() {
+        let mut gestures = Gestures::default();
+        let mut scene = morf_scene::Scene::default();
+        let area = scene.create(morf_scene::Element::MouseArea);
+        let other = scene.create(morf_scene::Element::MouseArea);
+        let ms = Duration::from_millis;
+        gestures.watch(ms(0), area, UiEvent::Pressed, at(10.0, 10.0));
+        assert!(!gestures.long_pressed(area));
+        assert!(gestures.take_long_press(ms(500), |_| true).is_some());
+        assert!(gestures.long_pressed(area));
+        assert!(!gestures.long_pressed(other));
+        gestures.watch(ms(520), area, UiEvent::Dragged, at(150.0, 10.0));
+        assert_eq!(
+            gestures.finish(ms(530), area, UiEvent::Released, at(150.0, 10.0)),
+            None,
+            "a long press dragged and let go is no swipe"
+        );
+        assert!(!gestures.long_pressed(area));
+    }
+
+    #[test]
+    fn a_held_long_press_waits_for_the_queued_input() {
+        let mut gestures = Gestures::default();
+        let area = node();
+        let ms = Duration::from_millis;
+        gestures.watch(ms(0), area, UiEvent::Pressed, at(10.0, 10.0));
+        gestures.hold(true);
+        assert!(gestures.take_long_press(ms(510), |_| true).is_none());
+        gestures.watch(ms(510), area, UiEvent::Dragged, at(40.0, 10.0));
+        gestures.hold(false);
+        assert!(
+            gestures.take_long_press(ms(510), |_| true).is_none(),
+            "the move queued before the poll counts"
+        );
+        gestures.watch(ms(600), area, UiEvent::Pressed, at(10.0, 10.0));
+        gestures.hold(true);
+        gestures.hold(false);
+        assert!(gestures.take_long_press(ms(1100), |_| true).is_some());
     }
 
     #[test]

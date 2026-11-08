@@ -71,7 +71,8 @@ impl Engine {
     }
 
     /// The earliest moment the engine's own work comes due on the wall
-    /// clock -- a timer, a preload, a long press -- and what it is.
+    /// clock -- a timer, a preload, a long press, a held tap -- and what it
+    /// is.
     pub fn next_deadline(&self) -> Option<(Instant, DeadlineCause)> {
         let timers = self
             .timers
@@ -96,7 +97,11 @@ impl Engine {
         let long_press = self
             .long_press_due()
             .map(|at| (at, DeadlineCause::LongPress));
-        crate::wake::earliest([timers, preload, long_press])
+        let touch = self.gestures.touch_held().map(|due| {
+            let at = crate::gestures::wall(self.timers.virtual_now(), due);
+            (at, DeadlineCause::HeldTouch)
+        });
+        crate::wake::earliest([timers, preload, long_press, touch])
     }
 
     /// Whether the last turn left the engine work no thread will ring for:

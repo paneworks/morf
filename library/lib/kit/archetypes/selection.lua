@@ -22,8 +22,11 @@
 -- `orientation` otherwise). `spec.item_id(index, value)` names each
 -- entry's area; `spec.delegate(index, value, s)`, when given, draws the
 -- entries instead of the skin (a layout's own swatches); and
--- `spec.press_activates` makes one press activate an entry, not only
--- choose it. A table entry's `accessible_role` overrides the role its
+-- `spec.press_activates` makes one tap activate an entry, not only
+-- choose it. An entry is chosen by a completed click or tap: a press only
+-- shows it down, and a press that becomes a drag or a pan chooses
+-- nothing. A reorderable entry dragged past a neighbour is chosen as it
+-- moves. A table entry's `accessible_role` overrides the role its
 -- area takes (a padding cell's "generic"). The live state adds `current_x`,
 -- `current_y`, `current_width`, `current_height`: the current entry's box
 -- within the control.
@@ -107,14 +110,17 @@ function M.make(widget, spec)
         local axis = orientation == "vertical" and "y" or "x"
         dragging = control.headless("Drag", { mode = "reorder", axis = axis,
           extent = axis == "y" and (spec.item_height or 36) or (spec.item_width or 80),
-          on_reorder = function(step) if spec.on_reorder then spec.on_reorder(index, step) end end })
+          on_reorder = function(step)
+            if live.current ~= index then deliver("item_pressed", index, "") end
+            if spec.on_reorder then spec.on_reorder(index, step) end
+          end })
       end
       local props = { width = spec.item_width, height = spec.item_height, cursor = "pointer",
         id = spec.item_id and spec.item_id(index, value) or nil,
-        on_pressed = function(sx, sy)
+        on_pressed = dragging and function(sx, sy) dragging.send("pressed", sx, sy) end or nil,
+        on_clicked = function()
           deliver("item_pressed", index, "")
           if spec.press_activates then deliver("item_activated", index) end
-          if dragging then dragging.send("pressed", sx, sy) end
         end,
         on_dragged = dragging and function(sx, sy) dragging.send("dragged", sx, sy) end or nil,
         drag_axis = dragging and (orientation == "vertical" and "y" or "x") or nil,

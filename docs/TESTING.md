@@ -290,7 +290,7 @@ the primary before anything was.
 | call | |
 |------|---|
 | `test.click(x, y [, { button, surface }])`, `test.click(query)` | motion, press and release; `button` is `left` (default), `right`, `middle`, `back`, `forward` or a Linux button code |
-| `test.touch(phase, id, x, y [, {surface, time_ms}])`, `test.swipe({x,y}, {x,y} [, {duration, steps, surface}])` | touch contacts and timed swipes through the actual touch path; phases are `down`, `move`, `up`, `cancel`; optional `time_ms` replays a wrapping compositor timestamp independently of virtual frame time; swipes default to one sample per 16 ms |
+| `test.touch(phase, id, x, y [, {surface, time_ms}])`, `test.swipe({x,y}, {x,y} [, {duration, steps, surface}])` | touch contacts and timed swipes through the actual touch path; phases are `down`, `move`, `up`, `cancel`; optional `time_ms` replays a wrapping compositor timestamp independently of virtual frame time; swipes default to one sample per 16 ms. A tap a pan could take is delivered 60 ms after its `up` (see "Gestures" in `docs/UI.md`): advance past that, or settle, before reading its click |
 | `test.move(x, y)`, `test.press(x, y)`, `test.release(x, y)` | the pieces of a click |
 | `test.leave([{ surface }])` | the pointer leaving the surface it is on (or the one named), as a compositor says when it moves off the input region: `hovered` and every `contains_pointer` there go false |
 | `test.drag({ x1, y1 }, { x2, y2 }, { steps, button })` | press, move in steps, release |
