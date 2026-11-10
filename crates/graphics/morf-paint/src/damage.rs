@@ -11,6 +11,7 @@ pub use engine::{Overlay, RenderBackend, RenderEngine};
 use explain::damage_log_wanted;
 use keys::{
     Changes, Key, command_changes, command_keys, keyed_commands, layer_changes, moved_commands,
+    shown,
 };
 
 /// Physical damage rectangle with an exclusive lower-right edge.
@@ -149,6 +150,7 @@ impl DamageTracker {
             (next, &current_keys),
             &mut changed,
         );
+        let (current, previous) = shown((current, next), (previous, &self.previous));
         command_changes(&current, &previous, &moved, &mut changed);
         (current_keys, changed)
     }

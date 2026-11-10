@@ -334,7 +334,7 @@ pub fn merge_damage(mut damage: Vec<DamageRect>) -> Vec<DamageRect> {
     while index < damage.len() {
         let mut other = index + 1;
         while other < damage.len() {
-            if touches(damage[index], damage[other]) {
+            if worth_joining(damage[index], damage[other]) {
                 damage[index] = union(damage[index], damage.swap_remove(other));
                 other = index + 1;
             } else {
@@ -344,6 +344,14 @@ pub fn merge_damage(mut damage: Vec<DamageRect>) -> Vec<DamageRect> {
         index += 1;
     }
     damage
+}
+
+/// Whether two pieces of damage are better repainted as one rectangle: they
+/// touch, and the rectangle round both is not mostly neither. Four strips of a
+/// frame meet at its corners, and joined they would be the whole screen.
+fn worth_joining(left: DamageRect, right: DamageRect) -> bool {
+    let area = |rect: DamageRect| u64::from(rect.width) * u64::from(rect.height);
+    touches(left, right) && area(union(left, right)) <= (area(left) + area(right)) * 5 / 4 + 4096
 }
 
 fn touches(left: DamageRect, right: DamageRect) -> bool {

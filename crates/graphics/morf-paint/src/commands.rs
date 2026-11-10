@@ -5,6 +5,7 @@ use std::ops::Range;
 use crate::{Overlay, effects::*, field::*, paint::*, sdf::*};
 
 mod command_bounds;
+mod paint_damage;
 mod partial_damage;
 mod sdf_types;
 mod styles;

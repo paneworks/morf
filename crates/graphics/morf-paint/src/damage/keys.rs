@@ -117,6 +117,9 @@ pub(super) fn command_changes(
                         command
                             .terminal_rows_changed(old)
                             .or_else(|| command.field_layers_changed(old))
+                            .or_else(|| command.field_paint_changed(old))
+                            .or_else(|| command.path_paint_changed(old))
+                            .or_else(|| command.quad_border_changed(old))
                     })
                     .flatten()
                 {
@@ -251,4 +254,55 @@ fn keyed_layers(list: &DrawList, command_keys: &[Key]) -> HashMap<Key, LayerShap
             (*key, shape)
         })
         .collect()
+}
+
+/// `current` and `previous` less the commands nothing shows in either frame:
+/// those inside a layer composited at no opacity, with no shadow, shader or
+/// mask role of its own to show instead. A page faded out still follows the
+/// theme, and recolouring what is not shown changes no pixel. A command shown
+/// in one frame and not the other stays, and a layer fading in or out is
+/// damaged as the layer it is.
+pub(super) fn shown<'a>(
+    (current, next): (Keyed<'a>, &DrawList),
+    (previous, last): (Keyed<'a>, &DrawList),
+) -> (Keyed<'a>, Keyed<'a>) {
+    let hidden_now = hidden(next);
+    let hidden_before = hidden(last);
+    let now = |order: usize| hidden_now.get(order).copied().unwrap_or(false);
+    let before = |order: usize| hidden_before.get(order).copied().unwrap_or(false);
+    let kept_current = current
+        .iter()
+        .filter(|(key, (order, _))| {
+            !(now(*order) && previous.get(*key).is_none_or(|(old, _)| before(*old)))
+        })
+        .map(|(key, value)| (*key, *value))
+        .collect();
+    let kept_previous = previous
+        .iter()
+        .filter(|(key, (order, _))| {
+            !(before(*order) && current.get(*key).is_none_or(|(new, _)| now(*new)))
+        })
+        .map(|(key, value)| (*key, *value))
+        .collect();
+    (kept_current, kept_previous)
+}
+
+/// Which commands of `list` sit in a layer composited at no opacity.
+fn hidden(list: &DrawList) -> Vec<bool> {
+    let mut hidden = vec![false; list.commands.len()];
+    for layer in &list.layers {
+        let invisible = layer.opacity <= 0.0
+            && layer.shadow_color.alpha <= 0.0
+            && layer.shader.is_none()
+            && layer.mask_for.is_none();
+        if !invisible {
+            continue;
+        }
+        for order in layer.commands.clone() {
+            if let Some(slot) = hidden.get_mut(order) {
+                *slot = true;
+            }
+        }
+    }
+    hidden
 }

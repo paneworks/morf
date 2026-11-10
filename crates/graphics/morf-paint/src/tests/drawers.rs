@@ -14,6 +14,7 @@ const SEAM: f64 = 16.0;
 struct Drawer {
     scene: Scene,
     root: NodeHandle,
+    field: NodeHandle,
     panel: NodeHandle,
     background: NodeHandle,
 }
@@ -92,6 +93,7 @@ fn drawer(stretch: bool) -> Drawer {
     Drawer {
         scene,
         root,
+        field,
         panel,
         background,
     }
@@ -372,4 +374,44 @@ fn fading_a_layer_damages_the_layer_and_not_the_frame() {
     assert!(faded.iter().any(|opacity| *opacity > 0.2 && *opacity < 0.8));
     assert!(faded.windows(2).all(|pair| pair[1] >= pair[0]));
     assert_eq!(*faded.last().unwrap(), 1.0);
+}
+
+#[test]
+fn recolouring_the_frame_damages_the_frame_and_not_the_opening() {
+    let mut drawer = drawer(false);
+    drawer
+        .scene
+        .assign(drawer.panel, "translate_y", 0.0)
+        .unwrap();
+    for _ in 0..40 {
+        drawer.frame();
+    }
+    let mut tracker = DamageTracker::default();
+    let (_, mut list) = drawer.frame();
+    let full: u64 = tracker.diff(&list, 120).iter().map(on_screen).sum();
+    tracker.retain(&mut list);
+    drawer
+        .scene
+        .assign(drawer.field, "fill_color", "#ff0000")
+        .unwrap();
+    let (_, mut list) = drawer.frame();
+    let damage = tracker.diff(&list, 120);
+    tracker.retain(&mut list);
+    assert!(!damage.is_empty(), "a new colour repaints");
+    let area: u64 = damage.iter().map(on_screen).sum();
+    assert!(area * 2 < full, "a recolour damaged {area} of {full}");
+    // The middle of the opening, clear of the panel, is never repainted.
+    let (x, y) = (400, 400);
+    for rect in &damage {
+        let inside =
+            rect.x <= x && x < rect.x + rect.width && rect.y <= y && y < rect.y + rect.height;
+        assert!(!inside, "{rect:?} covers the opening");
+    }
+}
+
+/// The pixels of `rect` that are on the screen.
+fn on_screen(rect: &DamageRect) -> u64 {
+    let right = (rect.x + rect.width).min(WIDTH as u32);
+    let bottom = (rect.y + rect.height).min(HEIGHT as u32);
+    u64::from(right.saturating_sub(rect.x)) * u64::from(bottom.saturating_sub(rect.y))
 }
