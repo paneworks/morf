@@ -152,9 +152,9 @@ fn a_theme_rejects_what_it_cannot_derive_from() {
     );
 }
 
-// A theme with a transition eases a colour written to it from the one on
-// show, frame by frame, and every reader follows; other tokens, and a
-// theme without one, change at once.
+// A theme with a transition lands a colour written to it on the next frame,
+// and what its readers paint eases there from the colour on show; other
+// tokens, and a theme without one, change at once.
 #[test]
 fn a_theme_with_a_transition_eases_its_colours() {
     let mut runtime = Runtime::default();
@@ -183,13 +183,15 @@ fn a_theme_with_a_transition_eases_its_colours() {
     assert!(runtime.has_motion(), "a fade keeps frames coming");
     runtime.tick_animations(Duration::from_millis(100)).unwrap();
     runtime
-        .execute(
-            "mid.lua",
-            br#"assert(red() > 60 and red() < 250, "not part way: " .. red())"#,
-        )
+        .execute("mid.lua", br#"assert(red() == 255, "the token waited: " .. red())"#)
         .unwrap();
     let rect = runtime.scene().roots()[0];
     let mid = runtime.scene().color_value(rect, "color").unwrap();
+    assert!(
+        mid.red > 0.2 && mid.red < 0.98,
+        "the reader is not part way: {}",
+        mid.red
+    );
     runtime.tick_animations(Duration::from_millis(150)).unwrap();
     runtime
         .execute(
@@ -213,12 +215,8 @@ fn a_theme_with_a_transition_eases_its_colours() {
         )
         .unwrap();
     runtime.tick_animations(Duration::from_millis(100)).unwrap();
-    runtime
-        .execute(
-            "again-mid.lua",
-            br#"local c = theme.accent assert(c.r > 0.1 and c.b > 0.1, c:hex())"#,
-        )
-        .unwrap();
+    let again = runtime.scene().color_value(rect, "color").unwrap();
+    assert!(again.red > 0.1 && again.blue > 0.1, "{again:?}");
 }
 
 // A colour written to a theme with a transition asks for the frame that

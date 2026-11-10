@@ -59,6 +59,7 @@ impl Runtime {
                     .log(LogLevel::Warn, format!("theme transition: {message}"));
             }
         });
+        self.reactive.borrow_mut().end_theme_fades();
         moved
     }
 

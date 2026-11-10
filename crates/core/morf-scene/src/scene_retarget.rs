@@ -26,6 +26,10 @@ impl Scene {
         if self.properties.read(slot.target)? == &value {
             return Ok(());
         }
+        // A colour nothing shows lands at once, as `assign` lands it.
+        if self.colour_jumps(key.node, property, &value) {
+            return self.assign(node, property, value);
+        }
         let current = self.properties.read(slot.current)?.clone();
         let velocity = self.running_velocity(key, &current);
         let started = match (motion, &current, &value) {

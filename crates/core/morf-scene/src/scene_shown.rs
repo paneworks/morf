@@ -9,9 +9,9 @@
 //! the desk. Such an animation catches up whenever the loop next turns --
 //! when its node is shown, that is a change, and a frame.
 
-use std::collections::HashMap;
+use crate::FastMap;
 
-use crate::types::{NodeHandle, NodeId, Scene};
+use crate::types::{NodeHandle, NodeId, Scene, Value};
 
 impl Scene {
     /// Whether a change to `property` of `node` can be seen now: the
@@ -41,6 +41,23 @@ impl Scene {
         }
     }
 
+    /// Eases every colour assigned from now on, by a property's own
+    /// behaviour if it has one and by `tween` if not, until it is `None`
+    /// again. A theme fading to a new scheme sets it for the one pass that
+    /// gives every binding its final colour, so the fade runs here, frame by
+    /// frame, and not by running every binding again on every frame.
+    pub fn set_colour_tween(&mut self, tween: Option<crate::Behavior>) {
+        self.colour_tween = tween;
+    }
+
+    /// Whether a new colour for `property` of `node` can skip its motion
+    /// and land at once: nothing shows the node, so no frame would draw the
+    /// fade, and a new scheme recolouring every hidden page would otherwise
+    /// keep that many animations to step and check on every frame.
+    pub(crate) fn colour_jumps(&self, node: NodeId, property: &str, value: &Value) -> bool {
+        matches!(value, Value::Color(_)) && !self.change_is_shown(NodeHandle(node), property)
+    }
+
     /// Whether a change to `property` of `node` shows. A node's own opacity
     /// or visibility changing shows whenever its ancestors do: that is how
     /// a fade in from nothing starts. `cache` holds what was found per node
@@ -49,7 +66,7 @@ impl Scene {
         &self,
         node: NodeId,
         property: &str,
-        cache: &mut HashMap<NodeId, bool>,
+        cache: &mut FastMap<NodeId, bool>,
     ) -> bool {
         let start = if property == "opacity" || property == "visible" {
             match self.parent(NodeHandle(node)) {
@@ -64,7 +81,7 @@ impl Scene {
     }
 
     /// Whether `node` and every ancestor are visible with some opacity.
-    fn shown(&self, node: NodeId, cache: &mut HashMap<NodeId, bool>) -> bool {
+    fn shown(&self, node: NodeId, cache: &mut FastMap<NodeId, bool>) -> bool {
         if let Some(known) = cache.get(&node) {
             return *known;
         }
