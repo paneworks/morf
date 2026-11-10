@@ -11,7 +11,7 @@
 use morf_scene::NodeHandle;
 use std::collections::{HashMap, HashSet};
 
-use super::keys::{Changes, Key, Keyed, command_changes, layer_changes, next_key};
+use super::keys::{Changes, Key, Keyed, command_changes, layer_changes, next_key, shown};
 use crate::{CopiedRun, DrawList};
 
 /// The keys of `next` and every area that changed from `previous`, with its
@@ -93,6 +93,7 @@ pub(super) fn copied_changes(
     }
     let mut changed = Vec::new();
     layer_changes((previous, previous_keys), (next, &keys), &mut changed);
+    let (current_loose, previous_loose) = shown((current_loose, next), (previous_loose, previous));
     command_changes(
         &current_loose,
         &previous_loose,
