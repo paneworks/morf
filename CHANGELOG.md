@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.6.4] - 2026-11-10
+
+### <!-- 4 -->⚡ Performance
+
+- Damage only what a recolour reaches
+
 ## [0.6.3] - 2026-11-08
 
 ### <!-- 1 -->🐛 Bug Fixes
