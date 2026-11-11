@@ -27,6 +27,7 @@ impl Scene {
             detached_revisions: FastMap::default(),
             motion_scale: 1.0,
             start_on_tick: false,
+            colour_tween: None,
             removed: Vec::new(),
             shaders: FastMap::default(),
             terminal_screens: FastMap::default(),
@@ -311,7 +312,9 @@ impl Scene {
             return Ok(());
         }
         let (_, slot) = self.owned(id, property)?;
-        if let Some(spec) = self.physics_specs.get(&key).copied()
+        let jump = self.colour_jumps(id, property_name, &value);
+        if !jump
+            && let Some(spec) = self.physics_specs.get(&key).copied()
             && let Value::Color(target) = value
             && let Value::Color(current) = *self.properties.read(slot.current)?
         {
@@ -341,7 +344,11 @@ impl Scene {
             self.properties.write(slot.target, Value::Number(target))?;
             self.physics
                 .insert(key, physics_animation(current, target, velocity, spec));
-        } else if let Some(behavior) = self.behaviors.get(&key).copied()
+        } else if !jump
+            && let Some(behavior) = self.behaviors.get(&key).copied().or_else(|| {
+                self.colour_tween
+                    .filter(|_| matches!(value, Value::Color(_)))
+            })
             && behavior.intercepts()
             && interpolatable(self.properties.read(slot.current)?, &value)
         {

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.6.5] - 2026-11-11
+
+### <!-- 4 -->⚡ Performance
+
+- Fade a new scheme without rerunning Lua
+
 ## [0.6.4] - 2026-11-10
 
 ### <!-- 4 -->⚡ Performance

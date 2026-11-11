@@ -49,7 +49,7 @@ impl Scene {
     pub fn has_motion(&self) -> bool {
         // An animation on a node nothing shows is not motion (see
         // `scene_shown`): it catches up when the loop next turns.
-        let mut shown = std::collections::HashMap::new();
+        let mut shown = crate::FastMap::default();
         !self.events.is_empty()
             || !self.group_events.is_empty()
             || self.animations.iter().any(|(key, animation)| {
@@ -118,7 +118,7 @@ impl Scene {
         // What is seen to move: an animation on a node nothing shows still
         // advances here, but it is not motion the loop draws for (see
         // `scene_shown`).
-        let mut shown = std::collections::HashMap::new();
+        let mut shown = crate::FastMap::default();
         let mut seen_moving = false;
         for key in keys {
             let Some(animation) = self.animations.get_mut(&key) else {

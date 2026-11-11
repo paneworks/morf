@@ -54,3 +54,26 @@ fn a_fade_in_from_nothing_is_motion() {
     assert!(frame.active, "a fade in from zero opacity never started");
     assert_eq!(frame.changed, 1);
 }
+
+#[test]
+fn a_hidden_nodes_new_colour_lands_at_once() {
+    let mut scene = Scene::new();
+    let page = scene.create(Element::Item);
+    let card = scene.create(Element::Rect);
+    scene.reparent(card, Some(page)).unwrap();
+    scene.set_behavior(card, "color", Some(eased())).unwrap();
+    let red = Color::rgba8(255, 0, 0, 255);
+    let blue = Color::rgba8(0, 0, 255, 255);
+
+    // A scheme recolouring a page nobody sees keeps no animation for it.
+    scene.assign(page, "visible", false).unwrap();
+    scene.assign(card, "color", Value::Color(red)).unwrap();
+    assert_eq!(scene.color_value(card, "color").unwrap(), red);
+    assert!(scene.running_animations().is_empty(), "a hidden colour animated");
+
+    // On show, a new colour fades as it always did.
+    scene.assign(page, "visible", true).unwrap();
+    scene.assign(card, "color", Value::Color(blue)).unwrap();
+    assert_eq!(scene.color_value(card, "color").unwrap(), red);
+    assert_eq!(scene.running_animations().len(), 1);
+}

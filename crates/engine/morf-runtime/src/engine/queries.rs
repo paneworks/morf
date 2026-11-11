@@ -116,19 +116,37 @@ impl Engine {
                 .any(|view| view.model.borrow().has_changes())
     }
 
-    /// Moves every theme colour easing on by `delta` and writes the colour
-    /// on show to each one's signal. Returns how many moved; the caller
-    /// flushes what read them.
-    pub fn advance_theme_fades(&mut self, delta: Duration) -> usize {
+    /// Lands every theme colour on its way to a new one, and has the scene
+    /// ease each property the caller's flush assigns from them (see
+    /// `Scene::set_colour_tween`), the longest fade's duration and curve.
+    /// Returns how many landed; the caller flushes what read them, then
+    /// calls [`Self::end_theme_fades`].
+    ///
+    /// Easing the tokens themselves ran every binding that reads them once a
+    /// frame: a new scheme on a full shell was a second of Lua per output.
+    pub fn advance_theme_fades(&mut self, _delta: Duration) -> usize {
         if !self.animation.fading() {
             return 0;
         }
-        let writes = crate::animation::fades::advance(&mut self.animation.fades, delta);
-        let moved = writes.len();
-        for (signal, colour) in writes {
-            self.reactive.try_write(signal, IpcValue::Color(colour));
+        let fades = std::mem::take(&mut self.animation.fades);
+        let longest = fades.iter().max_by_key(|fade| fade.duration);
+        let tween = longest.map(|fade| morf_scene::Behavior {
+            duration: fade.duration,
+            easing: fade.easing,
+            color_space: morf_scene::ColorSpace::Oklab,
+            ..morf_scene::Behavior::default()
+        });
+        for fade in &fades {
+            self.reactive.try_write(fade.signal, IpcValue::Color(fade.to));
         }
-        moved
+        self.scene.set_colour_tween(tween);
+        fades.len()
+    }
+
+    /// Ends the pass [`Self::advance_theme_fades`] began: colours assigned
+    /// from here on land at once again.
+    pub fn end_theme_fades(&mut self) {
+        self.scene.set_colour_tween(None);
     }
 
     /// Tells every stretching node in a frame's layout where it is, so its

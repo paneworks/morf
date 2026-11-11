@@ -225,6 +225,8 @@ pub struct Scene {
     pub(crate) motion_scale: f64,
     /// See [`Scene::set_start_on_tick`].
     pub(crate) start_on_tick: bool,
+    /// See [`Scene::set_colour_tween`].
+    pub(crate) colour_tween: Option<crate::Behavior>,
     /// Nodes destroyed since anyone last asked.
     ///
     /// Every cache keyed on a node lives outside this crate — shaped text
